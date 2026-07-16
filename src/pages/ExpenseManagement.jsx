@@ -6,7 +6,8 @@ import {
   InputLabel, Select, Stack, Divider, Card, CardContent, Fade, Zoom,
   Tooltip, Badge, List, ListItem, ListItemText, ListItemButton,
   InputAdornment, Autocomplete, ToggleButton, ToggleButtonGroup,
-  Pagination, Snackbar, Alert, Fab, useTheme, alpha, Avatar
+  Pagination, Snackbar, Alert, Fab, useTheme, alpha, Avatar,
+  CircularProgress  // <-- YEH ADD KAREIN
 } from '@mui/material';
 import {
   Add, Edit, Delete, Search, FilterList, Category, CalendarToday,
@@ -19,7 +20,7 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import db from '../database/db';
+import db from '../database/db';  // ✅ FIXED: Correct import path
 
 const EXPENSE_PAYMENT_MODES = [
   { value: 'cash', label: 'Cash', icon: <LocalAtm fontSize="small" /> },
@@ -66,7 +67,7 @@ export default function ExpensesPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
-    d.setDate(1); // Start of month
+    d.setDate(1);
     return d;
   });
   const [dateTo, setDateTo] = useState(new Date());
@@ -112,27 +113,12 @@ export default function ExpensesPage() {
       let exps = [];
       let cats = [];
 
+      // ✅ FIXED: Use correct method names from storage.js
       if (db.getExpenses) {
         exps = await db.getExpenses();
-      } else {
-        const saved = localStorage.getItem('expenses_data');
-        exps = saved ? JSON.parse(saved) : [];
       }
-
       if (db.getExpenseCategories) {
         cats = await db.getExpenseCategories();
-      } else {
-        const saved = localStorage.getItem('expense_categories');
-        cats = saved ? JSON.parse(saved) : [
-          { id: 1, name: 'Rent', color: '#e53935', description: 'Shop/Office rent' },
-          { id: 2, name: 'Utilities', color: '#1e88e5', description: 'Electricity, Gas, Water' },
-          { id: 3, name: 'Salaries', color: '#43a047', description: 'Staff salaries' },
-          { id: 4, name: 'Transport', color: '#fb8c00', description: 'Fuel, fares, delivery' },
-          { id: 5, name: 'Food', color: '#fdd835', description: 'Meals, tea, refreshments' },
-          { id: 6, name: 'Marketing', color: '#8e24aa', description: 'Ads, banners, promotions' },
-          { id: 7, name: 'Maintenance', color: '#546e7a', description: 'Repairs, servicing' },
-          { id: 8, name: 'Miscellaneous', color: '#757575', description: 'Other expenses' }
-        ];
       }
 
       setExpenses(Array.isArray(exps) ? exps : []);
@@ -156,19 +142,19 @@ export default function ExpensesPage() {
       setFormData({
         title: expense.title || '',
         amount: String(expense.amount || ''),
-        category_id: expense.category_id || '',
+        category_id: String(expense.category_id || ''),
         payment_mode: expense.payment_mode || 'cash',
-        date: expense.date ? expense.date.split('T')[0] : new Date().toISOString().split('T')[0],
+        date: expense.date ? (expense.date.includes('T') ? expense.date.split('T')[0] : expense.date) : new Date().toISOString().split('T')[0],
         description: expense.description || '',
         reference_no: expense.reference_no || '',
         status: expense.status || 'active',
-        receipt_no: expense.receipt_no || ''
+        receipt_no: expense.receipt_no || `EXP-${Date.now()}`
       });
     } else {
       setFormData({
         title: '',
         amount: '',
-        category_id: categories[0]?.id || '',
+        category_id: categories[0]?.id ? String(categories[0].id) : '',
         payment_mode: 'cash',
         date: new Date().toISOString().split('T')[0],
         description: '',
@@ -225,17 +211,23 @@ export default function ExpensesPage() {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfYear = new Date(now.getFullYear(), 0, 1);
 
-    const todayTotal = expenses.filter(e => e.date?.split('T')[0] === today).reduce((s, e) => s + Number(e.amount || 0), 0);
+    const todayTotal = expenses.filter(e => {
+      const d = e.date?.split('T')[0] || e.date;
+      return d === today;
+    }).reduce((s, e) => s + Number(e.amount || 0), 0);
+
     const weekTotal = expenses.filter(e => new Date(e.date) >= startOfWeek).reduce((s, e) => s + Number(e.amount || 0), 0);
     const monthTotal = expenses.filter(e => new Date(e.date) >= startOfMonth).reduce((s, e) => s + Number(e.amount || 0), 0);
     const yearTotal = expenses.filter(e => new Date(e.date) >= startOfYear).reduce((s, e) => s + Number(e.amount || 0), 0);
     const grandTotal = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
 
-    // Compare with yesterday
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const yestStr = yesterday.toISOString().split('T')[0];
-    const yestTotal = expenses.filter(e => e.date?.split('T')[0] === yestStr).reduce((s, e) => s + Number(e.amount || 0), 0);
+    const yestTotal = expenses.filter(e => {
+      const d = e.date?.split('T')[0] || e.date;
+      return d === yestStr;
+    }).reduce((s, e) => s + Number(e.amount || 0), 0);
     const trend = todayTotal - yestTotal;
     const trendPercent = yestTotal > 0 ? ((trend / yestTotal) * 100).toFixed(1) : 0;
 
@@ -250,16 +242,16 @@ export default function ExpensesPage() {
         (e.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (e.reference_no || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (e.receipt_no || '').toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       const matchCategory = !filterCategory || String(e.category_id) === String(filterCategory);
       const matchPayment = !filterPayment || e.payment_mode === filterPayment;
       const matchStatus = !filterStatus || e.status === filterStatus;
-      
+
       const d = new Date(e.date);
       const matchDate = (!dateFrom || d >= dateFrom) && (!dateTo || d <= new Date(dateTo.getTime() + 86400000));
-      
+
       return matchSearch && matchCategory && matchPayment && matchStatus && matchDate;
-    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+    }).sort((a, b) => new Date(b.date || b.created_at || 0) - new Date(a.date || a.created_at || 0));
   }, [expenses, searchQuery, filterCategory, filterPayment, filterStatus, dateFrom, dateTo]);
 
   const paginatedExpenses = useMemo(() => {
@@ -280,52 +272,37 @@ export default function ExpensesPage() {
     const payload = {
       ...formData,
       amount: Number(formData.amount),
-      category_id: Number(formData.category_id) || null
+      category_id: formData.category_id ? Number(formData.category_id) : null
     };
 
     try {
       if (editingExpense) {
-        if (db.updateExpense) {
-          await db.updateExpense(editingExpense.id, payload);
-        } else {
-          const updated = expenses.map(ex => ex.id === editingExpense.id ? { ...ex, ...payload, id: ex.id } : ex);
-          localStorage.setItem('expenses_data', JSON.stringify(updated));
-          setExpenses(updated);
-        }
+        // ✅ FIXED: Use updateExpense (correct method name)
+        await db.updateExpense(editingExpense.id, payload);
         setSnackbar({ open: true, message: 'Expense updated!', severity: 'success' });
       } else {
-        if (db.addExpense) {
-          await db.addExpense(payload);
-        } else {
-          const newExp = { ...payload, id: Date.now(), created_at: new Date().toISOString() };
-          const updated = [newExp, ...expenses];
-          localStorage.setItem('expenses_data', JSON.stringify(updated));
-          setExpenses(updated);
-        }
+        // ✅ FIXED: Use createExpense (correct method name from storage.js)
+        await db.createExpense(payload);
         setSnackbar({ open: true, message: 'Expense added!', severity: 'success' });
       }
       setExpenseDialog(false);
       setEditingExpense(null);
       await loadData();
     } catch (err) {
-      setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
+      console.error('Save error:', err);
+      setSnackbar({ open: true, message: 'Error: ' + (err.message || 'Failed to save'), severity: 'error' });
     }
   };
 
   const handleDelete = async (id) => {
     try {
-      if (db.deleteExpense) {
-        await db.deleteExpense(id);
-      } else {
-        const updated = expenses.filter(e => e.id !== id);
-        localStorage.setItem('expenses_data', JSON.stringify(updated));
-        setExpenses(updated);
-      }
+      await db.deleteExpense(id);
       setSnackbar({ open: true, message: 'Deleted!', severity: 'success' });
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
-      setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
+      console.error('Delete error:', err);
+      setSnackbar({ open: true, message: 'Error: ' + (err.message || 'Failed to delete'), severity: 'error' });
     }
   };
 
@@ -341,19 +318,15 @@ export default function ExpensesPage() {
         description: newCategory.description
       };
 
-      if (db.addExpenseCategory) {
-        await db.addExpenseCategory(payload);
-      } else {
-        const cats = [...categories, { ...payload, id: Date.now() }];
-        localStorage.setItem('expense_categories', JSON.stringify(cats));
-        setCategories(cats);
-      }
+      // ✅ FIXED: Use createExpenseCategory (correct method name)
+      await db.createExpenseCategory(payload);
 
-      setNewCategory({ name: '', color: CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length], description: '' });
+      setNewCategory({ name: '', color: CATEGORY_COLORS[(categories.length) % CATEGORY_COLORS.length], description: '' });
       await loadData();
       setSnackbar({ open: true, message: 'Category added!', severity: 'success' });
     } catch (err) {
-      setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
+      console.error('Category add error:', err);
+      setSnackbar({ open: true, message: 'Error: ' + (err.message || 'Failed to add category'), severity: 'error' });
     }
   };
 
@@ -364,17 +337,12 @@ export default function ExpensesPage() {
       return;
     }
     try {
-      if (db.deleteExpenseCategory) {
-        await db.deleteExpenseCategory(id);
-      } else {
-        const cats = categories.filter(c => c.id !== id);
-        localStorage.setItem('expense_categories', JSON.stringify(cats));
-        setCategories(cats);
-      }
+      await db.deleteExpenseCategory(id);
       await loadData();
       setSnackbar({ open: true, message: 'Category deleted!', severity: 'success' });
     } catch (err) {
-      setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
+      console.error('Category delete error:', err);
+      setSnackbar({ open: true, message: 'Error: ' + (err.message || 'Failed to delete'), severity: 'error' });
     }
   };
 
@@ -391,7 +359,7 @@ export default function ExpensesPage() {
       e.description || '-'
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
-    
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -436,7 +404,7 @@ export default function ExpensesPage() {
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box sx={{ p: { xs: 1, md: 2 } }}>
-        
+
         {/* ===== HEADER ===== */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
           <Typography variant="h4" fontWeight="bold" color="primary">
@@ -624,7 +592,14 @@ export default function ExpensesPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {paginatedExpenses.map((expense, idx) => (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={9} align="center" sx={{ py: 8 }}>
+                      <CircularProgress size={40} />
+                      <Typography color="text.secondary" sx={{ mt: 2 }}>Loading expenses...</Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : paginatedExpenses.map((expense, idx) => (
                   <TableRow 
                     key={expense.id} 
                     hover
@@ -682,7 +657,7 @@ export default function ExpensesPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {paginatedExpenses.length === 0 && (
+                {!loading && paginatedExpenses.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={9} align="center" sx={{ py: 8 }}>
                       <Typography color="text.secondary">No expenses found</Typography>
@@ -695,7 +670,7 @@ export default function ExpensesPage() {
               </TableBody>
             </Table>
           </TableContainer>
-          
+
           {/* Table Footer */}
           <Box sx={{ p: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${theme.palette.divider}` }}>
             <Typography variant="body2" color="text.secondary">
@@ -758,7 +733,7 @@ export default function ExpensesPage() {
                     >
                       <MenuItem value=""><em>Select Category</em></MenuItem>
                       {categories.map(c => (
-                        <MenuItem key={c.id} value={c.id}>
+                        <MenuItem key={c.id} value={String(c.id)}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Box sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: c.color }} />
                             {c.name}
@@ -838,7 +813,7 @@ export default function ExpensesPage() {
                 Cancel (Esc)
               </Button>
               <Button type="submit" variant="contained" startIcon={<Save />} disabled={loading}>
-                {loading ? 'Saving...' : editingExpense ? 'Update (Ctrl+Enter)' : 'Save (Ctrl+Enter)'}
+                {loading ? 'Saving...' : editingExpense ? 'Update' : 'Save'}
               </Button>
             </DialogActions>
           </form>
@@ -933,6 +908,13 @@ export default function ExpensesPage() {
                       </TableRow>
                     );
                   })}
+                  {categories.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                        <Typography color="text.secondary">No categories yet</Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -1002,8 +984,9 @@ export default function ExpensesPage() {
               variant="contained" 
               startIcon={<Edit />} 
               onClick={() => {
+                const ve = viewExpense;
                 setViewExpense(null);
-                handleOpenExpense(viewExpense);
+                handleOpenExpense(ve);
               }}
             >
               Edit

@@ -65,12 +65,34 @@ export default function SuppliersPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [sups, purchs, pays, ledg] = await Promise.all([
-        db.getSuppliers(),
-        db.getPurchases(),
-        db.getPayments ? db.getPayments() : Promise.resolve([]),
-        db.getLedger ? db.getLedger() : Promise.resolve([])
-      ]);
+      // Load each data source independently so one failure doesn't block others
+      let sups = [], purchs = [], pays = [], ledg = [];
+
+      try {
+        sups = await db.getSuppliers();
+        console.log('[SuppliersPage] Loaded suppliers:', sups?.length || 0, sups);
+      } catch (err) {
+        console.error('[SuppliersPage] getSuppliers error:', err);
+      }
+
+      try {
+        purchs = await db.getPurchases();
+      } catch (err) {
+        console.error('[SuppliersPage] getPurchases error:', err);
+      }
+
+      try {
+        pays = db.getPayments ? await db.getPayments() : [];
+      } catch (err) {
+        console.error('[SuppliersPage] getPayments error:', err);
+      }
+
+      try {
+        ledg = db.getLedger ? await db.getLedger() : [];
+      } catch (err) {
+        console.error('[SuppliersPage] getLedger error:', err);
+      }
+
       setSuppliers(sups || []);
       setPurchases(purchs || []);
       setPayments(pays || []);
@@ -85,6 +107,11 @@ export default function SuppliersPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Debug: log suppliers state changes
+  useEffect(() => {
+    console.log('[SuppliersPage] suppliers state updated:', suppliers.length, suppliers);
+  }, [suppliers]);
   
   useEffect(() => {
     if (paymentDialog) {

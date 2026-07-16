@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box, Paper, Typography, Button, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle,
   DialogContent, DialogActions, Grid, Chip, MenuItem, FormControl,
   InputLabel, Select, Stack, Card, CardContent, Tabs, Tab,
-  Pagination, Snackbar, Alert, Avatar, LinearProgress, Tooltip,
-  ToggleButton, ToggleButtonGroup, Divider
+  Pagination, Snackbar, Alert, LinearProgress, Tooltip,
+  Divider
 } from '@mui/material';
 import {
   Search, FilterList, Visibility, Refresh, Inventory, Warning, 
-  CheckCircle, AccessTime, Layers, Speed, BarChart, Print, 
+  CheckCircle, AccessTime, Layers, Speed, BarChart, 
   RemoveShoppingCart, AttachMoney
 } from '@mui/icons-material';
 import db from '../database/db';
@@ -43,6 +43,25 @@ const STOCK_STATUS = {
   fast_moving: { color: 'success', label: 'Fast Moving', icon: <Speed fontSize="small" /> },
 };
 
+const STATUS_CHIP_COLORS = {
+  out_of_stock: 'error',
+  low_stock: 'warning',
+  dead_stock: 'default',
+  over_stock: 'info',
+  fast_moving: 'success',
+  in_stock: 'success'
+};
+
+const safeDbCall = async (fn, fallback = []) => {
+  if (typeof fn !== 'function') return fallback;
+  try {
+    return await fn();
+  } catch (err) {
+    console.warn('DB call failed:', err);
+    return fallback;
+  }
+};
+
 export default function StockTrackingPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [variants, setVariants] = useState([]);
@@ -50,19 +69,15 @@ export default function StockTrackingPage() {
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Filters Engine Setup
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [showFilters, setShowFilters] = useState(true); // Kept default open for faster workflow access
-  const [viewMode, setViewMode] = useState('table');
+  const [showFilters, setShowFilters] = useState(true);
 
-  // Pagination Matrix
   const [page, setPage] = useState(1);
   const [rowsPerPage] = useState(25);
 
-  // Dialogs Meta Nodes
   const [detailDialog, setDetailDialog] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productHistory, setProductHistory] = useState({ sales: [], purchases: [] });
@@ -81,56 +96,79 @@ export default function StockTrackingPage() {
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  // ==================== ENGINE OPERATIONAL SYNCHRONIZER ====================
-  const loadData = async () => {
+  const isElectron = typeof window !== 'undefined' && window.electronAPI && window.electronAPI.isElectron;
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Direct high-performance relational joins bypassing abstract layer stubs completely
-      const variantsQuery = `
-        SELECT pv.*, p.name as product_name, p.brand_id, p.category_id,
-               b.name as brand_name, c.name as category_name
-        FROM product_variants pv
-        JOIN products p ON pv.product_id = p.id
-        LEFT JOIN brands b ON p.brand_id = b.id
-        LEFT JOIN categories c ON p.category_id = c.id
-        WHERE pv.is_deleted = 0 AND p.is_deleted = 0
-        ORDER BY pv.id DESC
-      `;
-      
-      const [variantsData, categoriesData, brandsData, allSales, allSaleItems, allPurchases, allPurchaseItems, allReturnItems] = await Promise.all([
-        db.electronQuery(variantsQuery).catch(() => []),
-        db.getCategories().catch(() => []),
-        db.getBrands().catch(() => []),
-        db.electronQuery("SELECT * FROM sales WHERE is_deleted = 0").catch(() => []),
-        db.electronQuery("SELECT * FROM sale_items").catch(() => []),
-        db.electronQuery("SELECT * FROM purchases WHERE is_deleted = 0").catch(() => []),
-        db.electronQuery("SELECT * FROM purchase_items").catch(() => []),
-        db.electronQuery("SELECT * FROM sale_return_items").catch(() => [])
-      ]);
+      let variantsData, categoriesData, brandsData, allSales, allSaleItems, allPurchases, allPurchaseItems, allReturnItems;
+
+      if (isElectron) {
+        const variantsQuery = `
+          SELECT pv.*, p.name as product_name, p.brand_id, p.category_id,
+                 b.name as brand_name, c.name as category_name
+          FROM product_variants pv
+          JOIN products p ON pv.product_id = p.id
+          LEFT JOIN brands b ON p.brand_id = b.id
+          LEFT JOIN categories c ON p.category_id = c.id
+          WHERE pv.is_deleted = 0 AND p.is_deleted = 0
+          ORDER BY pv.id DESC
+        `;
+
+        [variantsData, categoriesData, brandsData, allSales, allSaleItems, allPurchases, allPurchaseItems, allReturnItems] = await Promise.all([
+          safeDbCall(() => db.electronQuery(variantsQuery)),
+          safeDbCall(() => db.getCategories()),
+          safeDbCall(() => db.getBrands()),
+          safeDbCall(() => db.electronQuery("SELECT * FROM sales WHERE is_deleted = 0")),
+          safeDbCall(() => db.electronQuery("SELECT * FROM sale_items")),
+          safeDbCall(() => db.electronQuery("SELECT * FROM purchases WHERE is_deleted = 0")),
+          safeDbCall(() => db.electronQuery("SELECT * FROM purchase_items")),
+          safeDbCall(() => db.electronQuery("SELECT * FROM sale_return_items"))
+        ]);
+      } else {
+        [variantsData, categoriesData, brandsData, allSales, allSaleItems, allPurchases, allPurchaseItems, allReturnItems] = await Promise.all([
+          safeDbCall(() => db.getAllVariants()),
+          safeDbCall(() => db.getCategories()),
+          safeDbCall(() => db.getBrands()),
+          safeDbCall(() => db.getSalesHistory()),
+          safeDbCall(() => db.getAllSaleItems()),
+          safeDbCall(() => db.getPurchases()),
+          safeDbCall(() => db.getAllPurchaseItems()),
+          safeDbCall(() => db.getAllSaleReturnItems())
+        ]);
+      }
 
       setCategories(categoriesData || []);
       setBrands(brandsData || []);
 
       const enriched = (variantsData || []).map(v => {
-        const variantSaleItems = allSaleItems.filter(si => si.product_variant_id === v.id);
+        const variantSaleItems = (allSaleItems || []).filter(si => si.product_variant_id === v.id);
         const variantSaleIds = variantSaleItems.map(si => si.sale_id);
-        const variantSales = allSales.filter(s => variantSaleIds.includes(s.id));
+        const variantSales = (allSales || []).filter(s => variantSaleIds.includes(s.id));
 
         const lastSale = variantSales.length > 0 
-          ? variantSales.sort((a, b) => new Date(b.date) - new Date(a.date))[0] 
+          ? [...variantSales].sort((a, b) => new Date(b.date) - new Date(a.date))[0] 
           : null;
         const totalSold = variantSaleItems.reduce((sum, si) => sum + (Number(si.quantity || si.qty || 0)), 0);
 
-        const variantPurchaseItems = allPurchaseItems.filter(pi => pi.product_variant_id === v.id);
+        const variantPurchaseItems = (allPurchaseItems || []).filter(pi => pi.product_variant_id === v.id);
         const variantPurchaseIds = variantPurchaseItems.map(pi => pi.purchase_id);
-        const variantPurchases = allPurchases.filter(p => variantPurchaseIds.includes(p.id));
+        const variantPurchases = (allPurchases || []).filter(p => variantPurchaseIds.includes(p.id));
 
         const lastPurchase = variantPurchases.length > 0
-          ? variantPurchases.sort((a, b) => new Date(b.purchase_date || b.date) - new Date(a.purchase_date || a.date))[0]
+          ? [...variantPurchases].sort((a, b) => new Date(b.purchase_date || b.date) - new Date(a.purchase_date || a.date))[0]
           : null;
         const totalPurchased = variantPurchaseItems.reduce((sum, pi) => sum + (Number(pi.quantity || 0)), 0);
 
-        const variantReturnItems = allReturnItems.filter(sri => variantSaleIds.includes(sri.sale_return_id));
+        const variantReturnItems = (allReturnItems || []).filter(sri => {
+          if (sri.sale_item_id) {
+            return variantSaleItems.some(vsi => vsi.id === sri.sale_item_id);
+          }
+          if (sri.sale_id) {
+            return variantSaleItems.some(vsi => vsi.sale_id === sri.sale_id);
+          }
+          return false;
+        });
         const totalReturned = variantReturnItems.reduce((sum, sri) => sum + (Number(sri.quantity || 0)), 0);
 
         const currentStock = Number(v.current_stock || 0);
@@ -140,7 +178,6 @@ export default function StockTrackingPage() {
         const netSold = Math.max(0, totalSold - totalReturned);
         const daysSinceSale = getDaysAgo(lastSale?.date);
 
-        // Dynamic State Status Machine 
         let status = 'in_stock';
         if (currentStock === 0) status = 'out_of_stock';
         else if (currentStock <= alertQty) status = 'low_stock';
@@ -169,12 +206,13 @@ export default function StockTrackingPage() {
 
     } catch (err) {
       console.error('Core Stack Tracking Pipeline Failure:', err);
+      setSnackbar({ open: true, message: 'Error loading data: ' + err.message, severity: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [isElectron]);
 
-  const calculateStats = (data) => {
+  const calculateStats = useCallback((data) => {
     const totalValue = data.reduce((s, v) => s + v.stock_value, 0);
     const lowStock = data.filter(v => v.status === 'low_stock').length;
     const outOfStock = data.filter(v => v.status === 'out_of_stock').length;
@@ -201,48 +239,79 @@ export default function StockTrackingPage() {
       overStockCount: overStock,
       categoryBreakdown: Object.entries(catMap).map(([name, d]) => ({ name, ...d }))
     });
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
-  // ==================== DETAILED PRODUCT DIALOG COMPILATION ====================
+  useEffect(() => {
+    let cancelled = false;
+    const fetch = async () => {
+      setLoading(true);
+      try {
+        await loadData();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetch();
+    return () => { cancelled = true; };
+  }, [loadData]);
+
   const handleViewDetail = async (product) => {
     setSelectedProduct(product);
     try {
-      const salesQuery = `
-        SELECT si.*, s.invoice_no, s.date, s.customer_name
-        FROM sale_items si
-        JOIN sales s ON si.sale_id = s.id
-        WHERE si.product_variant_id = ? AND s.is_deleted = 0
-        ORDER BY s.id DESC LIMIT 10
-      `;
-      const purchasesQuery = `
-        SELECT pi.*, p.purchase_no, p.purchase_date, sup.name as supplier_name
-        FROM purchase_items pi
-        JOIN purchases p ON pi.purchase_id = p.id
-        LEFT JOIN suppliers sup ON p.supplier_id = sup.id
-        WHERE pi.product_variant_id = ? AND p.is_deleted = 0
-        ORDER BY p.id DESC LIMIT 10
-      `;
+      let sales, purchases;
 
-      const [sales, purchases] = await Promise.all([
-        db.electronQuery(salesQuery, [product.id]).catch(() => []),
-        db.electronQuery(purchasesQuery, [product.id]).catch(() => [])
-      ]);
+      if (isElectron) {
+        const salesQuery = `
+          SELECT si.*, s.invoice_no, s.date, s.customer_name
+          FROM sale_items si
+          JOIN sales s ON si.sale_id = s.id
+          WHERE si.product_variant_id = ? AND s.is_deleted = 0
+          ORDER BY s.id DESC LIMIT 10
+        `;
+        const purchasesQuery = `
+          SELECT pi.*, p.purchase_no, p.purchase_date, sup.name as supplier_name
+          FROM purchase_items pi
+          JOIN purchases p ON pi.purchase_id = p.id
+          LEFT JOIN suppliers sup ON p.supplier_id = sup.id
+          WHERE pi.product_variant_id = ? AND p.is_deleted = 0
+          ORDER BY p.id DESC LIMIT 10
+        `;
+
+        [sales, purchases] = await Promise.all([
+          safeDbCall(() => db.electronQuery(salesQuery, [product.id])),
+          safeDbCall(() => db.electronQuery(purchasesQuery, [product.id]))
+        ]);
+      } else {
+        const [allSales, allSaleItems, allPurchases, allPurchaseItems] = await Promise.all([
+          safeDbCall(() => db.getSalesHistory()),
+          safeDbCall(() => db.getAllSaleItems()),
+          safeDbCall(() => db.getPurchases()),
+          safeDbCall(() => db.getAllPurchaseItems())
+        ]);
+
+        const productSaleItems = (allSaleItems || []).filter(si => si.product_variant_id === product.id);
+        sales = productSaleItems.map(si => {
+          const sale = (allSales || []).find(s => s.id === si.sale_id);
+          return { ...si, invoice_no: sale?.invoice_no, date: sale?.date, customer_name: sale?.customer_name };
+        }).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+
+        const productPurchaseItems = (allPurchaseItems || []).filter(pi => pi.product_variant_id === product.id);
+        purchases = productPurchaseItems.map(pi => {
+          const purchase = (allPurchases || []).find(p => p.id === pi.purchase_id);
+          return { ...pi, purchase_no: purchase?.purchase_no, purchase_date: purchase?.purchase_date, supplier_name: purchase?.supplier_name };
+        }).sort((a, b) => new Date(b.purchase_date) - new Date(a.purchase_date)).slice(0, 10);
+      }
 
       setProductHistory({ sales, purchases });
       setDetailDialog(true);
     } catch (err) {
       console.error(err);
+      setSnackbar({ open: true, message: 'Error loading details: ' + err.message, severity: 'error' });
     }
   };
 
-  // ==================== CORE MEMOIZED FILTER SYSTEMS MATCHES ====================
   const filteredData = useMemo(() => {
     return variants.filter(v => {
-      // Dynamic fuzzing across key identity indicators handles real-time requests cleanly
       const matchSearch = !searchQuery.trim() || 
         (v.product_name || '').toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
         (v.variant_name || '').toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
@@ -251,7 +320,7 @@ export default function StockTrackingPage() {
 
       const matchCategory = !filterCategory || String(v.category_id) === String(filterCategory);
       const matchBrand = !filterBrand || String(v.brand_id) === String(filterBrand);
-      
+
       let matchStatus = true;
       if (activeTab === 1) matchStatus = v.status === 'low_stock';
       else if (activeTab === 2) matchStatus = v.status === 'out_of_stock';
@@ -270,14 +339,27 @@ export default function StockTrackingPage() {
   }, [filteredData, page, rowsPerPage]);
 
   const getStatusChip = (status) => {
-    const config = STOCK_STATUS[status] || STOCK_STATUS.entry_pool;
+    const config = STOCK_STATUS[status] || STOCK_STATUS.in_stock;
     return <Chip size="small" color={config.color} icon={config.icon} label={config.label} sx={{ fontWeight: 'bold' }} />;
+  };
+
+  const handleTabChange = (e, v) => {
+    setActiveTab(v);
+    setPage(1);
+    setFilterStatus('all');
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setFilterCategory('');
+    setFilterBrand('');
+    setFilterStatus('all');
+    setPage(1);
   };
 
   return (
     <Box sx={{ p: { xs: 1, md: 2 } }}>
 
-      {/* ===== MASTER DESK CONTROLS MODULE HEADER ===== */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h5" fontWeight="bold" color="primary">
           <Inventory sx={{ verticalAlign: 'middle', mr: 1, fontSize: 28 }} />
@@ -287,16 +369,12 @@ export default function StockTrackingPage() {
           <Button variant="outlined" size="small" startIcon={<FilterList />} onClick={() => setShowFilters(!showFilters)}>
             Filters Engine
           </Button>
-          <ToggleButtonGroup size="small" value={viewMode} exclusive onChange={(e, v) => v && setViewMode(v)}>
-            <ToggleButton value="table"><BarChart fontSize="small" /></ToggleButton>
-          </ToggleButtonGroup>
-          <Button variant="contained" size="small" sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }} startIcon={<Refresh />} onClick={loadData}>
-            Sync Tables
+          <Button variant="contained" size="small" sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }} startIcon={<Refresh />} onClick={loadData} disabled={loading}>
+            {loading ? 'Syncing...' : 'Sync Tables'}
           </Button>
         </Stack>
       </Box>
 
-      {/* ===== EXECUTIVE EXECUTIVE STATUS METRICS CARDS ===== */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
         {[
           { title: 'Total Sourced Products', value: stats.totalProducts, sub: `${stats.totalVariants} active variants`, color: 'primary', icon: <Inventory /> },
@@ -307,7 +385,7 @@ export default function StockTrackingPage() {
           { title: 'Fast Moving Units Rate', value: stats.fastMovingCount, sub: 'high outbound demand', color: 'success', icon: <Speed /> },
           { title: 'Over Stock Accumulation', value: stats.overStockCount, sub: 'excess volume cap', color: 'secondary', icon: <Layers /> },
         ].map((stat, idx) => (
-          <Grid item xs={6} md={3} lg={1.7} key={idx}>
+          <Grid item xs={6} md={3} lg={2} key={idx}>
             <Card sx={{ bgcolor: `${stat.color}.light`, borderLeft: '4px solid', borderLeftColor: `${stat.color}.main`, boxShadow: 1 }}>
               <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                 <Typography variant="caption" color="text.secondary" display="block" fontWeight={500}>{stat.title}</Typography>
@@ -319,9 +397,8 @@ export default function StockTrackingPage() {
         ))}
       </Grid>
 
-      {/* ===== NAVIGATION WORKSPACE PARAMETERS FILTERS TABS ===== */}
       <Paper sx={{ mb: 2 }}>
-        <Tabs value={activeTab} onChange={(e, v) => { setActiveTab(v); setPage(1); }} indicatorColor="primary" textColor="primary" variant="scrollable">
+        <Tabs value={activeTab} onChange={handleTabChange} indicatorColor="primary" textColor="primary" variant="scrollable">
           <Tab icon={<Inventory fontSize="small" />} iconPosition="start" label="All Registered Stocks" />
           <Tab icon={<Warning fontSize="small" />} iconPosition="start" label={`Low Limit Alert (${stats.lowStockCount})`} />
           <Tab icon={<RemoveShoppingCart fontSize="small" />} iconPosition="start" label={`Out of Stock (${stats.outOfStockCount})`} />
@@ -332,11 +409,9 @@ export default function StockTrackingPage() {
         </Tabs>
       </Paper>
 
-      {/* ===== ==================== ADVANCED REAL-TIME LIVE SEARCH FILTER NODES ==================== ===== */}
       {showFilters && activeTab !== 6 && (
         <Paper sx={{ p: 2, mb: 2, border: '1px solid #10b981', bgcolor: '#fbfdfb', boxShadow: 0 }}>
           <Grid container spacing={2} alignItems="center">
-            {/* INJECTED FUZZY MULTI-KEY SEARCH FIELD CONTROLLER */}
             <Grid item xs={12} md={4}>
               <TextField
                 fullWidth 
@@ -367,13 +442,12 @@ export default function StockTrackingPage() {
               </FormControl>
             </Grid>
             <Grid item xs={12} md={2}>
-              <Button fullWidth variant="outlined" color="success" size="small" onClick={() => { setSearchQuery(''); setFilterCategory(''); setFilterBrand(''); setFilterStatus('all'); setPage(1); }}>Reset Variables</Button>
+              <Button fullWidth variant="outlined" color="success" size="small" onClick={handleResetFilters}>Reset Variables</Button>
             </Grid>
           </Grid>
         </Paper>
       )}
 
-      {/* ===== MAIN GRID TABLE SCHEMAS VIEWPORT ===== */}
       {activeTab !== 6 && (
         <Paper sx={{ border: '1px solid #e5e7eb', boxShadow: 0 }}>
           <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
@@ -387,34 +461,44 @@ export default function StockTrackingPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {paginatedData.map((v) => (
-                  <TableRow key={v.id} hover>
-                    <TableCell></TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight="bold" color="primary">{v.product_name}</Typography>
-                      <Typography variant="caption" color="text.secondary">{v.variant_name || 'Standard Base Specs'}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption" fontFamily="monospace" sx={{ bgcolor: '#f3f4f6', px: 0.5, borderRadius: 0.5 }}>{v.sku}</Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography fontWeight="bold" color={v.current_stock <= v.stock_alert_quantity ? 'error.main' : 'green'}>{v.current_stock} units</Typography>
-                    </TableCell>
-                    <TableCell>{getStatusChip(v.status)}</TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>{formatCurrency(v.stock_value)}</TableCell>
-                    <TableCell sx={{ color: 'green', fontWeight: 500 }}>{formatCurrency(v.retail_value)}</TableCell>
-                    <TableCell>
-                      {v.last_sale_date ? (
-                        <Box><Typography variant="caption" display="block">{formatDate(v.last_sale_date)}</Typography><Typography variant="caption" color="text.secondary">{v.days_since_sale} days ago</Typography></Box>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      <Tooltip title="View Lifecycle History Details"><IconButton size="small" color="primary" onClick={() => handleViewDetail(v)}><Visibility fontSize="small" /></IconButton></Tooltip>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={9} align="center" sx={{ py: 8 }}>
+                      <Typography color="text.secondary">Loading stock data...</Typography>
                     </TableCell>
                   </TableRow>
-                ))}
-                {paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={9} align="center" sx={{ py: 8 }}><Typography color="text.secondary">No matching inventory assets found matching filter constraints parameters.</Typography></TableCell></TableRow>
+                ) : (
+                  <>
+                    {paginatedData.map((v) => (
+                      <TableRow key={v.id} hover>
+                        <TableCell></TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="bold" color="primary">{v.product_name}</Typography>
+                          <Typography variant="caption" color="text.secondary">{v.variant_name || 'Standard Base Specs'}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" fontFamily="monospace" sx={{ bgcolor: '#f3f4f6', px: 0.5, borderRadius: 0.5 }}>{v.sku}</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography fontWeight="bold" color={v.current_stock <= v.stock_alert_quantity ? 'error.main' : 'green'}>{v.current_stock} units</Typography>
+                        </TableCell>
+                        <TableCell>{getStatusChip(v.status)}</TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>{formatCurrency(v.stock_value)}</TableCell>
+                        <TableCell sx={{ color: 'green', fontWeight: 500 }}>{formatCurrency(v.retail_value)}</TableCell>
+                        <TableCell>
+                          {v.last_sale_date ? (
+                            <Box><Typography variant="caption" display="block">{formatDate(v.last_sale_date)}</Typography><Typography variant="caption" color="text.secondary">{v.days_since_sale} days ago</Typography></Box>
+                          ) : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip title="View Lifecycle History Details"><IconButton size="small" color="primary" onClick={() => handleViewDetail(v)}><Visibility fontSize="small" /></IconButton></Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {paginatedData.length === 0 && (
+                      <TableRow><TableCell colSpan={9} align="center" sx={{ py: 8 }}><Typography color="text.secondary">No matching inventory assets found matching filter constraints parameters.</Typography></TableCell></TableRow>
+                    )}
+                  </>
                 )}
               </TableBody>
             </Table>
@@ -425,7 +509,6 @@ export default function StockTrackingPage() {
         </Paper>
       )}
 
-      {/* ===== EXECUTIVE ANALYTICS COMPILATION VIEWPORT ===== */}
       {activeTab === 6 && (
         <Grid container spacing={2}>
           <Grid item xs={12} md={12}>
@@ -435,7 +518,9 @@ export default function StockTrackingPage() {
               {stats.categoryBreakdown.map((cat, i) => (
                 <Box key={i} sx={{ mb: 2.5 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography variant="body2" fontWeight={500}>{cat.name} — <span style={{ color: 'gray' }}>({cat.count} variants logged)</span></Typography>
+                    <Typography variant="body2" fontWeight={500}>
+                      {cat.name} — <span style={{ color: 'gray' }}>({cat.count} variants logged)</span>
+                    </Typography>
                     <Typography variant="body2" fontWeight="bold" color="primary.main">{formatCurrency(cat.stock_value)}</Typography>
                   </Box>
                   <LinearProgress variant="determinate" value={stats.totalStockValue > 0 ? (cat.stock_value / stats.totalStockValue) * 100 : 0} sx={{ height: 6, borderRadius: 3, bgcolor: '#e5e7eb', '& .MuiLinearProgress-bar': { bgcolor: '#10b981' } }} />
@@ -446,11 +531,15 @@ export default function StockTrackingPage() {
         </Grid>
       )}
 
-      {/* ===== HISTORY LIFECYCLE MODAL DETAILS MODULE ===== */}
       <Dialog open={detailDialog} onClose={() => setDetailDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ borderBottom: '1px solid #e5e7eb', pb: 1.5 }}>
           Asset Audit Portfolio Lifecycle: {selectedProduct?.product_name}
-          <Chip size="small" label={String(selectedProduct?.status).toUpperCase()} color={selectedProduct?.status === 'out_of_stock' ? 'error' : 'success'} sx={{ ml: 2, fontWeight: 'bold' }} />
+          <Chip 
+            size="small" 
+            label={String(selectedProduct?.status || 'unknown').toUpperCase()} 
+            color={STATUS_CHIP_COLORS[selectedProduct?.status] || 'default'} 
+            sx={{ ml: 2, fontWeight: 'bold' }} 
+          />
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
           {selectedProduct && (
@@ -476,6 +565,9 @@ export default function StockTrackingPage() {
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(p.purchase_price)}</TableCell>
                       </TableRow>
                     ))}
+                    {(!productHistory.purchases || productHistory.purchases.length === 0) && (
+                      <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}><Typography color="text.secondary">No procurement history found</Typography></TableCell></TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -494,6 +586,9 @@ export default function StockTrackingPage() {
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(s.price)}</TableCell>
                       </TableRow>
                     ))}
+                    {(!productHistory.sales || productHistory.sales.length === 0) && (
+                      <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4 }}><Typography color="text.secondary">No sales history found</Typography></TableCell></TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -503,10 +598,10 @@ export default function StockTrackingPage() {
         <DialogActions><Button onClick={() => setDetailDialog(false)}>Dismiss Portfolio</Button></DialogActions>
       </Dialog>
 
-      {/* ===== GLOBAL TOAST MESSAGES ENGINE ===== */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
       </Snackbar>
     </Box>
   );
 }
+

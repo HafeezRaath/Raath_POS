@@ -1,8 +1,24 @@
-import React from 'react';
-import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { ThemeProvider, createTheme, Box, CssBaseline, Toolbar, CircularProgress } from '@mui/material';
+import React, { useMemo } from 'react';
+import { 
+  HashRouter as Router, 
+  Routes, 
+  Route, 
+  Navigate, 
+  useLocation 
+} from 'react-router-dom';
+import { 
+  ThemeProvider, 
+  createTheme, 
+  Box, 
+  CssBaseline, 
+  Toolbar, 
+  CircularProgress 
+} from '@mui/material';
 import { useResponsive } from './hooks/useResponsive';
 import { AuthProvider, useAuth } from './AuthContext';
+
+// Role imports
+import { hasPermission } from './role';
 
 // ==================== PAGES ====================
 import Dashboard from './pages/Dashboard';
@@ -24,11 +40,13 @@ import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ServicesPage from './pages/ServicesPage';
 
 // ==================== COMPONENTS ====================
 import Navbar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 
+// ==================== THEME ====================
 const theme = createTheme({
   palette: {
     primary: { main: '#1a237e' },
@@ -39,21 +57,55 @@ const theme = createTheme({
 });
 
 // ==================== GUARDS ====================
-function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
-  const location = useLocation();
-  if (loading) return null;
-  return isAuthenticated ? children : <Navigate to="/login" state={{ from: location }} replace />;
-}
 
 function PublicRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
-  if (loading) return null;
-  return isAuthenticated ? <Navigate to="/" replace /> : children;
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+function ProtectedRoute({ children, pageId }) {
+  const { isAuthenticated, loading, user } = useAuth();
+  const location = useLocation();
+
+  const hasAccess = useMemo(() => {
+    if (!user?.role || !pageId) return false;
+    return hasPermission(user.role, pageId);
+  }, [user?.role, pageId]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (pageId && !hasAccess) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
 }
 
 // ==================== LAYOUT ====================
-function MainLayout({ children }) {
+const MainLayout = React.memo(function MainLayout({ children }) {
   const { isMobile } = useResponsive();
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -65,45 +117,144 @@ function MainLayout({ children }) {
       {isMobile && <MobileNav />}
     </Box>
   );
-}
+});
 
 // ==================== ROUTES ====================
-function AppRoutes() {
+const AppRoutes = React.memo(function AppRoutes() {
   const { loading } = useAuth();
 
-  if (loading) return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-      <CircularProgress />
-    </Box>
-  );
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Routes>
+      {/* PUBLIC ROUTES */}
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
-      
-      <Route path="/" element={<ProtectedRoute><MainLayout><Dashboard /></MainLayout></ProtectedRoute>} />
-      <Route path="/billing" element={<ProtectedRoute><MainLayout><Billing /></MainLayout></ProtectedRoute>} />
-      <Route path="/products" element={<ProtectedRoute><MainLayout><ProductsPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/suppliers" element={<ProtectedRoute><MainLayout><SuppliersPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/emi" element={<ProtectedRoute><MainLayout><EMI /></MainLayout></ProtectedRoute>} />
-      <Route path="/inventory" element={<ProtectedRoute><MainLayout><Inventory /></MainLayout></ProtectedRoute>} />
-      <Route path="/customers" element={<ProtectedRoute><MainLayout><CustomerPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/recovery" element={<ProtectedRoute><MainLayout><RecoveryPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/expenses" element={<ProtectedRoute><MainLayout><ExpensesPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/sales-history" element={<ProtectedRoute><MainLayout><SalesHistory /></MainLayout></ProtectedRoute>} />
-      <Route path="/returns" element={<ProtectedRoute><MainLayout><ReturnsPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/stock-tracking" element={<ProtectedRoute><MainLayout><StockTrackingPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/accounts" element={<ProtectedRoute><MainLayout><AccountsPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute><MainLayout><ReportsPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/backup" element={<ProtectedRoute><MainLayout><BackupPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/history" element={<ProtectedRoute><MainLayout><HistoryPage /></MainLayout></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><MainLayout><SettingsPage /></MainLayout></ProtectedRoute>} />
-      
+
+      {/* OLD URL REDIRECTS */}
+      <Route path="/dashboard" element={<Navigate to="/" replace />} />
+      <Route path="/pos" element={<Navigate to="/billing" replace />} />
+
+      {/* PROTECTED ROUTES */}
+      <Route path="/" element={
+        <ProtectedRoute pageId="dashboard">
+          <MainLayout><Dashboard /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/billing" element={
+        <ProtectedRoute pageId="pos">
+          <MainLayout><Billing /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/sales-history" element={
+        <ProtectedRoute pageId="sales">
+          <MainLayout><SalesHistory /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/returns" element={
+        <ProtectedRoute pageId="sales">
+          <MainLayout><ReturnsPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/products" element={
+        <ProtectedRoute pageId="products">
+          <MainLayout><ProductsPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/inventory" element={
+        <ProtectedRoute pageId="inventory">
+          <MainLayout><Inventory /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/stock-tracking" element={
+        <ProtectedRoute pageId="inventory">
+          <MainLayout><StockTrackingPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/customers" element={
+        <ProtectedRoute pageId="customers">
+          <MainLayout><CustomerPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/suppliers" element={
+        <ProtectedRoute pageId="suppliers">
+          <MainLayout><SuppliersPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/services" element={
+        <ProtectedRoute pageId="services">
+          <MainLayout><ServicesPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/emi" element={
+        <ProtectedRoute pageId="emi">
+          <MainLayout><EMI /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/expenses" element={
+        <ProtectedRoute pageId="expenses">
+          <MainLayout><ExpensesPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/recovery" element={
+        <ProtectedRoute pageId="customers">
+          <MainLayout><RecoveryPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/accounts" element={
+        <ProtectedRoute pageId="reports">
+          <MainLayout><AccountsPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/reports" element={
+        <ProtectedRoute pageId="reports">
+          <MainLayout><ReportsPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/history" element={
+        <ProtectedRoute pageId="reports">
+          <MainLayout><HistoryPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/settings" element={
+        <ProtectedRoute pageId="settings">
+          <MainLayout><SettingsPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/backup" element={
+        <ProtectedRoute pageId="backup">
+          <MainLayout><BackupPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      {/* CATCH ALL */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
-}
+});
 
 export default function App() {
   return (

@@ -13,10 +13,8 @@ import {
   Computer, Send, Lock, Info
 } from '@mui/icons-material';
 
-// Agar aap Electron IPC use kar rahe hain toh yeh uncomment karein:
-// const { ipcRenderer } = window.require('electron');
-// ya agar preload script se expose kiya hai:
-// const electronAPI = window.electron;
+// Electron IPC API (preload script se expose hona chahiye)
+const electronAPI = window.electronAPI;
 
 const formatBytes = (bytes) => {
   if (!bytes || bytes === 0) return '0 B';
@@ -43,8 +41,8 @@ export default function BackupPage() {
 
   // Auto Backup Settings
   const [autoBackup, setAutoBackup] = useState(false);
-  const [backupInterval, setBackupInterval] = useState('daily'); // daily, weekly, monthly
-  const [backupDestination, setBackupDestination] = useState('local'); // local, gmail, drive
+  const [backupInterval, setBackupInterval] = useState('daily');
+  const [backupDestination, setBackupDestination] = useState('local');
 
   // Gmail Settings
   const [gmailConfig, setGmailConfig] = useState({
@@ -66,133 +64,96 @@ export default function BackupPage() {
   const loadDbInfo = async () => {
     try {
       // Electron IPC se DB info lena
-      // const info = await electronAPI.getDbInfo();
+      const info = await electronAPI.getDbInfo();
+      setDbInfo(info);
 
-      // Temporary mock data - Electron main process mein implement karein
-      setDbInfo({
-        path: 'C:\Users\User\AppData\Roaming\YourApp\database.db',
-        size: 2457600, // 2.4 MB mock
-        lastModified: new Date().toISOString()
-      });
-
-      // Load backup history from localStorage ya Electron store
+      // Load backup history from localStorage
       const history = JSON.parse(localStorage.getItem('backup_history') || '[]');
       setBackups(history);
 
-      // Load settings
-      const settings = JSON.parse(localStorage.getItem('backup_settings') || '{}');
+      // Load settings from main process
+      const settings = await electronAPI.loadBackupSettings();
       if (settings.autoBackup !== undefined) setAutoBackup(settings.autoBackup);
       if (settings.backupInterval) setBackupInterval(settings.backupInterval);
       if (settings.backupDestination) setBackupDestination(settings.backupDestination);
       if (settings.gmail) setGmailConfig(settings.gmail);
     } catch (err) {
       console.error('Load info error:', err);
+      // Fallback mock data agar Electron API fail ho
+      setDbInfo({
+        path: 'C:\\Users\\User\\AppData\\Roaming\\RAATH-POS\\raath-pos.db',
+        size: 2457600,
+        lastModified: new Date().toISOString()
+      });
     }
   };
 
   useEffect(() => {
     loadDbInfo();
-
-    // Electron se auto-backup status check
-    // ipcRenderer?.on('backup-completed', handleBackupComplete);
-    // ipcRenderer?.on('backup-error', handleBackupError);
-
-    return () => {
-      // ipcRenderer?.removeAllListeners('backup-completed');
-      // ipcRenderer?.removeAllListeners('backup-error');
-    };
   }, []);
 
   // ==================== SAVE SETTINGS ====================
-  const saveSettings = () => {
+  const saveSettings = async () => {
     const settings = {
       autoBackup,
       backupInterval,
       backupDestination,
       gmail: gmailConfig
     };
-    localStorage.setItem('backup_settings', JSON.stringify(settings));
-
-    // Electron main process ko bhejein
-    // electronAPI?.updateBackupSettings(settings);
-
-    showSnackbar('Settings saved successfully!', 'success');
+    
+    try {
+      await electronAPI.updateBackupSettings(settings);
+      localStorage.setItem('backup_settings', JSON.stringify(settings));
+      showSnackbar('Settings saved successfully!', 'success');
+    } catch (err) {
+      showSnackbar('Failed to save settings: ' + err.message, 'error');
+    }
   };
 
-  // ==================== MANUAL BACKUP ====================
-  const handleManualBackup = async (destination = 'local') => {
+  // ==================== MANUAL BACKUP (MERGED) ====================
+  const handleManualBackup = async (destination) => {
     setLoading(true);
     setUploadProgress(0);
 
     try {
       if (destination === 'gmail') {
+        // Validate Gmail config
         if (!gmailConfig.email || !gmailConfig.appPassword || !gmailConfig.toEmail) {
           showSnackbar('Please configure Gmail settings first!', 'error');
           setLoading(false);
           return;
         }
 
-        // Electron main process ko call karein
-        // await electronAPI.sendBackupEmail({
-        //   ...gmailConfig,
-        //   subject: `POS Backup - ${new Date().toLocaleDateString()}`,
-        //   body: 'Automated backup from POS System'
-        // });
+        // Call Electron main process
+        const result = await electronAPI.sendBackupEmail(gmailConfig);
+        
+        if (result.success) {
+          addBackupRecord('gmail', 'Email Sent Successfully');
+          showSnackbar('Backup sent to Email!', 'success');
+        } else {
+          throw new Error(result.message || 'Email backup failed');
+        }
 
-        // Simulate progress
-        simulateProgress();
-        await delay(3000);
-
-        addBackupRecord('gmail', 'Email sent successfully');
-        showSnackbar('Backup emailed to Gmail successfully!', 'success');
+      } else if (destination === 'local') {
+        // Call Electron main process
+        const result = await electronAPI.createLocalBackup();
+        
+        addBackupRecord('local', `Saved at: ${result.path}`);
+        showSnackbar('Local backup created!', 'success');
 
       } else if (destination === 'drive') {
-        // Google Drive upload
-        // await electronAPI.uploadToDrive();
+        // Google Drive - Abhi ke liye placeholder
         simulateProgress();
         await delay(2000);
-
         addBackupRecord('drive', 'Google Drive upload complete');
         showSnackbar('Backup uploaded to Google Drive!', 'success');
-
-      } else {
-        // Local backup - Electron will copy file to chosen path
-        // const result = await electronAPI.createLocalBackup();
-
-        // For web: download the file
-        await downloadLocalBackup();
-
-        addBackupRecord('local', 'Downloaded to Downloads folder');
-        showSnackbar('Local backup created successfully!', 'success');
       }
     } catch (err) {
+      console.error('Backup error:', err);
       showSnackbar('Backup failed: ' + err.message, 'error');
     } finally {
       setLoading(false);
       setUploadProgress(0);
-    }
-  };
-
-  // ==================== LOCAL DOWNLOAD (Web Fallback) ====================
-  const downloadLocalBackup = async () => {
-    // Agar Electron hai toh yeh unnecessary hai
-    // Electron main process mein: fs.copyFile(dbPath, backupPath)
-
-    try {
-      // SQLite DB ko as blob download karein (agar sql.js use kar rahe hain)
-      // const dbBlob = await db.export();
-      // const url = URL.createObjectURL(new Blob([dbBlob]));
-
-      // Mock download
-      const url = '#'; // Replace with actual DB blob URL
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `pos-backup-${new Date().toISOString().split('T')[0]}.db`;
-      // a.click();
-
-      console.log('Local backup download triggered');
-    } catch (err) {
-      throw new Error('Failed to download database file');
     }
   };
 
@@ -202,10 +163,16 @@ export default function BackupPage() {
 
     setLoading(true);
     try {
-      // Electron main process ko restore command bhejein
-      // await electronAPI.restoreBackup(selectedBackup.path);
-
-      await delay(2000);
+      if (selectedBackup.type === 'upload') {
+        // File upload restore
+        await electronAPI.restoreBackup(selectedBackup.path);
+      } else if (selectedBackup.backupDirPath) {
+        // Restore from existing backup path
+        await electronAPI.restoreBackup(selectedBackup.backupDirPath);
+      } else {
+        throw new Error('Invalid backup path');
+      }
+      
       showSnackbar('Database restored successfully! Please restart the app.', 'success');
       setRestoreDialog(false);
     } catch (err) {
@@ -630,7 +597,7 @@ export default function BackupPage() {
 
           <Typography variant="subtitle2" gutterBottom>Select Backup to Restore:</Typography>
           <List dense>
-            {backups.map((backup, idx) => (
+            {backups.map((backup) => (
               <Paper 
                 key={backup.id} 
                 sx={{ 

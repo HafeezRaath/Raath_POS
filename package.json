@@ -18,6 +18,7 @@
     "better-sqlite3": "^12.11.1",
     "date-fns": "^4.1.0",
     "electron-store": "^11.0.2",
+    "firebase": "^12.16.0",
     "googleapis": "^171.4.0",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.7",
@@ -28,6 +29,7 @@
     "react-scripts": "5.0.1",
     "sqlite3": "^6.0.1",
     "tailwindcss": "^3.4.19",
+    "tesseract.js": "^7.0.0",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
@@ -39,8 +41,9 @@
     "postinstall": "npm run rebuild",
     "electron": "npx electron public/electron.js",
     "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3000 && npx electron public/electron.js\"",
-    "electron-pack": "npm run build && npx electron-builder --dir",
-    "electron-dist": "npm run build && npx electron-builder"
+    "copy-electron": "copy public\\electron.js build\\electron.js && copy public\\preload.js build\\preload.js",
+    "electron-pack": "npm run build && npm run copy-electron && npx electron-builder --dir",
+    "electron-dist": "npm run build && npm run copy-electron && npx electron-builder"
   },
   "build": {
     "appId": "com.raath.pos",
@@ -49,10 +52,7 @@
       "output": "dist"
     },
     "files": [
-      "build/**/*",
-      "public/electron.js",
-      "public/preload.js",
-      "node_modules/**/*"
+      "build/**/*"
     ],
     "extraResources": [
       {
@@ -89,7 +89,7 @@
   "devDependencies": {
     "concurrently": "^9.2.1",
     "electron": "^42.1.0",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^26.15.3",
     "wait-on": "^9.0.10"
   }
 }

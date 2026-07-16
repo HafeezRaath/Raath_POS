@@ -18,7 +18,7 @@ const steps = ['Account Info', 'Business Details', 'Review'];
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -68,7 +68,35 @@ export default function Signup() {
     if (!validateStep()) return;
     setLoading(true);
     setError('');
+
     try {
+      // ===== FIREBASE REGISTER (Web / Cloud Mode) =====
+      if (register) {
+        const shopData = {
+          name: form.name,
+          shopName: form.shopName,
+          phone: form.phone,
+          businessType: form.businessType,
+          currency: form.currency,
+          shopAddress: form.shopAddress
+        };
+
+        const result = await register(form.email, form.password, shopData);
+        if (result.success) {
+          navigate('/');
+          return;
+        }
+        // If register exists but failed, show error (don't silently fallback)
+        if (result.error && !result.error.includes('auth/network-request-failed')) {
+          setError(result.error);
+          setLoading(false);
+          return;
+        }
+        // Network or other error — fall through to local DB
+        console.warn('[Signup] Firebase register failed, falling back to local DB:', result.error);
+      }
+
+      // ===== LOCAL DB REGISTER (Electron / Offline Fallback) =====
       const existing = await db.getUserByEmail(form.email);
       if (existing) {
         setError('Email already registered.');
@@ -97,14 +125,15 @@ export default function Signup() {
         name: form.name,
         email: form.email,
         role: 'admin',
-        shop_name: form.shopName
+        shop_name: form.shopName,
+        shop_id: `shop_${userId}`,
       };
 
       login(userToStore);
       navigate('/');
     } catch (err) {
       console.error('Signup error:', err);
-      setError('System Error: Could not create account.');
+      setError(err.message || 'System Error: Could not create account.');
     } finally {
       setLoading(false);
     }
@@ -237,6 +266,8 @@ export default function Signup() {
               <option value="restaurant">Restaurant / Cafe</option>
               <option value="electronics">Electronics</option>
               <option value="clothing">Clothing & Fashion</option>
+              <option value="shoes">Shoes</option>
+              <option value="mobile">Mobile Shop</option>
               <option value="other">Other</option>
             </TextField>
             <TextField

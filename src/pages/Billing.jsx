@@ -8,7 +8,8 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, Search, Print, Save, Pause, Close,
-  Settings, Receipt, ArrowBack, QrCodeScanner, Person, LocalShipping
+  Settings, Receipt, ArrowBack, QrCodeScanner, Person, LocalShipping,
+  LocalOffer, ShoppingCart
 } from '@mui/icons-material';
 import db from '../database/db';
 
@@ -23,146 +24,312 @@ const today = () => new Date().toISOString().split('T')[0];
 const ThermalReceipt = React.forwardRef(({ sale, items, party, partyType }, ref) => {
   if (!sale) {
     return (
-      <div ref={ref} style={{ width: '58mm', padding: '20px', textAlign: 'center', fontFamily: '"Courier New", monospace', fontSize: '12px' }}>
+      <div ref={ref} style={{ width: '80mm', padding: '20px', textAlign: 'center', fontFamily: '"Segoe UI", Arial, sans-serif', fontSize: '12px' }}>
         <div>No receipt data</div>
       </div>
     );
   }
-  
+
   const dateStr = sale?.date ? new Date(sale.date).toLocaleString('en-GB', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
+    day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   }) : '';
-  
+
   const totalQty = items?.reduce((s, i) => s + Number(i.qty || 0), 0) || 0;
-  
+  const offerItems = items?.filter(i => i.isOfferItem) || [];
+  const regularItems = items?.filter(i => !i.isOfferItem) || [];
+
   return (
     <div ref={ref} style={{
-      width: '58mm',
-      padding: '4px 6px',
-      fontFamily: '"Courier New", Courier, monospace',
+      width: '80mm',
+      padding: '8px 12px',
+      fontFamily: '"Segoe UI", "Helvetica Neue", Arial, sans-serif',
       fontSize: '11px',
-      lineHeight: '1.4',
-      background: 'white',
-      color: 'black',
+      lineHeight: '1.5',
+      background: '#fff',
+      color: '#1a1a1a',
       boxSizing: 'border-box'
     }}>
-      {/* Store Header */}
-      <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-        <div style={{ fontSize: '16px', fontWeight: 'bold', letterSpacing: '1px', marginBottom: '2px' }}>
+      {/* ===== HEADER ===== */}
+      <div style={{ textAlign: 'center', marginBottom: '8px', paddingBottom: '8px', borderBottom: '2px solid #10b981' }}>
+        <div style={{ 
+          fontSize: '22px', 
+          fontWeight: '800', 
+          letterSpacing: '2px', 
+          marginBottom: '4px',
+          color: '#10b981',
+          textTransform: 'uppercase'
+        }}>
           RAATH POS
         </div>
-        <div style={{ fontSize: '10px', marginBottom: '1px' }}>Universal Retail System</div>
-        <div style={{ fontSize: '10px' }}>Phone: 0349-3860656</div>
-      </div>
-      
-      <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
-      
-      {/* Invoice Info */}
-      <div style={{ marginBottom: '4px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Slip: {sale?.invoiceNo || 'N/A'}</span>
-          <span>Staff: Admin</span>
+        <div style={{ fontSize: '11px', color: '#666', marginBottom: '2px', fontWeight: '500' }}>
+          Universal Retail Management System
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Date: {dateStr}</span>
-          <span>Type: {String(partyType).toUpperCase()}</span>
+        <div style={{ fontSize: '10px', color: '#888' }}>
+          <span style={{ marginRight: '8px' }}>📞 0349-3860656</span>
+          <span>📍 Main Market, Lahore</span>
         </div>
       </div>
-      
-      <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
-      
-      {/* Party/Customer */}
-      <div style={{ marginBottom: '4px', textAlign: 'center' }}>
-        **** {party?.name || 'Walk-in Account'} ****
+
+      {/* ===== INVOICE INFO ===== */}
+      <div style={{ 
+        background: '#f8fafc', 
+        borderRadius: '6px', 
+        padding: '8px 10px', 
+        marginBottom: '8px',
+        border: '1px solid #e2e8f0'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+          <span style={{ color: '#64748b', fontWeight: '500' }}>Invoice #</span>
+          <span style={{ fontWeight: '700', color: '#10b981' }}>{sale?.invoiceNo || 'N/A'}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+          <span style={{ color: '#64748b', fontWeight: '500' }}>Date</span>
+          <span style={{ fontWeight: '600' }}>{dateStr}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#64748b', fontWeight: '500' }}>Type</span>
+          <span style={{ 
+            fontWeight: '700', 
+            color: partyType === 'customer' ? '#3b82f6' : '#f59e0b',
+            textTransform: 'uppercase',
+            fontSize: '10px'
+          }}>
+            {String(partyType).toUpperCase()}
+          </span>
+        </div>
       </div>
-      
-      {/* Items Header */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #000', paddingBottom: '2px', marginBottom: '2px', fontWeight: 'bold' }}>
-        <span style={{ flex: 1 }}>Description</span>
-        <span style={{ width: '35px', textAlign: 'right' }}>Qty</span>
-        <span style={{ width: '50px', textAlign: 'right' }}>Amount</span>
-      </div>
-      
-      {/* Items */}
-      {(items || []).map((item, idx) => (
-        <div key={idx} style={{ marginBottom: '2px' }}>
-          <div style={{ display: 'flex' }}>
-            <span style={{ flex: 1, wordBreak: 'break-word' }}>{item.name || 'Item'}</span>
-            <span style={{ width: '35px', textAlign: 'right' }}>{Number(item.qty || 0).toFixed(item.qty % 1 === 0 ? 0 : 3)}</span>
-            <span style={{ width: '50px', textAlign: 'right' }}>{Number(item.total || 0).toFixed(0)}</span>
+
+      {/* ===== CUSTOMER INFO ===== */}
+      <div style={{ 
+        background: '#eff6ff', 
+        borderRadius: '6px', 
+        padding: '8px 10px', 
+        marginBottom: '10px',
+        border: '1px solid #bfdbfe',
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '10px', color: '#3b82f6', fontWeight: '600', marginBottom: '2px' }}>
+          BILL TO
+        </div>
+        <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e40af' }}>
+          {party?.name || 'Walk-in Customer'}
+        </div>
+        {party?.phone && (
+          <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+            📱 {party.phone}
           </div>
-          {item.sku && (
-            <div style={{ fontSize: '9px', color: '#333', paddingLeft: '4px' }}>
-              {item.sku} @ {Number(item.price || 0).toFixed(0)}
+        )}
+      </div>
+
+      {/* ===== ITEMS TABLE ===== */}
+      <div style={{ marginBottom: '8px' }}>
+        {/* Table Header */}
+        <div style={{ 
+          display: 'flex', 
+          background: '#10b981', 
+          color: 'white',
+          padding: '6px 8px',
+          borderRadius: '4px 4px 0 0',
+          fontWeight: '700',
+          fontSize: '10px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px'
+        }}>
+          <span style={{ flex: 1 }}>Item</span>
+          <span style={{ width: '40px', textAlign: 'center' }}>Qty</span>
+          <span style={{ width: '55px', textAlign: 'right' }}>Price</span>
+          <span style={{ width: '55px', textAlign: 'right' }}>Total</span>
+        </div>
+
+        {/* Table Body */}
+        {(items || []).map((item, idx) => (
+          <div key={idx} style={{ 
+            display: 'flex', 
+            padding: '6px 8px',
+            borderBottom: '1px solid #f1f5f9',
+            background: idx % 2 === 0 ? '#fff' : '#fafafa',
+            alignItems: 'flex-start'
+          }}>
+            <span style={{ flex: 1, wordBreak: 'break-word', paddingRight: '4px' }}>
+              <span style={{ fontWeight: '600', color: '#1e293b' }}>{item.name || 'Item'}</span>
+              {item.isOfferItem && (
+                <span style={{ 
+                  display: 'inline-block',
+                  background: '#dcfce7', 
+                  color: '#166534',
+                  fontSize: '8px',
+                  padding: '1px 4px',
+                  borderRadius: '3px',
+                  marginLeft: '4px',
+                  fontWeight: '700'
+                }}>
+                  OFFER
+                </span>
+              )}
+              <br/>
+              <span style={{ fontSize: '9px', color: '#94a3b8' }}>
+                {item.sku || ''}
+              </span>
+            </span>
+            <span style={{ width: '40px', textAlign: 'center', fontWeight: '600' }}>
+              {Number(item.qty || 0).toFixed(item.qty % 1 === 0 ? 0 : 2)}
+            </span>
+            <span style={{ width: '55px', textAlign: 'right', color: '#64748b' }}>
+              {Number(item.price || 0).toFixed(0)}
+            </span>
+            <span style={{ width: '55px', textAlign: 'right', fontWeight: '700', color: '#10b981' }}>
+              {Number(item.total || 0).toFixed(0)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* ===== SUMMARY BOX ===== */}
+      <div style={{ 
+        background: '#f8fafc', 
+        borderRadius: '6px', 
+        padding: '10px',
+        border: '1px solid #e2e8f0',
+        marginBottom: '8px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '10px' }}>
+          <span style={{ color: '#64748b' }}>Total Items</span>
+          <span style={{ fontWeight: '600' }}>{items?.length || 0}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '10px' }}>
+          <span style={{ color: '#64748b' }}>Total Quantity</span>
+          <span style={{ fontWeight: '600' }}>{totalQty.toFixed(2)}</span>
+        </div>
+
+        <div style={{ borderTop: '1px dashed #cbd5e1', margin: '6px 0', paddingTop: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+            <span style={{ color: '#64748b' }}>Sub Total</span>
+            <span style={{ fontWeight: '600' }}>Rs. {Number(sale?.subtotal || 0).toFixed(2)}</span>
+          </div>
+          {sale?.itemDiscount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+              <span style={{ color: '#ef4444' }}>Item Discount</span>
+              <span style={{ color: '#ef4444' }}>-Rs. {Number(sale.itemDiscount).toFixed(2)}</span>
+            </div>
+          )}
+          {sale?.discount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+              <span style={{ color: '#ef4444' }}>Bill Discount</span>
+              <span style={{ color: '#ef4444' }}>-Rs. {Number(sale.discount).toFixed(2)}</span>
+            </div>
+          )}
+          {sale?.tax > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+              <span style={{ color: '#64748b' }}>Tax</span>
+              <span>Rs. {Number(sale.tax).toFixed(2)}</span>
             </div>
           )}
         </div>
-      ))}
-      
-      <div style={{ borderTop: '1px solid #000', margin: '4px 0', paddingTop: '2px' }}></div>
-      
-      {/* Totals */}
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span>Total Items: {items?.length || 0}</span>
-        <span>Total Qty: {totalQty.toFixed(3)}</span>
-      </div>
-      
-      <div style={{ marginTop: '4px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Sub Total:</span>
-          <span>{Number(sale?.subtotal || 0).toFixed(2)}</span>
-        </div>
-        {sale?.itemDiscount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Item Disc:</span>
-            <span>-{Number(sale.itemDiscount).toFixed(2)}</span>
-          </div>
-        )}
-        {sale?.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Bill Disc:</span>
-            <span>-{Number(sale.discount).toFixed(2)}</span>
-          </div>
-        )}
-        {sale?.tax > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Tax:</span>
-            <span>{Number(sale.tax).toFixed(2)}</span>
-          </div>
-        )}
-      </div>
-      
-      <div style={{ borderTop: '1px dashed #000', margin: '4px 0', paddingTop: '4px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px' }}>
-          <span>GRAND TOTAL:</span>
-          <span>Rs. {Number(sale?.grandTotal || 0).toFixed(2)}</span>
+
+        <div style={{ 
+          borderTop: '2px solid #10b981', 
+          marginTop: '6px', 
+          paddingTop: '8px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span style={{ fontSize: '13px', fontWeight: '800', color: '#1e293b' }}>GRAND TOTAL</span>
+          <span style={{ fontSize: '16px', fontWeight: '800', color: '#10b981' }}>
+            Rs. {Number(sale?.grandTotal || 0).toFixed(2)}
+          </span>
         </div>
       </div>
-      
-      <div style={{ marginTop: '2px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Paid:</span>
-          <span>{Number(sale?.paid || 0).toFixed(2)}</span>
+
+      {/* ===== PAYMENT DETAILS ===== */}
+      <div style={{ 
+        background: '#ecfdf5', 
+        borderRadius: '6px', 
+        padding: '8px 10px',
+        border: '1px solid #a7f3d0',
+        marginBottom: '8px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+          <span style={{ color: '#059669', fontWeight: '600' }}>Paid Amount</span>
+          <span style={{ fontWeight: '700', color: '#059669' }}>Rs. {Number(sale?.paid || 0).toFixed(2)}</span>
         </div>
         {sale?.due > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Due:</span>
-            <span>{Number(sale.due).toFixed(2)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+            <span style={{ color: '#dc2626', fontWeight: '600' }}>Balance Due</span>
+            <span style={{ fontWeight: '700', color: '#dc2626' }}>Rs. {Number(sale.due).toFixed(2)}</span>
           </div>
         )}
         {sale?.change > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Change:</span>
-            <span>{Number(sale.change).toFixed(2)}</span>
+            <span style={{ color: '#059669', fontWeight: '600' }}>Change Return</span>
+            <span style={{ fontWeight: '700', color: '#059669' }}>Rs. {Number(sale.change).toFixed(2)}</span>
           </div>
         )}
       </div>
-      
-      {/* Footer */}
-      <div style={{ textAlign: 'center', marginTop: '8px', borderTop: '1px dashed #000', paddingTop: '6px' }}>
-        <div style={{ fontSize: '10px', marginBottom: '2px' }}>Thank You! Visit Again</div>
-        <div style={{ fontSize: '9px', color: '#666' }}>Powered by Raath Developers</div>
+
+      {/* ===== OFFER SUMMARY (if any) ===== */}
+      {offerItems.length > 0 && (
+        <div style={{ 
+          background: '#fef3c7', 
+          borderRadius: '6px', 
+          padding: '8px 10px',
+          border: '1px solid #fcd34d',
+          marginBottom: '8px'
+        }}>
+          <div style={{ fontSize: '10px', fontWeight: '700', color: '#92400e', marginBottom: '4px', textAlign: 'center' }}>
+            🎁 BUNDLE OFFER APPLIED
+          </div>
+          {offerItems.map((item, idx) => (
+            <div key={idx} style={{ fontSize: '10px', color: '#78350f', textAlign: 'center' }}>
+              {item.offerName || 'Offer'} — {item.name}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ===== BARCODE / QR SECTION ===== */}
+      <div style={{ 
+        textAlign: 'center', 
+        margin: '10px 0',
+        padding: '8px',
+        background: '#f8fafc',
+        borderRadius: '6px',
+        border: '1px dashed #cbd5e1'
+      }}>
+        <div style={{ 
+          fontSize: '24px', 
+          fontFamily: '"Libre Barcode 39", "Courier New", monospace',
+          letterSpacing: '2px',
+          color: '#1e293b',
+          marginBottom: '4px'
+        }}>
+          *{sale?.invoiceNo || '0000'}*
+        </div>
+        <div style={{ fontSize: '9px', color: '#94a3b8' }}>
+          Scan for digital verification
+        </div>
+      </div>
+
+      {/* ===== FOOTER ===== */}
+      <div style={{ 
+        textAlign: 'center', 
+        marginTop: '10px', 
+        paddingTop: '10px',
+        borderTop: '2px solid #e2e8f0'
+      }}>
+        <div style={{ fontSize: '12px', fontWeight: '700', color: '#10b981', marginBottom: '4px' }}>
+          Thank You For Your Business!
+        </div>
+        <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>
+          Goods once sold will not be taken back
+        </div>
+        <div style={{ fontSize: '9px', color: '#cbd5e1' }}>
+          Powered by Raath Developers | www.raathpos.com
+        </div>
+        <div style={{ fontSize: '8px', color: '#e2e8f0', marginTop: '4px' }}>
+          ─────────────────────
+        </div>
       </div>
     </div>
   );
@@ -210,6 +377,11 @@ export default function BillingPage() {
   const [lastScanTime, setLastScanTime] = useState(0);
   const [searchKey, setSearchKey] = useState(0);
 
+  // Offers state
+  const [offers, setOffers] = useState([]);
+  const [showOffersDialog, setShowOffersDialog] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState(null);
+
   const printRef = useRef();
   const searchRef = useRef();
   const barcodeTimeoutRef = useRef();
@@ -223,16 +395,18 @@ export default function BillingPage() {
 
   const loadData = async () => {
     try {
-      const [allVariants, custs, sups, cats] = await Promise.all([
+      const [allVariants, custs, sups, cats, offs] = await Promise.all([
         db.getAllVariants ? db.getAllVariants() : db.getProductVariants(),
         db.getCustomers(),
         db.getSuppliers(),
-        db.getCategories()
+        db.getCategories(),
+        db.getOffers ? db.getOffers() : Promise.resolve([])
       ]);
       setProducts(allVariants || []);
       setCustomers(custs || []);
       setSuppliers(sups || []);
       setCategories(cats || []);
+      setOffers(offs || []);
     } catch (err) {
       console.error("Data loading failed:", err);
     }
@@ -624,6 +798,55 @@ export default function BillingPage() {
     localStorage.setItem('heldBills', JSON.stringify(updated));
   };
 
+  // ---- APPLY OFFER TO CART ----
+  const applyOffer = async (offer) => {
+    try {
+      let offerItems = [];
+      if (db.getOfferItems) {
+        const res = await db.getOfferItems(offer.id);
+        offerItems = res.data || res || [];
+      }
+
+      if (!offerItems.length) {
+        setSnackbar({ open: true, message: 'Offer has no items!', severity: 'warning' });
+        return;
+      }
+
+      // Add all offer items to cart
+      for (const item of offerItems) {
+        const product = products.find(p => p.id === item.variant_id);
+        if (product) {
+          const offerPrice = Number(item.offer_price) || Number(product.retail_price) || 0;
+          setCart(prev => [...prev, {
+            id: Date.now() + Math.random(),
+            variantId: product.id,
+            productId: product.product_id,
+            name: item.product_name || product.product_name || 'Offer Item',
+            sku: item.sku || product.sku || '',
+            barcode: product.barcode || '',
+            qty: 1,
+            price: offerPrice,
+            costPrice: product.purchase_price || 0,
+            total: offerPrice,
+            discount: 0,
+            discountType: 'amount',
+            unit: product.unit || 'pc',
+            stock: Number(product.current_stock) || 0,
+            isOfferItem: true,
+            offerName: offer.name
+          }]);
+        }
+      }
+
+      setSnackbar({ open: true, message: `Offer "${offer.name}" added to cart!`, severity: 'success' });
+      setShowOffersDialog(false);
+      setSelectedOffer(null);
+    } catch (err) {
+      console.error('Apply offer error:', err);
+      setSnackbar({ open: true, message: 'Error applying offer: ' + err.message, severity: 'error' });
+    }
+  };
+
   const newBill = () => {
     setCart([]);
     setSelectedParty(null);
@@ -703,6 +926,9 @@ export default function BillingPage() {
           </Button>
           <Button size="small" startIcon={<Pause />} onClick={() => setShowHoldDialog(true)} sx={{ color: 'white', borderColor: 'white' }} variant="outlined">
             Hold (F3)
+          </Button>
+          <Button size="small" startIcon={<LocalOffer />} onClick={() => setShowOffersDialog(true)} sx={{ color: 'white', borderColor: 'white' }} variant="outlined">
+            Offers
           </Button>
         </Box>
       </Paper>
@@ -1073,6 +1299,62 @@ export default function BillingPage() {
         <DialogActions>
           <Button onClick={() => setShowHoldDialog(false)}>Cancel</Button>
           <Button onClick={() => { holdBill(); setShowHoldDialog(false); }} variant="contained" sx={{ bgcolor: '#f59e0b' }}>Freeze Stack</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ===== OFFERS DIALOG ===== */}
+      <Dialog open={showOffersDialog} onClose={() => setShowOffersDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ bgcolor: '#10b981', color: 'white', py: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <LocalOffer />
+            <Typography fontWeight="bold">Active Offers & Bundles</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ p: 2 }}>
+          {offers.filter(o => o.status === 'active').length === 0 ? (
+            <Alert severity="info" sx={{ mt: 2 }}>No active offers available.</Alert>
+          ) : (
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mt: 1 }}>
+              {offers.filter(o => o.status === 'active').map(offer => (
+                <Paper key={offer.id} variant="outlined" sx={{ p: 2, borderLeft: '4px solid #10b981', cursor: 'pointer', '&:hover': { bgcolor: '#f0fdf4' } }} onClick={() => applyOffer(offer)}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                    <Typography fontWeight="bold" variant="h6">{offer.name}</Typography>
+                    <Chip size="small" color="success" label="ACTIVE" />
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    {offer.description || 'Bundle offer'}
+                  </Typography>
+                  <Divider sx={{ my: 1 }} />
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary">Products:</Typography>
+                    <Typography variant="body2" fontWeight="bold">{offer.items_count || 0} items</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary">Original:</Typography>
+                    <Typography variant="body2">Rs. {Number(offer.original_total || 0).toLocaleString()}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary">Discount:</Typography>
+                    <Typography variant="body2" color="error">
+                      {offer.discount_type === 'percentage' ? `${offer.discount_value}%` : `Rs. ${Number(offer.discount_value).toLocaleString()}`}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: '1px dashed #10b981' }}>
+                    <Typography variant="body2" fontWeight="bold">Final Price:</Typography>
+                    <Typography variant="h6" fontWeight="bold" color="#10b981">
+                      Rs. {Number(offer.final_total || 0).toLocaleString()}
+                    </Typography>
+                  </Box>
+                  <Button fullWidth variant="contained" size="small" sx={{ mt: 1.5, bgcolor: '#10b981' }} startIcon={<ShoppingCart />}>
+                    Add to Cart
+                  </Button>
+                </Paper>
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowOffersDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 
