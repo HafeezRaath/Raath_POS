@@ -10,11 +10,18 @@ import {
   collection
 } from 'firebase/firestore';
 
+// ==================== DETECT ELECTRON MODE ====================
+const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
+const SYNC_ENABLED = !isElectron; // ✅ Electron mein sync OFF
+
+console.log(`[CloudSync] Mode: ${isElectron ? 'ELECTRON' : 'BROWSER'}`);
+console.log(`[CloudSync] Sync: ${SYNC_ENABLED ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+
 class CloudSync {
   constructor() {
     this.queue = [];
     this.isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-    this.syncEnabled = true;
+    this.syncEnabled = SYNC_ENABLED; // ✅ Electron mein false
     this.isFlushing = false;
     this.currentShopId = 'shop_default';
 
@@ -48,6 +55,8 @@ class CloudSync {
         this.queue = [];
       }
     }
+
+    console.log(`[CloudSync] Initialized - Sync: ${this.syncEnabled ? 'ON ✅' : 'OFF ❌'}`);
   }
 
   setShopId(shopId) {
@@ -69,7 +78,14 @@ class CloudSync {
     }
   }
 
+  // ==================== PUSH (WITH CONDITIONAL SYNC) ====================
   async push(collectionName, data) {
+    // ✅ Electron mein sync completely skip
+    if (!this.syncEnabled) {
+      console.log(`[CloudSync] ⏭️ Skipping push (Electron mode): ${collectionName}/${data?.id}`);
+      return;
+    }
+
     if (!data || !data.id) {
       console.warn('[CloudSync] push() skipped — missing data.id');
       return;
@@ -85,7 +101,7 @@ class CloudSync {
     delete payload.password;
     delete payload.password_hash;
 
-    if (this.isOnline && this.syncEnabled) {
+    if (this.isOnline) {
       try {
         const ref = doc(db, 'shops', this.currentShopId, collectionName, String(data.id));
         await setDoc(ref, payload);
@@ -101,11 +117,18 @@ class CloudSync {
     }
   }
 
+  // ==================== REMOVE (WITH CONDITIONAL SYNC) ====================
   async remove(collectionName, id) {
+    // ✅ Electron mein sync completely skip
+    if (!this.syncEnabled) {
+      console.log(`[CloudSync] ⏭️ Skipping remove (Electron mode): ${collectionName}/${id}`);
+      return;
+    }
+
     if (id === undefined || id === null) return;
     const strId = String(id);
 
-    if (this.isOnline && this.syncEnabled) {
+    if (this.isOnline) {
       try {
         await deleteDoc(doc(db, 'shops', this.currentShopId, collectionName, strId));
         console.log(`🗑️ Deleted from cloud: ${collectionName}/${strId}`);
@@ -119,7 +142,14 @@ class CloudSync {
     }
   }
 
+  // ==================== FLUSH (WITH CONDITIONAL SYNC) ====================
   async flush() {
+    // ✅ Electron mein flush skip
+    if (!this.syncEnabled) {
+      console.log('[CloudSync] ⏭️ Skipping flush (Electron mode)');
+      return;
+    }
+
     if (!this.isOnline || this.queue.length === 0 || this.isFlushing) return;
     this.isFlushing = true;
     const batch = writeBatch(db);
@@ -150,7 +180,14 @@ class CloudSync {
     }
   }
 
+  // ==================== PULL (WITH CONDITIONAL SYNC) ====================
   async pull(collectionName) {
+    // ✅ Electron mein pull skip
+    if (!this.syncEnabled) {
+      console.log(`[CloudSync] ⏭️ Skipping pull (Electron mode): ${collectionName}`);
+      return [];
+    }
+
     if (!this.isOnline) {
       console.warn('[CloudSync] pull() skipped — offline');
       return [];
@@ -172,7 +209,14 @@ class CloudSync {
     }
   }
 
+  // ==================== SYNC ALL FROM CLOUD (WITH CONDITIONAL SYNC) ====================
   async syncAllFromCloud() {
+    // ✅ Electron mein syncAllFromCloud skip
+    if (!this.syncEnabled) {
+      console.log('[CloudSync] ⏭️ Skipping syncAllFromCloud (Electron mode)');
+      return {};
+    }
+
     const collections = [
       'brands', 'categories', 'products', 'product_variants',
       'customers', 'suppliers', 'purchases', 'purchase_items',
@@ -193,18 +237,54 @@ class CloudSync {
     return result;
   }
 
+  // ==================== TOGGLE SYNC (MANUAL CONTROL) ====================
   toggleSync(enabled) {
+    // ✅ Electron mein toggle allow nahi (always off)
+    if (isElectron) {
+      console.log('[CloudSync] ⏭️ Cannot toggle sync in Electron mode');
+      return;
+    }
     this.syncEnabled = enabled;
+    console.log(`[CloudSync] Sync ${enabled ? 'enabled ✅' : 'disabled ❌'}`);
     if (enabled) this.flush();
   }
 
+  // ==================== MANUAL SYNC (FOR BROWSER) ====================
+  async manualSync() {
+    if (isElectron) {
+      console.log('[CloudSync] ⏭️ Manual sync not available in Electron mode');
+      return { success: false, message: 'Electron uses local database only' };
+    }
+
+    console.log('[CloudSync] Starting manual sync...');
+    try {
+      await this.flush();
+      const data = await this.syncAllFromCloud();
+      console.log('[CloudSync] Manual sync completed');
+      return { success: true, data };
+    } catch (e) {
+      console.error('[CloudSync] Manual sync failed:', e);
+      return { success: false, error: e.message };
+    }
+  }
+
+  // ==================== GET STATUS ====================
   getStatus() {
     return {
       online: this.isOnline,
       enabled: this.syncEnabled,
       queued: this.queue.length,
-      shopId: this.currentShopId
+      shopId: this.currentShopId,
+      mode: isElectron ? 'electron' : 'browser',
+      isElectron: isElectron
     };
+  }
+
+  // ==================== CLEAR QUEUE (FOR TESTING) ====================
+  clearQueue() {
+    this.queue = [];
+    this.saveQueue();
+    console.log('[CloudSync] Queue cleared');
   }
 }
 

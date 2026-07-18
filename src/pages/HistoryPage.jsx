@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box, Paper, Typography, Button, TextField, Table, TableBody, TableCell,
@@ -7,7 +6,9 @@ import {
   InputLabel, Select, Stack, Card, CardContent, Tabs, Tab, Pagination,
   Snackbar, Alert, Avatar, Tooltip, Divider, InputAdornment,
   List, ListItem, ListItemText, ListItemIcon, Accordion, AccordionSummary,
-  AccordionDetails, Badge, LinearProgress, ToggleButton, ToggleButtonGroup
+  AccordionDetails, Badge, LinearProgress, ToggleButton, ToggleButtonGroup,
+  useMediaQuery, useTheme, Drawer, Collapse, Fab, SwipeableDrawer,
+  Fade, Zoom
 } from '@mui/material';
 import {
   Search, FilterList, Visibility, Refresh, Close, Receipt,
@@ -17,7 +18,8 @@ import {
   MonetizationOn, CreditCard, MoneyOff, CalendarToday, ExpandMore,
   Inventory, Category, AttachMoney, PointOfSale, AccountCircle,
   Store, ArrowUpward, ArrowDownward, SwapHoriz, DoneAll,
-  Cancel, Pending, Schedule, Restore, DeleteOutline, Edit
+  Cancel, Pending, Schedule, Restore, DeleteOutline, Edit,
+  Menu as MenuIcon
 } from '@mui/icons-material';
 import db from '../database/db';
 
@@ -53,11 +55,162 @@ const HISTORY_TABS = [
   { id: 'ledger', label: 'Ledger', icon: <Receipt fontSize="small" />, color: 'default' },
 ];
 
+// ==================== MOBILE HISTORY CARD ====================
+const MobileHistoryCard = ({ record, type, onView }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  const getIcon = () => {
+    switch(type) {
+      case 'sales': return <PointOfSale color="primary" />;
+      case 'purchases': return <LocalShipping color="info" />;
+      case 'payments': return <Payment color="success" />;
+      case 'returns': return <Restore color="warning" />;
+      case 'emi': return <AccountBalance color="secondary" />;
+      case 'expenses': return <MoneyOff color="error" />;
+      default: return <Receipt />;
+    }
+  };
+
+  const getTitle = () => {
+    switch(type) {
+      case 'sales': return record.invoice_no || 'INV-0000';
+      case 'purchases': return record.purchase_no || 'PUR-0000';
+      case 'returns': return `RET-${record.id}`;
+      case 'emi': return record.product_name || 'EMI';
+      case 'expenses': return record.title || 'Expense';
+      default: return 'Record';
+    }
+  };
+
+  const getCustomer = () => {
+    switch(type) {
+      case 'sales': return record.customer_name || 'Walk-in';
+      case 'purchases': return record.supplier_name || 'Supplier';
+      case 'returns': return record.customer_name || 'Customer';
+      case 'emi': return record.customer_name || 'Customer';
+      default: return '-';
+    }
+  };
+
+  const getAmount = () => {
+    switch(type) {
+      case 'sales': return record.grand_total || 0;
+      case 'purchases': return record.grand_total || 0;
+      case 'returns': return record.refund_amount || 0;
+      case 'payments': return record.amount || 0;
+      case 'expenses': return record.amount || 0;
+      default: return 0;
+    }
+  };
+
+  const getStatus = () => {
+    switch(type) {
+      case 'sales': return record.payment_status || 'paid';
+      case 'purchases': return record.payment_status || 'received';
+      case 'returns': return 'returned';
+      case 'emi': return record.status || 'active';
+      case 'expenses': return record.status || 'active';
+      default: return 'active';
+    }
+  };
+
+  const getDate = () => {
+    switch(type) {
+      case 'sales': return record.date;
+      case 'purchases': return record.purchase_date;
+      case 'returns': return record.return_date;
+      case 'payments': return record.date;
+      case 'expenses': return record.date;
+      default: return record.date;
+    }
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      paid: 'success', received: 'success', active: 'success', completed: 'success',
+      due: 'warning', pending: 'warning', partial: 'info',
+      returned: 'error', cancelled: 'error', overdue: 'error'
+    };
+    return colors[status] || 'default';
+  };
+
+  return (
+    <Card sx={{ mb: 1.5, borderLeft: `4px solid ${getStatusColor(getStatus()) === 'success' ? '#10b981' : getStatusColor(getStatus()) === 'warning' ? '#f59e0b' : '#ef4444'}` }}>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.light' }}>
+              {getIcon()}
+            </Avatar>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="body2" fontWeight="bold" noWrap>
+                {getTitle()}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {getCustomer()}
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="subtitle2" fontWeight="bold" color="primary.main">
+              {formatCurrency(getAmount())}
+            </Typography>
+            <Chip 
+              size="small" 
+              label={getStatus().toUpperCase()} 
+              color={getStatusColor(getStatus())}
+              sx={{ height: 18, fontSize: '0.55rem' }}
+            />
+          </Box>
+        </Box>
+
+        <Collapse in={expanded}>
+          <Divider sx={{ my: 1 }} />
+          <Grid container spacing={1}>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Date</Typography>
+              <Typography variant="body2">{formatShortDate(getDate())}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Payment</Typography>
+              <Typography variant="body2">
+                {record.payment_mode || record.refund_mode || 'N/A'}
+              </Typography>
+            </Grid>
+            {record.description && (
+              <Grid item xs={12}>
+                <Typography variant="caption" color="text.secondary">Notes</Typography>
+                <Typography variant="body2" color="text.secondary">{record.description}</Typography>
+              </Grid>
+            )}
+          </Grid>
+        </Collapse>
+
+        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+          <Button size="small" variant="contained" startIcon={<Visibility />} onClick={() => onView(record, type)} sx={{ flex: 1, bgcolor: '#10b981' }}>
+            View
+          </Button>
+          <IconButton size="small" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ArrowUpward fontSize="small" /> : <ArrowDownward fontSize="small" />}
+          </IconButton>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+};
+
+// ==================== MAIN COMPONENT ====================
 export default function HistoryPage() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
   // ==================== GLOBAL STATES ====================
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [mobileDrawer, setMobileDrawer] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   // ==================== DATE RANGE ====================
   const today = new Date().toISOString().split('T')[0];
@@ -74,7 +227,7 @@ export default function HistoryPage() {
 
   // ==================== PAGINATION ====================
   const [page, setPage] = useState(1);
-  const perPage = 25;
+  const perPage = isMobile ? 10 : 25;
 
   // ==================== DATA STATES ====================
   const [salesData, setSalesData] = useState([]);
@@ -225,10 +378,15 @@ export default function HistoryPage() {
   // ==================== QUICK DATE FILTER ====================
   const handleQuickDate = (days) => {
     setQuickDate(days);
+    if (days === 'all') {
+      setDateFrom('2000-01-01');
+      setDateTo(today);
+      return;
+    }
     const d = new Date();
     d.setDate(d.getDate() - parseInt(days));
     setDateFrom(d.toISOString().split('T')[0]);
-    setDateTo(new Date().toISOString().split('T')[0]);
+    setDateTo(today);
   };
 
   // ==================== FILTERED DATA ====================
@@ -303,7 +461,7 @@ export default function HistoryPage() {
       ).join(',')
     );
     
-    const csv = [headers, ...rows].join('\\n');
+    const csv = [headers, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -324,15 +482,19 @@ export default function HistoryPage() {
   const StatCard = ({ title, value, sub, color, icon }) => (
     <Grid item xs={6} md={3} lg={2}>
       <Card sx={{ bgcolor: `${color}.light`, opacity: 0.95, height: '100%' }}>
-        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <CardContent sx={{ p: isMobile ? 1 : 1.5, '&:last-child': { pb: isMobile ? 1 : 1.5 } }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
             <Box>
-              <Typography variant="caption" color="text.secondary">{title}</Typography>
-              <Typography variant="h6" fontWeight="bold" color={`${color}.dark`} noWrap>{value}</Typography>
-              {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: isMobile ? '0.6rem' : '0.75rem' }}>
+                {title}
+              </Typography>
+              <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="bold" color={`${color}.dark`} noWrap>
+                {value}
+              </Typography>
+              {sub && <Typography variant="caption" color="text.secondary" sx={{ fontSize: isMobile ? '0.5rem' : '0.75rem' }}>{sub}</Typography>}
             </Box>
-            <Avatar sx={{ bgcolor: `${color}.main`, width: 32, height: 32 }}>
-              {React.cloneElement(icon, { sx: { fontSize: 18 } })}
+            <Avatar sx={{ bgcolor: `${color}.main`, width: isMobile ? 28 : 32, height: isMobile ? 28 : 32 }}>
+              {React.cloneElement(icon, { sx: { fontSize: isMobile ? 14 : 18 } })}
             </Avatar>
           </Stack>
         </CardContent>
@@ -363,22 +525,32 @@ export default function HistoryPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 1, md: 2 } }}>
+    <Box sx={{ p: isMobile ? 1 : 2, pb: isMobile ? 8 : 2 }}>
+      
       {/* HEADER */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="h4" fontWeight="bold" color="primary">
-          <History sx={{ verticalAlign: 'middle', mr: 1 }} />
-          Transaction History
+      <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', mb: 2, gap: 1 }}>
+        <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="bold" color="primary">
+          <History sx={{ verticalAlign: 'middle', mr: 1, fontSize: isMobile ? 28 : 32 }} />
+          {isMobile ? 'History' : 'Transaction History'}
         </Typography>
-        <Stack direction="row" spacing={1}>
-          <Button variant="outlined" size="small" startIcon={<Download />} onClick={exportCSV}>
-            Export CSV
-          </Button>
-          <Button variant="outlined" size="small" startIcon={<Print />} onClick={handlePrint}>
-            Print
-          </Button>
+        <Stack direction="row" spacing={1} sx={{ width: isMobile ? '100%' : 'auto', flexWrap: 'wrap' }}>
+          {isMobile && (
+            <Button variant="outlined" size="small" startIcon={<MenuIcon />} onClick={() => setMobileDrawer(true)}>
+              Menu
+            </Button>
+          )}
+          {!isMobile && (
+            <>
+              <Button variant="outlined" size="small" startIcon={<Download />} onClick={exportCSV}>
+                Export CSV
+              </Button>
+              <Button variant="outlined" size="small" startIcon={<Print />} onClick={handlePrint}>
+                Print
+              </Button>
+            </>
+          )}
           <Button variant="contained" size="small" startIcon={<Refresh />} onClick={loadAllData} disabled={loading}>
-            Refresh
+            {isMobile ? 'Refresh' : 'Refresh'}
           </Button>
         </Stack>
       </Box>
@@ -386,8 +558,8 @@ export default function HistoryPage() {
       {loading && <LinearProgress sx={{ mb: 2 }} />}
 
       {/* SUMMARY CARDS */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <StatCard title="Total Sales" value={formatCurrency(summaryStats.totalSales)} color="success" icon={<PointOfSale />} />
+      <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 2 }}>
+        <StatCard title="Sales" value={formatCurrency(summaryStats.totalSales)} color="success" icon={<PointOfSale />} />
         <StatCard title="Purchases" value={formatCurrency(summaryStats.totalPurchases)} color="info" icon={<LocalShipping />} />
         <StatCard title="Payments" value={formatCurrency(summaryStats.totalPayments)} color="primary" icon={<Payment />} />
         <StatCard title="Returns" value={formatCurrency(summaryStats.totalReturns)} color="warning" icon={<Restore />} />
@@ -396,15 +568,24 @@ export default function HistoryPage() {
       </Grid>
 
       {/* FILTERS BAR */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Grid container spacing={2} alignItems="center">
+      <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+        <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
           <Grid item xs={12} md={3}>
             <TextField
               fullWidth size="small"
-              placeholder="Search invoice, customer, supplier, amount..."
+              placeholder={isMobile ? "Search..." : "Search invoice, customer, supplier, amount..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} /> }}
+              InputProps={{ 
+                startAdornment: <Search sx={{ mr: 1, color: 'text.secondary', fontSize: isMobile ? 18 : 24 }} />,
+                endAdornment: searchQuery && (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setSearchQuery('')}>
+                      <Close fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
             />
           </Grid>
           <Grid item xs={6} md={2}>
@@ -415,12 +596,12 @@ export default function HistoryPage() {
           </Grid>
           <Grid item xs={6} md={2}>
             <FormControl fullWidth size="small">
-              <InputLabel>Quick Range</InputLabel>
-              <Select value={quickDate} onChange={(e) => handleQuickDate(e.target.value)} label="Quick Range">
+              <InputLabel>Range</InputLabel>
+              <Select value={quickDate} onChange={(e) => handleQuickDate(e.target.value)} label="Range">
                 <MenuItem value="1">Today</MenuItem>
-                <MenuItem value="7">Last 7 Days</MenuItem>
-                <MenuItem value="30">Last 30 Days</MenuItem>
-                <MenuItem value="90">Last 3 Months</MenuItem>
+                <MenuItem value="7">7 Days</MenuItem>
+                <MenuItem value="30">30 Days</MenuItem>
+                <MenuItem value="90">3 Months</MenuItem>
                 <MenuItem value="365">This Year</MenuItem>
                 <MenuItem value="all">All Time</MenuItem>
               </Select>
@@ -455,409 +636,205 @@ export default function HistoryPage() {
       </Paper>
 
       {/* TABS */}
-      <Paper sx={{ mb: 2 }}>
-        <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto">
-          {HISTORY_TABS.map((tab, idx) => (
-            <Tab 
-              key={tab.id}
-              icon={tab.icon} 
-              label={`${tab.label} (${
-                tab.id === 'sales' ? salesData.length :
-                tab.id === 'purchases' ? purchaseData.length :
-                tab.id === 'payments' ? paymentData.length :
-                tab.id === 'returns' ? returnData.length :
-                tab.id === 'emi' ? emiData.length :
-                tab.id === 'expenses' ? expenseData.length :
-                ledgerData.length
-              })`}
-              sx={{ color: tab.color + '.main' }}
-            />
-          ))}
+      <Paper sx={{ mb: 2, overflowX: 'auto' }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={(e, v) => setActiveTab(v)} 
+          variant={isMobile ? 'fullWidth' : 'scrollable'}
+          scrollButtons={isMobile ? false : 'auto'}
+          sx={{ minHeight: isMobile ? 40 : 48 }}
+        >
+          {HISTORY_TABS.map((tab, idx) => {
+            const count = tab.id === 'sales' ? salesData.length :
+                         tab.id === 'purchases' ? purchaseData.length :
+                         tab.id === 'payments' ? paymentData.length :
+                         tab.id === 'returns' ? returnData.length :
+                         tab.id === 'emi' ? emiData.length :
+                         tab.id === 'expenses' ? expenseData.length :
+                         ledgerData.length;
+            return (
+              <Tab 
+                key={tab.id}
+                icon={isMobile ? tab.icon : tab.icon} 
+                label={isMobile ? tab.label : `${tab.label} (${count})`}
+                sx={{ 
+                  fontSize: isMobile ? '0.6rem' : '0.875rem',
+                  py: isMobile ? 0.5 : 1,
+                  minWidth: isMobile ? 'auto' : 'auto',
+                  px: isMobile ? 1 : 2,
+                  color: `${tab.color}.main`
+                }}
+              />
+            );
+          })}
         </Tabs>
       </Paper>
 
-      {/* ==================== SALES TAB ==================== */}
-      {activeTab === 0 && (
-        <Paper>
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'primary.main' }}>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Invoice #</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Date</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Customer</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Items</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Qty</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Grand Total</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Paid</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Due</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Payment</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Status</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Action</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedData.map((sale) => (
-                  <TableRow key={sale.id} hover>
-                    <TableCell fontWeight="bold">{sale.invoice_no}</TableCell>
-                    <TableCell>{formatShortDate(sale.date)}</TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{sale.customer_name || 'Walk-in'}</Typography>
-                      {sale.customer_phone && <Typography variant="caption" color="text.secondary">{sale.customer_phone}</Typography>}
-                    </TableCell>
-                    <TableCell align="right">{sale.total_items || 0}</TableCell>
-                    <TableCell align="right">{sale.total_qty || 0}</TableCell>
-                    <TableCell align="right" fontWeight="bold">{formatCurrency(sale.grand_total || sale.grand_total)}</TableCell>
-                    <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(sale.paid_amount)}</TableCell>
-                    <TableCell align="right" sx={{ color: (sale.due_amount || 0) > 0 ? 'error.main' : 'text.secondary' }} fontWeight="bold">
-                      {formatCurrency(sale.due_amount)}
-                    </TableCell>
-                    <TableCell align="center">{getPaymentChip(sale.payment_mode)}</TableCell>
-                    <TableCell align="center">{getStatusChip(sale.payment_status)}</TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="View Details">
-                        <IconButton size="small" color="primary" onClick={() => handleViewDetail(sale, 'sales')}>
-                          <Visibility fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
+      {/* ==================== DATA TABLE / CARDS ==================== */}
+      {isMobile ? (
+        // Mobile Cards View
+        <Box>
+          {loading ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <LinearProgress />
+              <Typography sx={{ mt: 2 }}>Loading...</Typography>
+            </Box>
+          ) : paginatedData.length === 0 ? (
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Receipt sx={{ fontSize: 48, color: '#d1d5db' }} />
+              <Typography color="text.secondary">No records found</Typography>
+              <Typography variant="caption" color="text.secondary">Try changing filters</Typography>
+            </Paper>
+          ) : (
+            paginatedData.map((record, idx) => (
+              <MobileHistoryCard
+                key={record.id || idx}
+                record={record}
+                type={HISTORY_TABS[activeTab].id}
+                onView={handleViewDetail}
+              />
+            ))
+          )}
+          {filteredData.length > perPage && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+              <Pagination 
+                count={Math.ceil(filteredData.length / perPage)} 
+                page={page} 
+                onChange={(e, p) => setPage(p)} 
+                color="primary" 
+                size="small"
+              />
+            </Box>
+          )}
+        </Box>
+      ) : (
+        // Desktop Table View
+        <>
+          <Paper>
+            <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'primary.main' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>#</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Invoice/Ref</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Party</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Amount</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Status</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Action</TableCell>
                   </TableRow>
-                ))}
-                {paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={11} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No sales found for selected period</Typography>
-                  </TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
+                </TableHead>
+                <TableBody>
+                  {paginatedData.map((record, idx) => {
+                    const type = HISTORY_TABS[activeTab].id;
+                    const getInvoice = () => {
+                      switch(type) {
+                        case 'sales': return record.invoice_no;
+                        case 'purchases': return record.purchase_no;
+                        case 'returns': return `RET-${record.id}`;
+                        case 'payments': return `PAY-${record.id}`;
+                        case 'emi': return record.product_name;
+                        case 'expenses': return record.title;
+                        default: return record.id;
+                      }
+                    };
+                    const getParty = () => {
+                      switch(type) {
+                        case 'sales': return record.customer_name || 'Walk-in';
+                        case 'purchases': return record.supplier_name || '-';
+                        case 'returns': return record.customer_name || '-';
+                        case 'emi': return record.customer_name || '-';
+                        default: return '-';
+                      }
+                    };
+                    const getAmount = () => {
+                      switch(type) {
+                        case 'sales': return record.grand_total || 0;
+                        case 'purchases': return record.grand_total || 0;
+                        case 'returns': return record.refund_amount || 0;
+                        case 'payments': return record.amount || 0;
+                        case 'expenses': return record.amount || 0;
+                        default: return 0;
+                      }
+                    };
+                    const getDate = () => {
+                      switch(type) {
+                        case 'sales': return record.date;
+                        case 'purchases': return record.purchase_date;
+                        case 'returns': return record.return_date;
+                        case 'payments': return record.date;
+                        case 'expenses': return record.date;
+                        default: return record.date;
+                      }
+                    };
+                    const getStatus = () => {
+                      switch(type) {
+                        case 'sales': return record.payment_status || 'paid';
+                        case 'purchases': return record.payment_status || 'received';
+                        case 'returns': return 'returned';
+                        case 'emi': return record.status || 'active';
+                        case 'expenses': return record.status || 'active';
+                        default: return 'active';
+                      }
+                    };
 
-      {/* ==================== PURCHASES TAB ==================== */}
-      {activeTab === 1 && (
-        <Paper>
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'info.main' }}>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Purchase #</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Date</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Supplier</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Grand Total</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Paid</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Due</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Status</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Action</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedData.map((p) => (
-                  <TableRow key={p.id} hover>
-                    <TableCell fontWeight="bold">{p.purchase_no}</TableCell>
-                    <TableCell>{formatShortDate(p.purchase_date)}</TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{p.supplier_name || '-'}</Typography>
-                      {p.supplier_phone && <Typography variant="caption" color="text.secondary">{p.supplier_phone}</Typography>}
-                    </TableCell>
-                    <TableCell align="right" fontWeight="bold">{formatCurrency(p.grand_total)}</TableCell>
-                    <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(p.paid_amount)}</TableCell>
-                    <TableCell align="right" sx={{ color: (p.grand_total - p.paid_amount) > 0 ? 'error.main' : 'inherit' }}>
-                      {formatCurrency(p.grand_total - p.paid_amount)}
-                    </TableCell>
-                    <TableCell align="center">{getStatusChip(p.payment_status)}</TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="View Details">
-                        <IconButton size="small" color="info" onClick={() => handleViewDetail(p, 'purchases')}>
-                          <Visibility fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No purchases found</Typography>
-                  </TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
-
-      {/* ==================== PAYMENTS TAB ==================== */}
-      {activeTab === 2 && (
-        <Paper>
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'success.main' }}>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Date</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Type</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Party</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Note</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Amount</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Mode</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedData.map((p, idx) => (
-                  <TableRow key={idx} hover>
-                    <TableCell>{formatShortDate(p.date)}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={p.payment_type?.toUpperCase() || 'PAYMENT'} color="primary" variant="outlined" />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{p.supplier_name || 'Unknown'}</Typography>
-                      {p.supplier_phone && <Typography variant="caption" color="text.secondary">{p.supplier_phone}</Typography>}
-                    </TableCell>
-                    <TableCell>{p.note || '-'}</TableCell>
-                    <TableCell align="right" fontWeight="bold" color="success.main">{formatCurrency(p.amount)}</TableCell>
-                    <TableCell align="center">{getPaymentChip(p.type || p.payment_mode)}</TableCell>
-                  </TableRow>
-                ))}
-                {paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No payments found</Typography>
-                  </TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
-
-      {/* ==================== RETURNS TAB ==================== */}
-      {activeTab === 3 && (
-        <Paper>
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'warning.main' }}>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Return #</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Date</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Original Invoice</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Customer</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Reason</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Refund</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Mode</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Action</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedData.map((r) => (
-                  <TableRow key={r.id} hover>
-                    <TableCell fontWeight="bold">RET-{r.id}</TableCell>
-                    <TableCell>{formatShortDate(r.return_date)}</TableCell>
-                    <TableCell>{r.original_invoice || '-'}</TableCell>
-                    <TableCell>{r.customer_name || '-'}</TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{r.reason || 'No reason'}</Typography>
-                      {r.notes && <Typography variant="caption" color="text.secondary">{r.notes}</Typography>}
-                    </TableCell>
-                    <TableCell align="right" fontWeight="bold" color="warning.main">{formatCurrency(r.refund_amount)}</TableCell>
-                    <TableCell align="center">{getPaymentChip(r.refund_mode)}</TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="View Details">
-                        <IconButton size="small" color="warning" onClick={() => handleViewDetail(r, 'returns')}>
-                          <Visibility fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No returns found</Typography>
-                  </TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
-
-      {/* ==================== EMI TAB ==================== */}
-      {activeTab === 4 && (
-        <Paper>
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'secondary.main' }}>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Customer</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Product</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Total</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Down</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">EMI/Month</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Paid</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Remaining</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Status</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Next Due</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedData.map((emi) => {
-                  const remaining = (emi.total_months || 0) - (emi.paid_months || 0);
-                  const progress = emi.total_months > 0 ? (emi.paid_months / emi.total_months) * 100 : 0;
-                  return (
-                    <TableRow key={emi.id} hover>
-                      <TableCell>
-                        <Typography variant="body2">{emi.customer_name || '-'}</Typography>
-                        {emi.phone && <Typography variant="caption" color="text.secondary">{emi.phone}</Typography>}
-                      </TableCell>
-                      <TableCell>{emi.product_name || '-'}</TableCell>
-                      <TableCell align="right" fontWeight="bold">{formatCurrency(emi.total_amount)}</TableCell>
-                      <TableCell align="right" color="success.main">{formatCurrency(emi.down_payment)}</TableCell>
-                      <TableCell align="right">{formatCurrency(emi.emi_amount)}/mo</TableCell>
-                      <TableCell align="right">{emi.paid_months}/{emi.total_months}</TableCell>
-                      <TableCell align="right" fontWeight="bold" color={remaining <= 2 ? 'success.main' : 'warning.main'}>
-                        {remaining} months
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip size="small" 
-                          label={emi.status?.toUpperCase()} 
-                          color={emi.status === 'active' ? 'success' : emi.status === 'completed' ? 'info' : 'error'}
-                          variant="outlined" 
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Typography variant="body2" color={new Date(emi.next_due_date) < new Date() ? 'error.main' : 'inherit'}>
-                          {formatShortDate(emi.next_due_date)}
-                        </Typography>
-                        <LinearProgress variant="determinate" value={progress} sx={{ height: 4, mt: 0.5 }} />
+                    return (
+                      <TableRow key={record.id || idx} hover>
+                        <TableCell>{idx + 1}</TableCell>
+                        <TableCell fontWeight="bold">{getInvoice()}</TableCell>
+                        <TableCell>{formatShortDate(getDate())}</TableCell>
+                        <TableCell>{getParty()}</TableCell>
+                        <TableCell align="right" fontWeight="bold" color="primary.main">
+                          {formatCurrency(getAmount())}
+                        </TableCell>
+                        <TableCell align="center">{getStatusChip(getStatus())}</TableCell>
+                        <TableCell align="center">
+                          <Tooltip title="View Details">
+                            <IconButton size="small" color="primary" onClick={() => handleViewDetail(record, type)}>
+                              <Visibility fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {paginatedData.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                        <Typography color="text.secondary">No records found</Typography>
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-                {paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No EMI records found</Typography>
-                  </TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
 
-      {/* ==================== EXPENSES TAB ==================== */}
-      {activeTab === 5 && (
-        <Paper>
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'error.main' }}>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Date</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Title</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Category</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Description</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Amount</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Payment</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedData.map((e) => (
-                  <TableRow key={e.id} hover>
-                    <TableCell>{formatShortDate(e.date)}</TableCell>
-                    <TableCell fontWeight="bold">{e.title}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={e.category_name || 'Uncategorized'} 
-                        sx={{ bgcolor: e.category_color || '#888', color: '#fff' }} />
-                    </TableCell>
-                    <TableCell>{e.description || '-'}</TableCell>
-                    <TableCell align="right" fontWeight="bold" color="error.main">{formatCurrency(e.amount)}</TableCell>
-                    <TableCell align="center">{getPaymentChip(e.payment_mode)}</TableCell>
-                    <TableCell align="center">
-                      <Chip size="small" label={e.status?.toUpperCase()} color={e.status === 'active' ? 'success' : 'default'} variant="outlined" />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No expenses found</Typography>
-                  </TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
+          {/* PAGINATION */}
+          <Box sx={{ p: 1, display: 'flex', justifyContent: 'center', mt: 2 }}>
+            <Pagination 
+              count={Math.ceil(filteredData.length / perPage)} 
+              page={page} 
+              onChange={(e, p) => setPage(p)} 
+              color="primary" 
+            />
+          </Box>
+        </>
       )}
-
-      {/* ==================== LEDGER TAB ==================== */}
-      {activeTab === 6 && (
-        <Paper>
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
-            <Table size="small" stickyHeader>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.700' }}>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Date</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Customer/Supplier</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Type</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Description</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Amount</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Balance After</TableCell>
-                  <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Mode</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginatedData.map((l, idx) => (
-                  <TableRow key={idx} hover>
-                    <TableCell>{formatShortDate(l.date)}</TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{l.customer_name || l.supplier_name || '-'}</Typography>
-                      {l.customer_phone && <Typography variant="caption" color="text.secondary">{l.customer_phone}</Typography>}
-                    </TableCell>
-                    <TableCell>
-                      <Chip size="small" 
-                        label={l.type?.toUpperCase()} 
-                        color={l.type === 'sale' ? 'success' : l.type === 'payment' ? 'primary' : 'warning'}
-                        variant="outlined" 
-                      />
-                    </TableCell>
-                    <TableCell>{l.description || '-'}</TableCell>
-                    <TableCell align="right" fontWeight="bold" color={l.type === 'sale' ? 'success.main' : l.type === 'payment' ? 'primary.main' : 'inherit'}>
-                      {l.type === 'sale' ? '+' : l.type === 'payment' ? '-' : ''}{formatCurrency(l.amount)}
-                    </TableCell>
-                    <TableCell align="right" fontWeight="bold">{formatCurrency(l.balance_after)}</TableCell>
-                    <TableCell align="center">{getPaymentChip(l.payment_mode)}</TableCell>
-                  </TableRow>
-                ))}
-                {paginatedData.length === 0 && (
-                  <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">No ledger entries found</Typography>
-                  </TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
-
-      {/* PAGINATION */}
-      <Box sx={{ p: 1, display: 'flex', justifyContent: 'center', mt: 2 }}>
-        <Pagination 
-          count={Math.ceil(filteredData.length / perPage)} 
-          page={page} 
-          onChange={(e, p) => setPage(p)} 
-          color="primary" 
-        />
-      </Box>
 
       {/* ==================== DETAIL DIALOG ==================== */}
-      <Dialog open={detailDialog} onClose={() => setDetailDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
-          <Receipt sx={{ verticalAlign: 'middle', mr: 1, color: 'primary.main' }} />
+      <Dialog open={detailDialog} onClose={() => setDetailDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>
+        <DialogTitle sx={{ bgcolor: '#10b981', color: 'white' }}>
+          <Receipt sx={{ verticalAlign: 'middle', mr: 1 }} />
           {selectedRecord?.recordType === 'sales' ? 'Sale Invoice' : 
            selectedRecord?.recordType === 'purchases' ? 'Purchase Order' : 
            selectedRecord?.recordType === 'returns' ? 'Return Details' : 'Details'} — 
           {selectedRecord?.invoice_no || selectedRecord?.purchase_no || `RET-${selectedRecord?.id}`}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ pt: 2 }}>
           {selectedRecord && (
             <Box>
-              <Grid container spacing={2} sx={{ mb: 2 }}>
+              <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 2 }}>
                 <Grid item xs={6} md={3}>
                   <Paper sx={{ p: 1.5, textAlign: 'center' }}>
                     <Typography variant="caption" color="text.secondary">Date</Typography>
@@ -866,9 +843,9 @@ export default function HistoryPage() {
                 </Grid>
                 <Grid item xs={6} md={3}>
                   <Paper sx={{ p: 1.5, textAlign: 'center' }}>
-                    <Typography variant="caption" color="text.secondary">Total Amount</Typography>
+                    <Typography variant="caption" color="text.secondary">Total</Typography>
                     <Typography variant="h6" fontWeight="bold" color="primary.main">
-                      {formatCurrency(selectedRecord.grand_total || selectedRecord.grand_total || selectedRecord.total_amount || selectedRecord.refund_amount)}
+                      {formatCurrency(selectedRecord.grand_total || selectedRecord.total_amount || selectedRecord.refund_amount)}
                     </Typography>
                   </Paper>
                 </Grid>
@@ -880,7 +857,7 @@ export default function HistoryPage() {
                 </Grid>
                 <Grid item xs={6} md={3}>
                   <Paper sx={{ p: 1.5, textAlign: 'center' }}>
-                    <Typography variant="caption" color="text.secondary">Payment Mode</Typography>
+                    <Typography variant="caption" color="text.secondary">Payment</Typography>
                     <Box sx={{ mt: 0.5 }}>{getPaymentChip(selectedRecord.payment_mode || selectedRecord.refund_mode)}</Box>
                   </Paper>
                 </Grid>
@@ -888,20 +865,16 @@ export default function HistoryPage() {
 
               {detailItems.length > 0 && (
                 <>
-                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                    {selectedRecord.recordType === 'sales' ? 'Sold Items' : 
-                     selectedRecord.recordType === 'purchases' ? 'Purchased Items' : 
-                     selectedRecord.recordType === 'returns' ? 'Returned Items' : 'Items'}
-                  </Typography>
+                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>Items</Typography>
                   <TableContainer component={Paper} variant="outlined">
                     <Table size="small">
                       <TableHead>
                         <TableRow sx={{ bgcolor: 'action.hover' }}>
                           <TableCell>#</TableCell>
                           <TableCell>Product</TableCell>
-                          <TableCell>SKU/Variant</TableCell>
+                          <TableCell>SKU</TableCell>
                           <TableCell align="right">Qty</TableCell>
-                          <TableCell align="right">Unit Price</TableCell>
+                          <TableCell align="right">Price</TableCell>
                           <TableCell align="right">Total</TableCell>
                         </TableRow>
                       </TableHead>
@@ -921,30 +894,38 @@ export default function HistoryPage() {
                   </TableContainer>
                 </>
               )}
-
-              {selectedRecord.recordType === 'sales' && (
-                <Box sx={{ mt: 2 }}>
-                  <Grid container spacing={2}>
-                    <Grid item xs={6}><Typography variant="body2" color="text.secondary">Customer: {selectedRecord.customer_name || 'Walk-in'}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2" color="text.secondary">Phone: {selectedRecord.customer_phone || '-'}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2" color="text.secondary">Subtotal: {formatCurrency(selectedRecord.subtotal)}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2" color="text.secondary">Discount: {formatCurrency(selectedRecord.discount)}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2" color="text.secondary">Paid: {formatCurrency(selectedRecord.paid_amount)}</Typography></Grid>
-                    <Grid item xs={6}><Typography variant="body2" color="text.secondary" fontWeight="bold">Due: {formatCurrency(selectedRecord.due_amount)}</Typography></Grid>
-                  </Grid>
-                </Box>
-              )}
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDetailDialog(false)}>Close</Button>
-          <Button variant="outlined" startIcon={<Print />} onClick={() => window.print()}>Print</Button>
+        <DialogActions sx={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+          <Button fullWidth={isMobile} onClick={() => setDetailDialog(false)}>Close</Button>
+          <Button fullWidth={isMobile} variant="outlined" startIcon={<Print />} onClick={() => window.print()}>Print</Button>
         </DialogActions>
       </Dialog>
 
-      {/* SNACKBAR */}
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+      {/* ==================== MOBILE DRAWER ==================== */}
+      <Drawer anchor="bottom" open={mobileDrawer} onClose={() => setMobileDrawer(false)}>
+        <Box sx={{ p: 2, pb: 4 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>Menu</Typography>
+          <List>
+            <ListItem button onClick={() => { setMobileDrawer(false); exportCSV(); }}>
+              <ListItemIcon><Download /></ListItemIcon>
+              <ListItemText primary="Export CSV" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); handlePrint(); }}>
+              <ListItemIcon><Print /></ListItemIcon>
+              <ListItemText primary="Print" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); loadAllData(); }}>
+              <ListItemIcon><Refresh /></ListItemIcon>
+              <ListItemText primary="Refresh Data" />
+            </ListItem>
+          </List>
+        </Box>
+      </Drawer>
+
+      {/* ==================== SNACKBAR ==================== */}
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }} sx={{ mb: isMobile ? 8 : 0 }}>
         <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}>
           {snackbar.message}
         </Alert>
@@ -952,4 +933,3 @@ export default function HistoryPage() {
     </Box>
   );
 }
-

@@ -4,11 +4,16 @@ import {
   TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle,
   DialogContent, DialogActions, Grid, Chip, MenuItem, FormControl,
   InputLabel, Select, Stack, Card, CardContent, Tabs, Tab,
-  Pagination, Divider, LinearProgress, Tooltip
+  Pagination, Divider, LinearProgress, Tooltip, useMediaQuery, useTheme,
+  Drawer, Collapse, Fab, Avatar, Badge, List, ListItem, ListItemText,
+  ListItemIcon, Fade, Zoom
 } from '@mui/material';
 import {
   Search, Refresh, Visibility, Assessment, Timeline, PointOfSale,
-  LocalShipping, People, ShowChart, Inventory, MoneyOff, Warning, Error, CheckCircle, AccessTime, RemoveShoppingCart, Speed, TrendingDown
+  LocalShipping, People, ShowChart, Inventory, MoneyOff, Warning, Error, 
+  CheckCircle, AccessTime, RemoveShoppingCart, Speed, TrendingDown,
+  Menu as MenuIcon, Close, ArrowUpward, ArrowDownward, Receipt,
+  TrendingUp, AccountBalance, Store, Person, AttachMoney
 } from '@mui/icons-material';
 import db from '../database/db';
 
@@ -34,18 +39,121 @@ const getDaysAgo = (dateStr) => {
 
 const FORECAST_STATUS = {
   critical_low: { color: 'error', label: 'Critical Low', icon: <Error fontSize="small" /> },
-  low_stock: { color: 'error', label: 'Low Stock', icon: <Warning fontSize="small" /> },
-  over_stock: { color: 'error', label: 'Over Stock', icon: <TrendingDown fontSize="small" /> },
+  low_stock: { color: 'warning', label: 'Low Stock', icon: <Warning fontSize="small" /> },
+  over_stock: { color: 'warning', label: 'Over Stock', icon: <TrendingDown fontSize="small" /> },
   dead_stock: { color: 'default', label: 'Dead Stock', icon: <AccessTime fontSize="small" /> },
   out_of_stock: { color: 'error', label: 'Out of Stock', icon: <RemoveShoppingCart fontSize="small" /> },
   ok: { color: 'success', label: 'Optimal', icon: <CheckCircle fontSize="small" /> },
   fast_moving: { color: 'info', label: 'Fast Moving', icon: <Speed fontSize="small" /> },
 };
 
+// ==================== MOBILE FORECAST CARD ====================
+const MobileForecastCard = ({ item, onView }) => {
+  const [expanded, setExpanded] = useState(false);
+  const status = FORECAST_STATUS[item.status] || FORECAST_STATUS.ok;
+
+  return (
+    <Card sx={{ mb: 1.5, borderLeft: `4px solid ${status.color === 'error' ? '#ef4444' : status.color === 'warning' ? '#f59e0b' : status.color === 'success' ? '#10b981' : '#94a3b8'}` }}>
+      <CardContent sx={{ p: 1.5 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="subtitle2" fontWeight="bold" noWrap>
+              {item.product_name}
+            </Typography>
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <Typography variant="caption" color="text.secondary">{item.sku}</Typography>
+              <Chip 
+                size="small" 
+                color={status.color} 
+                label={status.label}
+                sx={{ height: 16, fontSize: '0.5rem' }}
+              />
+            </Stack>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="subtitle1" fontWeight="bold" color={item.current_stock <= 0 ? 'error.main' : 'success.main'}>
+              {item.current_stock}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">Stock</Typography>
+          </Box>
+        </Box>
+
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Sold (Period)</Typography>
+            <Typography variant="body2" fontWeight="bold">{item.total_sold_period || 0}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Daily Velocity</Typography>
+            <Typography variant="body2" fontWeight="bold">{item.daily_velocity.toFixed(2)}/d</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Days Left</Typography>
+            <Typography variant="body2" fontWeight="bold" color={item.days_remaining <= 7 ? 'error.main' : 'success.main'}>
+              {item.daily_velocity > 0 ? item.days_remaining : '-'}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Value</Typography>
+            <Typography variant="body2" fontWeight="bold">{formatCurrency(item.stock_value)}</Typography>
+          </Box>
+        </Box>
+
+        <Collapse in={expanded}>
+          <Divider sx={{ my: 1 }} />
+          <Grid container spacing={1}>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Alert Qty</Typography>
+              <Typography variant="body2">{item.alert_qty}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Suggested Order</Typography>
+              <Typography variant="body2" fontWeight="bold" color="error.main">{item.suggested_order || '-'}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Retail Value</Typography>
+              <Typography variant="body2">{formatCurrency(item.retail_value)}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Potential Profit</Typography>
+              <Typography variant="body2" color="success.main">{formatCurrency(item.potential_profit)}</Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="caption" color="text.secondary">Last Sale</Typography>
+              <Typography variant="body2">{item.last_sale_date ? formatDate(item.last_sale_date) : 'Never'}</Typography>
+            </Grid>
+          </Grid>
+        </Collapse>
+
+        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+          <Button 
+            size="small" 
+            variant="contained" 
+            startIcon={<Visibility />} 
+            onClick={() => onView(item)}
+            sx={{ flex: 1, bgcolor: '#10b981' }}
+          >
+            View Detail
+          </Button>
+          <IconButton size="small" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ArrowUpward fontSize="small" /> : <ArrowDownward fontSize="small" />}
+          </IconButton>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+};
+
+// ==================== MAIN COMPONENT ====================
 export default function ReportsPage() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
   // ==================== GLOBAL STATES ====================
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [mobileDrawer, setMobileDrawer] = useState(false);
 
   // ==================== FORECASTING STATES ====================
   const [forecastData, setForecastData] = useState([]);
@@ -55,7 +163,7 @@ export default function ReportsPage() {
   const [fcSearch, setFcSearch] = useState('');
   const [fcStatus, setFcStatus] = useState('all');
   const [fcPage, setFcPage] = useState(1);
-  const fcPerPage = 25;
+  const fcPerPage = isMobile ? 10 : 25;
 
   // ==================== SALES REPORT STATES ====================
   const [salesData, setSalesData] = useState([]);
@@ -99,8 +207,7 @@ export default function ReportsPage() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productHistory, setProductHistory] = useState({ sales: [], purchases: [], summary: {} });
 
-  // ==================== CODE LOGIC SYNC MATRIX ====================
-
+  // ==================== LOAD FUNCTIONS ====================
   const loadForecasting = async () => {
     setLoading(true);
     try {
@@ -451,406 +558,670 @@ export default function ReportsPage() {
     return { criticalLow, lowStock, outOfStock, overStock, ok };
   }, [forecastData]);
 
-  // Filters for dynamic views
   const filteredSuppliers = supplierSummary.filter(s => s.name?.toLowerCase().includes(supSearch.toLowerCase()) || s.company_name?.toLowerCase().includes(supSearch.toLowerCase()));
   const filteredCustomers = customerData.filter(c => c.name?.toLowerCase().includes(custSearch.toLowerCase()) || c.phone?.includes(custSearch));
 
   return (
-    <Box sx={{ p: { xs: 1, md: 2 } }}>
-      {/* HEADER SECTION */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="h5" fontWeight="bold" color="primary">
-          <Assessment sx={{ verticalAlign: 'middle', mr: 1, fontSize: 28 }} />
-          Enterprise Sourced Analytical Control Center
+    <Box sx={{ p: isMobile ? 1 : 2, pb: isMobile ? 8 : 2 }}>
+      
+      {/* HEADER */}
+      <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', mb: 2, gap: 1 }}>
+        <Typography variant={isMobile ? 'h6' : 'h5'} fontWeight="bold" color="primary">
+          <Assessment sx={{ verticalAlign: 'middle', mr: 1, fontSize: isMobile ? 24 : 28 }} />
+          {isMobile ? 'Reports' : 'Enterprise Analytical Control Center'}
         </Typography>
-        <Button variant="contained" size="small" sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }} startIcon={<Refresh />} onClick={() => loadForecasting()}>Force Sync Engine</Button>
+        <Stack direction="row" spacing={1} sx={{ width: isMobile ? '100%' : 'auto' }}>
+          {isMobile && (
+            <Button variant="outlined" size="small" startIcon={<MenuIcon />} onClick={() => setMobileDrawer(true)}>
+              Menu
+            </Button>
+          )}
+          <Button variant="contained" size="small" sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }} startIcon={<Refresh />} onClick={() => loadForecasting()}>
+            {isMobile ? 'Sync' : 'Force Sync Engine'}
+          </Button>
+        </Stack>
       </Box>
 
       {loading && <LinearProgress sx={{ mb: 2 }} />}
 
-      {/* REFRESH PANELS TABS WRAPPER */}
-      <Paper sx={{ mb: 2 }}>
-        <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" indicatorColor="primary" textColor="primary">
-          <Tab icon={<Timeline fontSize="small" />} label="Run Velocity Forecast" />
-          <Tab icon={<PointOfSale fontSize="small" />} label="Sales Analysis" />
-          <Tab icon={<LocalShipping fontSize="small" />} label="Suppliers Ledger" />
-          <Tab icon={<People fontSize="small" />} label="Customers Debt" />
-          <Tab icon={<ShowChart fontSize="small" />} label="Profit & Loss Matrix" />
-          <Tab icon={<Inventory fontSize="small" />} label="Stock Valuation" />
-          <Tab icon={<MoneyOff fontSize="small" />} label="Expense Ledger" />
+      {/* TABS */}
+      <Paper sx={{ mb: 2, overflowX: 'auto' }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={(e, v) => setActiveTab(v)} 
+          variant={isMobile ? 'fullWidth' : 'scrollable'}
+          scrollButtons={isMobile ? false : 'auto'}
+          sx={{ minHeight: isMobile ? 40 : 48 }}
+        >
+          <Tab 
+            icon={<Timeline fontSize="small" />} 
+            label={isMobile ? 'Forecast' : 'Velocity Forecast'} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<PointOfSale fontSize="small" />} 
+            label={isMobile ? 'Sales' : 'Sales Analysis'} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<LocalShipping fontSize="small" />} 
+            label={isMobile ? 'Suppliers' : 'Suppliers Ledger'} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<People fontSize="small" />} 
+            label={isMobile ? 'Customers' : 'Customers Debt'} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<ShowChart fontSize="small" />} 
+            label={isMobile ? 'P&L' : 'Profit & Loss'} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<Inventory fontSize="small" />} 
+            label={isMobile ? 'Stock' : 'Stock Valuation'} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<MoneyOff fontSize="small" />} 
+            label={isMobile ? 'Expenses' : 'Expense Ledger'} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
         </Tabs>
       </Paper>
 
-      {/* TAB PANEL 0: VELOCITY FORECAST */}
+      {/* ==================== TAB 0: FORECAST ==================== */}
       {activeTab === 0 && (
-        <Box>
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            {[
-              { title: 'Critical Low', value: forecastStats.criticalLow, color: 'error' },
-              { title: 'Low Limit Alerts', value: forecastStats.lowStock, color: 'error' },
-              { title: 'Out of Stock Level', value: forecastStats.outOfStock, color: 'error' },
-              { title: 'Over Stock Count', value: forecastStats.overStock, color: 'warning' },
-              { title: 'Optimal Safe Balance', value: forecastStats.ok, color: 'success' }
-            ].map((stat, i) => (
-              <Grid item xs={6} md={2.4} key={i}>
-                <Card sx={{ bgcolor: `${stat.color}.light`, borderLeft: '4px solid', borderLeftColor: `${stat.color}.main` }}><CardContent sx={{ p: 1.5 }}><Typography variant="caption" color="text.secondary">{stat.title}</Typography><Typography variant="h6" fontWeight="bold">{stat.value}</Typography></CardContent></Card>
-              </Grid>
-            ))}
-          </Grid>
-
-          <Paper sx={{ p: 2, mb: 2, border: '1px solid #10b981', bgcolor: '#fbfdfb', boxShadow: 0 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={4}><TextField fullWidth size="small" placeholder="Fuzzy search product descriptors or SKU constraints..." value={fcSearch} onChange={(e) => setFcSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: '#10b981' }} /> }} /></Grid>
-              <Grid item xs={6} md={3}>
-                <FormControl fullWidth size="small"><InputLabel>Velocity Forecast Basis</InputLabel>
-                  <Select value={forecastPeriod} onChange={(e) => setForecastPeriod(Number(e.target.value))} label="Velocity Forecast Basis">
-                    <MenuItem value={7}>Last 7 Trading Days</MenuItem><MenuItem value={30}>Last 30 Trading Days</MenuItem><MenuItem value={90}>Last 90 Trading Days</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6} md={3}>
-                <FormControl fullWidth size="small"><InputLabel>Account State Flag</InputLabel>
-                  <Select value={fcStatus} onChange={(e) => setFcStatus(e.target.value)} label="Account State Flag">
-                    <MenuItem value="all">Display All Structural States</MenuItem><MenuItem value="critical_low">Critical Low</MenuItem><MenuItem value="low_stock">Low Stock Alerts</MenuItem><MenuItem value="out_of_stock">Out of Stock</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={2}><Button fullWidth variant="outlined" color="success" size="small" onClick={() => { setFcSearch(''); setFcStatus('all'); }}>Clear Parameters</Button></Grid>
-            </Grid>
-          </Paper>
-
-          <Paper sx={{ border: '1px solid #e5e7eb', boxShadow: 0 }}>
-            <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
-              <Table size="small" stickyHeader>
-                <TableHead><TableRow>
-                  {['Product Model Nomenclature', 'Internal SKU', 'Stock Vol', 'Sold (Period)', 'Daily Velocity Rate', 'Days Left Runway', 'State Status Badge', 'Suggested Order Qty', 'Valuation Cost Basis', 'Action'].map(h => (
-                    <TableCell key={h} sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold' }}>{h}</TableCell>
-                  ))}
-                </TableRow></TableHead>
-                <TableBody>
-                  {paginatedForecast.map(v => (
-                    <TableRow key={v.id} hover>
-                      <TableCell><Typography variant="body2" fontWeight="bold">{v.product_name}</Typography><Typography variant="caption" color="text.secondary">{v.variant_name}</Typography></TableCell>
-                      <TableCell><Typography variant="caption" fontFamily="monospace" sx={{ bgcolor: '#f3f4f6', px: 0.5 }}>{v.sku}</Typography></TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>{v.current_stock}</TableCell>
-                      <TableCell align="right">{v.total_sold_period}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>{v.daily_velocity.toFixed(2)}/d</TableCell>
-                      <TableCell align="right">
-                        {v.daily_velocity > 0 ? (
-                          <Box><Typography fontWeight="bold" color={v.days_remaining <= forecastThreshold ? 'error.main' : 'success.main'}>{v.days_remaining} days</Typography>
-                            <LinearProgress variant="determinate" value={Math.min((v.days_remaining / 60) * 100, 100)} color={v.days_remaining <= forecastThreshold ? 'error' : 'success'} sx={{ height: 4, borderRadius: 2 }} />
-                          </Box>
-                        ) : 'No Outflow data'}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip size="small" color={FORECAST_STATUS[v.status]?.color || 'default'} label={FORECAST_STATUS[v.status]?.label || v.status} />
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: v.suggested_order > 0 ? 'red' : 'inherit', fontWeight: 'bold' }}>{v.suggested_order > 0 ? `+${v.suggested_order}` : '-'}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 500 }}>{formatCurrency(v.stock_value)}</TableCell>
-                      <TableCell align="center"><IconButton size="small" color="primary" onClick={() => handleViewDetail(v)}><Visibility fontSize="small" /></IconButton></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}><Pagination count={Math.ceil(filteredForecast.length / fcPerPage)} page={fcPage} onChange={(e, p) => setFcPage(p)} color="primary" size="small" /></Box>
-          </Paper>
-        </Box>
-      )}
-
-      {/* TAB PANEL 1: SALES REPORT */}
-      {activeTab === 1 && (
-        <Box>
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={3}><TextField fullWidth size="small" type="date" label="Sales Target From" value={salesFrom} onChange={(e) => setSalesFrom(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-              <Grid item xs={12} md={3}><TextField fullWidth size="small" type="date" label="Sales Target To" value={salesTo} onChange={(e) => setSalesTo(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-              <Grid item xs={12} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Payment Mode</InputLabel>
-                  <Select value={salesPaymentMode} onChange={(e) => setSalesPaymentMode(e.target.value)} label="Payment Mode">
-                    <MenuItem value="all">All Channels</MenuItem>
-                    <MenuItem value="cash">Cash</MenuItem>
-                    <MenuItem value="bank">Bank Transfer</MenuItem>
-                    <MenuItem value="credit">Credit / Due</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={3}><Button fullWidth variant="contained" size="small" onClick={loadSalesReport}>Compile Sales Statement</Button></Grid>
-            </Grid>
-          </Paper>
-
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} md={4}><Card sx={{ bg: '#f0fdf4' }}><CardContent><Typography variant="caption">Total Collected Revenue</Typography><Typography variant="h5" fontWeight="bold" color="green">{formatCurrency(salesSummary.total_sales)}</Typography></CardContent></Card></Grid>
-            <Grid item xs={6} md={4}><Card><CardContent><Typography variant="caption">Total Margin Yield (Gross)</Typography><Typography variant="h5" fontWeight="bold" color="primary">{formatCurrency(salesSummary.gross_profit)}</Typography></CardContent></Card></Grid>
-            <Grid item xs={6} md={4}><Card><CardContent><Typography variant="caption">Receivable Debt Booked</Typography><Typography variant="h5" fontWeight="bold" color="error">{formatCurrency(salesSummary.total_due)}</Typography></CardContent></Card></Grid>
-          </Grid>
-
-          <Paper sx={{ border: '1px solid #e5e7eb', boxShadow: 0 }}>
-            <TableContainer sx={{ maxHeight: 'calc(100vh - 360px)' }}>
-              <Table size="small" stickyHeader>
-                <TableHead><TableRow>
-                  {['Invoice Code ID', 'Posting Stamp', 'Acquired Consumer Party', 'Dispatched Qty', 'Gross Billing Value', 'Net Recovered Cash', 'Open Due Balance', 'Mode Channel'].map(h => (
-                    <TableCell key={h} sx={{ bgcolor: '#4b5563', color: 'white', fontWeight: 'bold' }}>{h}</TableCell>
-                  ))}
-                </TableRow></TableHead>
-                <TableBody>
-                  {salesData.map(sale => (
-                    <TableRow key={sale.id} hover>
-                      <TableCell sx={{ fontWeight: 'bold', color: 'primary.main' }}>{sale.invoice_no}</TableCell>
-                      <TableCell sx={{ fontSize: '0.8rem' }}>{formatDate(sale.date)}</TableCell>
-                      <TableCell>{sale.customer_name || 'Counter Cash Pool'}</TableCell>
-                      <TableCell align="right">{sale.total_qty || 0} units</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(sale.grand_total)}</TableCell>
-                      <TableCell align="right" sx={{ color: 'green' }}>{formatCurrency(sale.paid_amount)}</TableCell>
-                      <TableCell align="right" sx={{ color: sale.due_amount > 0 ? 'red' : 'inherit' }}>{formatCurrency(sale.due_amount)}</TableCell>
-                      <TableCell align="center"><Chip size="small" label={String(sale.payment_mode || 'Cash').toUpperCase()} variant="outlined" /></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-        </Box>
-      )}
-
-      {/* TAB PANEL 2: SUPPLIERS LEDGER */}
-      {activeTab === 2 && (
-        <Box>
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={4}><TextField fullWidth size="small" type="date" label="Purchases From" value={purchaseFrom} onChange={(e) => setPurchaseFrom(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-              <Grid item xs={12} md={4}><TextField fullWidth size="small" type="date" label="Purchases To" value={purchaseTo} onChange={(e) => setPurchaseTo(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-              <Grid item xs={12} md={4}><Button fullWidth variant="contained" size="small" onClick={loadPurchaseReport}>Fetch Procurement Ledger</Button></Grid>
-              <Grid item xs={12} sx={{ mt: 1 }}><TextField fullWidth size="small" placeholder="Filter by supplier or company..." value={supSearch} onChange={(e) => setSupSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray' }} /> }} /></Grid>
-            </Grid>
-          </Paper>
-
-          <Paper sx={{ border: '1px solid #e5e7eb', boxShadow: 0 }}>
-            <TableContainer>
-              <Table size="small">
-                <TableHead><TableRow>
-                  {['Supplier Name', 'Company Domain', 'Contact', 'Procurements Count', 'Total Orders Value', 'Paid Pool', 'Outstanding Payable'].map(h => (
-                    <TableCell key={h} sx={{ bgcolor: '#0284c7', color: 'white', fontWeight: 'bold' }}>{h}</TableCell>
-                  ))}
-                </TableRow></TableHead>
-                <TableBody>
-                  {filteredSuppliers.map(sup => (
-                    <TableRow key={sup.id} hover>
-                      <TableCell sx={{ fontWeight: 'bold' }}>{sup.name}</TableCell>
-                      <TableCell>{sup.company_name || '-'}</TableCell>
-                      <TableCell>{sup.phone || '-'}</TableCell>
-                      <TableCell align="center">{sup.bill_count} Invoices</TableCell>
-                      <TableCell align="right">{formatCurrency(sup.total_purchases)}</TableCell>
-                      <TableCell align="right" sx={{ color: 'green' }}>{formatCurrency(sup.total_paid)}</TableCell>
-                      <TableCell align="right" sx={{ color: sup.current_balance > 0 ? 'red' : 'inherit', fontWeight: 'bold' }}>{formatCurrency(sup.current_balance)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-        </Box>
-      )}
-
-      {/* TAB PANEL 3: CUSTOMERS DEBT */}
-      {activeTab === 3 && (
-        <Box>
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={4}><TextField fullWidth size="small" type="date" label="Timeline From" value={customerFrom} onChange={(e) => setCustomerFrom(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-              <Grid item xs={12} md={4}><TextField fullWidth size="small" type="date" label="Timeline To" value={customerTo} onChange={(e) => setCustomerTo(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-              <Grid item xs={12} md={4}><Button fullWidth variant="contained" size="small" onClick={loadCustomerReport}>Calculate Arrears Matrix</Button></Grid>
-              <Grid item xs={12} sx={{ mt: 1 }}><TextField fullWidth size="small" placeholder="Search customer records by name or cellphone..." value={custSearch} onChange={(e) => setCustSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray' }} /> }} /></Grid>
-            </Grid>
-          </Paper>
-
-          <Paper sx={{ border: '1px solid #e5e7eb', boxShadow: 0 }}>
-            <TableContainer>
-              <Table size="small">
-                <TableHead><TableRow>
-                  {['Client Identity', 'Mobile Contact', 'Shop Branding', 'Period Buying Volume', 'Period Clearances', 'Total Balance Receivables'].map(h => (
-                    <TableCell key={h} sx={{ bgcolor: '#7c3aed', color: 'white', fontWeight: 'bold' }}>{h}</TableCell>
-                  ))}
-                </TableRow></TableHead>
-                <TableBody>
-                  {filteredCustomers.map(cust => (
-                    <TableRow key={cust.id} hover>
-                      <TableCell sx={{ fontWeight: 'bold' }}>{cust.name}</TableCell>
-                      <TableCell>{cust.phone || '-'}</TableCell>
-                      <TableCell>{cust.shop_name || '-'}</TableCell>
-                      <TableCell align="right">{formatCurrency(cust.period_sales)}</TableCell>
-                      <TableCell align="right" sx={{ color: 'green' }}>{formatCurrency(cust.period_paid)}</TableCell>
-                      <TableCell align="right" sx={{ color: cust.current_balance > 0 ? 'red' : 'inherit', fontWeight: 'bold' }}>{formatCurrency(cust.current_balance)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-        </Box>
-      )}
-
-      {/* TAB PANEL 4: PROFIT & LOSS MATRIX */}
-      {activeTab === 4 && (
-        <Paper sx={{ p: 3, maxWidth: 800, mx: 'auto', border: '1px solid #e5e7eb', boxShadow: 0 }}>
-          <Typography variant="h6" align="center" fontWeight="bold" color="primary" gutterBottom>Statement of Profit & Loss Accounts</Typography>
-          <Typography variant="caption" align="center" display="block" color="text.secondary" sx={{ mb: 3 }}>Accounting Bounds Window: {formatDate(plFrom)} up to {formatDate(plTo)}</Typography>
-          <Divider sx={{ mb: 3 }} />
-
-          <Stack spacing={2}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#f0fdf4', borderRadius: 1 }}>
-              <Typography fontWeight="bold" color="green">Aggregate Top-Line Gross Revenue Sales Pool</Typography>
-              <Typography fontWeight="bold" color="green">{formatCurrency(plSummary.revenue)}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#fef2f2', borderRadius: 1 }}>
-              <Typography fontWeight="bold" color="red">Cost of Goods Sold (COGS Batch Expense Outflows)</Typography>
-              <Typography fontWeight="bold" color="red">-{formatCurrency(plSummary.cogs)}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#eff6ff', borderRadius: 1 }}>
-              <Typography variant="subtitle1" fontWeight="bold">Calculated Gross Trading Profit Yield Margin</Typography>
-              <Typography variant="subtitle1" fontWeight="bold" color="primary.main">{formatCurrency(plSummary.gross)}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#fffbeb', borderRadius: 1 }}>
-              <Typography variant="body2">Operating Expenditure (Indirect Vouchers Pool)</Typography>
-              <Typography variant="body2">-{formatCurrency(plSummary.expenses)}</Typography>
-            </Box>
-            <Divider />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: plSummary.net >= 0 ? '#10b981' : '#ef4444', color: 'white', borderRadius: 2 }}>
-              <Typography variant="h6" fontWeight="bold">NET AUDITED COMPREHENSIVE INCOME BALANCE</Typography>
-              <Typography variant="h6" fontWeight="bold">{formatCurrency(plSummary.net)}</Typography>
-            </Box>
-          </Stack>
-        </Paper>
-      )}
-
-      {/* TAB PANEL 5: STOCK VALUATION */}
-      {activeTab === 5 && (
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Capital Allocation Distribution Matrix Categories</Typography>
-            <Divider sx={{ mb: 1.5 }} />
-            {stockValuation.map((cat, i) => (
-              <Card key={i} variant="outlined" sx={{ mb: 1.5, bgcolor: '#f9fafb' }}><CardContent sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}><Typography fontWeight="bold">{cat.category_name}</Typography><Chip size="small" label={`${cat.total_qty} units stacked`} variant="outlined" /></Box>
-                <Grid container spacing={1}>
-                  <Grid item xs={4}><Typography variant="caption" color="text.secondary">Cost Value Sum</Typography><Typography variant="body2" fontWeight="bold">{formatCurrency(cat.stock_value_at_cost)}</Typography></Grid>
-                  <Grid item xs={4}><Typography variant="caption" color="text.secondary">Retail Revenue Value</Typography><Typography variant="body2" color="green" fontWeight="bold">{formatCurrency(cat.stock_value_at_retail)}</Typography></Grid>
-                  <Grid item xs={4}><Typography variant="caption" color="text.secondary">Potential Margin Profit</Typography><Typography variant="body2" color="primary.main" fontWeight="bold">{formatCurrency(cat.potential_profit)}</Typography></Grid>
+        <Fade in>
+          <Box>
+            <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 2 }}>
+              {[
+                { title: 'Critical Low', value: forecastStats.criticalLow, color: 'error' },
+                { title: 'Low Stock', value: forecastStats.lowStock, color: 'warning' },
+                { title: 'Out of Stock', value: forecastStats.outOfStock, color: 'error' },
+                { title: 'Over Stock', value: forecastStats.overStock, color: 'warning' },
+                { title: 'Optimal', value: forecastStats.ok, color: 'success' }
+              ].map((stat, i) => (
+                <Grid item xs={6} md={2.4} key={i}>
+                  <Card sx={{ bgcolor: `${stat.color}.light`, borderLeft: '4px solid', borderLeftColor: `${stat.color}.main` }}>
+                    <CardContent sx={{ p: isMobile ? 1 : 1.5 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: isMobile ? '0.55rem' : '0.75rem' }}>{stat.title}</Typography>
+                      <Typography variant="h6" fontWeight="bold">{stat.value}</Typography>
+                    </CardContent>
+                  </Card>
                 </Grid>
-              </CardContent></Card>
-            ))}
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Top Velocity Product Assets Ledger</Typography>
-            <Divider sx={{ mb: 1.5 }} />
-            <Paper sx={{ border: '1px solid #e5e7eb', boxShadow: 0 }}>
-              <TableContainer sx={{ maxHeight: 400 }}><Table size="small">
-                <TableHead><TableRow sx={{ bgcolor: '#f9fafb' }}><TableCell>Product</TableCell><TableCell align="right">Sold Units Volume</TableCell><TableCell align="right">Revenue Sum Generated</TableCell></TableRow></TableHead>
-                <TableBody>
-                  {topProducts.map((p, i) => (
-                    <TableRow key={i} hover>
-                      <TableCell><Typography variant="body2" fontWeight="bold">{p.product_name}</Typography><Typography variant="caption" color="text.secondary">{p.sku}</Typography></TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>{p.total_sold} units</TableCell>
-                      <TableCell align="right" sx={{ color: 'green', fontWeight: 'bold' }}>{formatCurrency(p.total_revenue)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table></TableContainer>
-            </Paper>
-          </Grid>
-        </Grid>
-      )}
+              ))}
+            </Grid>
 
-      {/* TAB PANEL 6: EXPENSE LEDGER */}
-      {activeTab === 6 && (
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={5}>
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Expense Categorical Outflow Distribution</Typography>
-            <Divider sx={{ mb: 1.5 }} />
-            {expenseSummary.map((exp, i) => (
-              <Card key={i} sx={{ mb: 1.5, borderLeft: '4px solid #f59e0b' }}>
-                <CardContent sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box>
-                    <Typography fontWeight="bold">{exp.category}</Typography>
-                    <Typography variant="caption" color="text.secondary">{exp.count} debit transactions</Typography>
-                  </Box>
-                  <Box sx={{ textAlign: 'right' }}>
-                    <Typography fontWeight="bold" color="error.main">{formatCurrency(exp.total)}</Typography>
-                    <Typography variant="caption" sx={{ bgcolor: '#fef3c7', px: 1, borderRadius: 1 }}>{exp.percentage.toFixed(1)}%</Typography>
-                  </Box>
-                </CardContent>
-              </Card>
-            ))}
-          </Grid>
-          <Grid item xs={12} md={7}>
-            <Paper sx={{ p: 2, mb: 2 }}>
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={5}><TextField fullWidth size="small" type="date" label="Expense From" value={expFrom} onChange={(e) => setExpFrom(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-                <Grid item xs={5}><TextField fullWidth size="small" type="date" label="Expense To" value={expTo} onChange={(e) => setExpTo(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-                <Grid item xs={2}><Button fullWidth variant="outlined" size="small" onClick={loadExpenses}><Refresh /></Button></Grid>
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2, border: '1px solid #10b981', bgcolor: '#fbfdfb' }}>
+              <Grid container spacing={isMobile ? 1 : 2}>
+                <Grid item xs={12} md={4}>
+                  <TextField fullWidth size="small" placeholder="Search products..." value={fcSearch} onChange={(e) => setFcSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: '#10b981' }} /> }} />
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Period</InputLabel>
+                    <Select value={forecastPeriod} onChange={(e) => setForecastPeriod(Number(e.target.value))} label="Period">
+                      <MenuItem value={7}>7 Days</MenuItem>
+                      <MenuItem value={30}>30 Days</MenuItem>
+                      <MenuItem value={90}>90 Days</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select value={fcStatus} onChange={(e) => setFcStatus(e.target.value)} label="Status">
+                      <MenuItem value="all">All</MenuItem>
+                      <MenuItem value="critical_low">Critical Low</MenuItem>
+                      <MenuItem value="low_stock">Low Stock</MenuItem>
+                      <MenuItem value="out_of_stock">Out of Stock</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <Button fullWidth variant="outlined" color="success" size="small" onClick={() => { setFcSearch(''); setFcStatus('all'); }}>Clear</Button>
+                </Grid>
               </Grid>
             </Paper>
 
-            <Paper sx={{ border: '1px solid #e5e7eb', boxShadow: 0 }}>
-              <TableContainer sx={{ maxHeight: 'calc(100vh - 350px)' }}>
-                <Table size="small">
-                  <TableHead><TableRow>
-                    {['Date Stamp', 'Category Group', 'Descriptor Memo', 'Mode Channel', 'Amount Deducted'].map(h => (
-                      <TableCell key={h} sx={{ bgcolor: '#ef4444', color: 'white', fontWeight: 'bold' }}>{h}</TableCell>
-                    ))}
-                  </TableRow></TableHead>
+            {isMobile ? (
+              // Mobile Forecast Cards
+              <Box>
+                {paginatedForecast.map(v => (
+                  <MobileForecastCard key={v.id} item={v} onView={handleViewDetail} />
+                ))}
+                {paginatedForecast.length === 0 && (
+                  <Paper sx={{ p: 4, textAlign: 'center' }}>
+                    <Timeline sx={{ fontSize: 48, color: '#d1d5db' }} />
+                    <Typography color="text.secondary">No products found</Typography>
+                  </Paper>
+                )}
+                {filteredForecast.length > fcPerPage && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    <Pagination count={Math.ceil(filteredForecast.length / fcPerPage)} page={fcPage} onChange={(e, p) => setFcPage(p)} color="primary" size="small" />
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              // Desktop Forecast Table
+              <Paper sx={{ border: '1px solid #e5e7eb' }}>
+                <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        {['Product', 'SKU', 'Stock', 'Sold', 'Velocity', 'Days Left', 'Status', 'Order', 'Value', 'Action'].map(h => (
+                          <TableCell key={h} sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }}>{h}</TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {paginatedForecast.map(v => {
+                        const status = FORECAST_STATUS[v.status] || FORECAST_STATUS.ok;
+                        return (
+                          <TableRow key={v.id} hover>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight="bold">{v.product_name}</Typography>
+                              <Typography variant="caption" color="text.secondary">{v.variant_name}</Typography>
+                            </TableCell>
+                            <TableCell><Typography variant="caption" fontFamily="monospace">{v.sku}</Typography></TableCell>
+                            <TableCell align="right" fontWeight="bold">{v.current_stock}</TableCell>
+                            <TableCell align="right">{v.total_sold_period}</TableCell>
+                            <TableCell align="right" fontWeight="bold">{v.daily_velocity.toFixed(2)}/d</TableCell>
+                            <TableCell align="right">
+                              {v.daily_velocity > 0 ? (
+                                <Box>
+                                  <Typography fontWeight="bold" color={v.days_remaining <= 7 ? 'error.main' : 'success.main'}>
+                                    {v.days_remaining} days
+                                  </Typography>
+                                  <LinearProgress variant="determinate" value={Math.min((v.days_remaining / 60) * 100, 100)} color={v.days_remaining <= 7 ? 'error' : 'success'} sx={{ height: 4, borderRadius: 2 }} />
+                                </Box>
+                              ) : 'No data'}
+                            </TableCell>
+                            <TableCell align="center">
+                              <Chip size="small" color={status.color} label={status.label} sx={{ height: 18, fontSize: '0.6rem' }} />
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: v.suggested_order > 0 ? 'error.main' : 'inherit', fontWeight: 'bold' }}>
+                              {v.suggested_order > 0 ? `+${v.suggested_order}` : '-'}
+                            </TableCell>
+                            <TableCell align="right" fontWeight="500">{formatCurrency(v.stock_value)}</TableCell>
+                            <TableCell align="center">
+                              <IconButton size="small" color="primary" onClick={() => handleViewDetail(v)}>
+                                <Visibility fontSize="small" />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
+                  <Pagination count={Math.ceil(filteredForecast.length / fcPerPage)} page={fcPage} onChange={(e, p) => setFcPage(p)} color="primary" size="small" />
+                </Box>
+              </Paper>
+            )}
+          </Box>
+        </Fade>
+      )}
+
+      {/* ==================== TAB 1: SALES ==================== */}
+      {activeTab === 1 && (
+        <Fade in>
+          <Box>
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+              <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+                <Grid item xs={6} md={3}>
+                  <TextField fullWidth size="small" type="date" label="From" value={salesFrom} onChange={(e) => setSalesFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <TextField fullWidth size="small" type="date" label="To" value={salesTo} onChange={(e) => setSalesTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Payment Mode</InputLabel>
+                    <Select value={salesPaymentMode} onChange={(e) => setSalesPaymentMode(e.target.value)} label="Payment Mode">
+                      <MenuItem value="all">All</MenuItem>
+                      <MenuItem value="cash">Cash</MenuItem>
+                      <MenuItem value="bank">Bank Transfer</MenuItem>
+                      <MenuItem value="credit">Credit</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <Button fullWidth variant="contained" size="small" onClick={loadSalesReport} sx={{ bgcolor: '#10b981' }}>Load</Button>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {!isMobile && (
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} md={4}>
+                  <Card sx={{ bgcolor: '#f0fdf4' }}>
+                    <CardContent><Typography variant="caption">Total Revenue</Typography>
+                      <Typography variant="h5" fontWeight="bold" color="green">{formatCurrency(salesSummary.total_sales)}</Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={6} md={4}>
+                  <Card><CardContent><Typography variant="caption">Gross Profit</Typography>
+                    <Typography variant="h5" fontWeight="bold" color="primary">{formatCurrency(salesSummary.gross_profit)}</Typography>
+                  </CardContent></Card>
+                </Grid>
+                <Grid item xs={6} md={4}>
+                  <Card><CardContent><Typography variant="caption">Receivable</Typography>
+                    <Typography variant="h5" fontWeight="bold" color="error">{formatCurrency(salesSummary.total_due)}</Typography>
+                  </CardContent></Card>
+                </Grid>
+              </Grid>
+            )}
+
+            <Paper sx={{ border: '1px solid #e5e7eb' }}>
+              <TableContainer sx={{ maxHeight: isMobile ? 'calc(100vh - 350px)' : 'calc(100vh - 360px)' }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      {['Invoice', 'Date', 'Customer', 'Qty', 'Total', 'Paid', 'Due', 'Mode'].map(h => (
+                        <TableCell key={h} sx={{ bgcolor: '#4b5563', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
                   <TableBody>
-                    {expenseData.map(e => (
-                      <TableRow key={e.id} hover>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>{formatDate(e.date)}</TableCell>
-                        <TableCell><Chip label={e.category_name || 'General'} size="small" variant="outlined" color="warning" /></TableCell>
-                        <TableCell>{e.description || '-'}</TableCell>
-                        <TableCell>{String(e.payment_mode || 'Cash').toUpperCase()}</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold', color: 'red' }}>{formatCurrency(e.amount)}</TableCell>
+                    {salesData.map(sale => (
+                      <TableRow key={sale.id} hover>
+                        <TableCell sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: isMobile ? '0.7rem' : '0.875rem' }}>{sale.invoice_no}</TableCell>
+                        <TableCell sx={{ fontSize: isMobile ? '0.65rem' : '0.8rem' }}>{formatDate(sale.date)}</TableCell>
+                        <TableCell sx={{ fontSize: isMobile ? '0.7rem' : '0.875rem' }}>{sale.customer_name || 'Walk-in'}</TableCell>
+                        <TableCell align="right">{sale.total_qty || 0}</TableCell>
+                        <TableCell align="right" fontWeight="bold">{formatCurrency(sale.grand_total)}</TableCell>
+                        <TableCell align="right" color="success.main">{formatCurrency(sale.paid_amount)}</TableCell>
+                        <TableCell align="right" color={sale.due_amount > 0 ? 'error.main' : 'inherit'}>{formatCurrency(sale.due_amount)}</TableCell>
+                        <TableCell align="center"><Chip size="small" label={String(sale.payment_mode || 'Cash').toUpperCase()} variant="outlined" sx={{ height: 16, fontSize: '0.5rem' }} /></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </TableContainer>
             </Paper>
-          </Grid>
-        </Grid>
+          </Box>
+        </Fade>
       )}
 
-      {/* MASTER LIFECYCLE POPUP DETAILS */}
-      <Dialog open={detailDialog} onClose={() => setDetailDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ borderBottom: '1px solid #e5e7eb' }}>Asset Audit Portfolio: {selectedProduct?.product_name}</DialogTitle>
+      {/* ==================== TAB 2: SUPPLIERS ==================== */}
+      {activeTab === 2 && (
+        <Fade in>
+          <Box>
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+              <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+                <Grid item xs={6} md={4}>
+                  <TextField fullWidth size="small" type="date" label="From" value={purchaseFrom} onChange={(e) => setPurchaseFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={6} md={4}>
+                  <TextField fullWidth size="small" type="date" label="To" value={purchaseTo} onChange={(e) => setPurchaseTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Button fullWidth variant="contained" size="small" onClick={loadPurchaseReport} sx={{ bgcolor: '#10b981' }}>Load</Button>
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField fullWidth size="small" placeholder="Search suppliers..." value={supSearch} onChange={(e) => setSupSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray' }} /> }} />
+                </Grid>
+              </Grid>
+            </Paper>
+
+            <Paper sx={{ border: '1px solid #e5e7eb' }}>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      {['Supplier', 'Company', 'Contact', 'Bills', 'Total', 'Paid', 'Payable'].map(h => (
+                        <TableCell key={h} sx={{ bgcolor: '#0284c7', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredSuppliers.map(sup => (
+                      <TableRow key={sup.id} hover>
+                        <TableCell fontWeight="bold">{sup.name}</TableCell>
+                        <TableCell>{sup.company_name || '-'}</TableCell>
+                        <TableCell>{sup.phone || '-'}</TableCell>
+                        <TableCell align="center">{sup.bill_count}</TableCell>
+                        <TableCell align="right">{formatCurrency(sup.total_purchases)}</TableCell>
+                        <TableCell align="right" color="success.main">{formatCurrency(sup.total_paid)}</TableCell>
+                        <TableCell align="right" color={sup.current_balance > 0 ? 'error.main' : 'inherit'} fontWeight="bold">{formatCurrency(sup.current_balance)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          </Box>
+        </Fade>
+      )}
+
+      {/* ==================== TAB 3: CUSTOMERS ==================== */}
+      {activeTab === 3 && (
+        <Fade in>
+          <Box>
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+              <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+                <Grid item xs={6} md={4}>
+                  <TextField fullWidth size="small" type="date" label="From" value={customerFrom} onChange={(e) => setCustomerFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={6} md={4}>
+                  <TextField fullWidth size="small" type="date" label="To" value={customerTo} onChange={(e) => setCustomerTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Button fullWidth variant="contained" size="small" onClick={loadCustomerReport} sx={{ bgcolor: '#10b981' }}>Load</Button>
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField fullWidth size="small" placeholder="Search customers..." value={custSearch} onChange={(e) => setCustSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray' }} /> }} />
+                </Grid>
+              </Grid>
+            </Paper>
+
+            <Paper sx={{ border: '1px solid #e5e7eb' }}>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      {['Customer', 'Phone', 'Shop', 'Period Sales', 'Period Paid', 'Balance'].map(h => (
+                        <TableCell key={h} sx={{ bgcolor: '#7c3aed', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredCustomers.map(cust => (
+                      <TableRow key={cust.id} hover>
+                        <TableCell fontWeight="bold">{cust.name}</TableCell>
+                        <TableCell>{cust.phone || '-'}</TableCell>
+                        <TableCell>{cust.shop_name || '-'}</TableCell>
+                        <TableCell align="right">{formatCurrency(cust.period_sales)}</TableCell>
+                        <TableCell align="right" color="success.main">{formatCurrency(cust.period_paid)}</TableCell>
+                        <TableCell align="right" color={cust.current_balance > 0 ? 'error.main' : 'inherit'} fontWeight="bold">{formatCurrency(cust.current_balance)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          </Box>
+        </Fade>
+      )}
+
+      {/* ==================== TAB 4: P&L ==================== */}
+      {activeTab === 4 && (
+        <Fade in>
+          <Paper sx={{ p: isMobile ? 2 : 3, maxWidth: 800, mx: 'auto', border: '1px solid #e5e7eb' }}>
+            <Typography variant={isMobile ? 'h6' : 'h6'} align="center" fontWeight="bold" color="primary" gutterBottom>Profit & Loss Statement</Typography>
+            <Typography variant="caption" align="center" display="block" color="text.secondary" sx={{ mb: 3 }}>
+              {formatDate(plFrom)} to {formatDate(plTo)}
+            </Typography>
+            <Divider sx={{ mb: 3 }} />
+
+            <Stack spacing={isMobile ? 1.5 : 2}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#f0fdf4', borderRadius: 1 }}>
+                <Typography fontWeight="bold" color="green">Revenue</Typography>
+                <Typography fontWeight="bold" color="green">{formatCurrency(plSummary.revenue)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#fef2f2', borderRadius: 1 }}>
+                <Typography fontWeight="bold" color="red">COGS</Typography>
+                <Typography fontWeight="bold" color="red">-{formatCurrency(plSummary.cogs)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#eff6ff', borderRadius: 1 }}>
+                <Typography variant="subtitle1" fontWeight="bold">Gross Profit</Typography>
+                <Typography variant="subtitle1" fontWeight="bold" color="primary.main">{formatCurrency(plSummary.gross)}</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#fffbeb', borderRadius: 1 }}>
+                <Typography variant="body2">Expenses</Typography>
+                <Typography variant="body2">-{formatCurrency(plSummary.expenses)}</Typography>
+              </Box>
+              <Divider />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: plSummary.net >= 0 ? '#10b981' : '#ef4444', color: 'white', borderRadius: 2 }}>
+                <Typography variant="h6" fontWeight="bold">NET INCOME</Typography>
+                <Typography variant="h6" fontWeight="bold">{formatCurrency(plSummary.net)}</Typography>
+              </Box>
+            </Stack>
+          </Paper>
+        </Fade>
+      )}
+
+      {/* ==================== TAB 5: STOCK ==================== */}
+      {activeTab === 5 && (
+        <Fade in>
+          <Grid container spacing={isMobile ? 1 : 2}>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Category Distribution</Typography>
+              <Divider sx={{ mb: 1.5 }} />
+              {stockValuation.map((cat, i) => (
+                <Card key={i} variant="outlined" sx={{ mb: 1.5, bgcolor: '#f9fafb' }}>
+                  <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography fontWeight="bold">{cat.category_name}</Typography>
+                      <Chip size="small" label={`${cat.total_qty} units`} variant="outlined" sx={{ height: 18, fontSize: '0.55rem' }} />
+                    </Box>
+                    <Grid container spacing={1}>
+                      <Grid item xs={4}>
+                        <Typography variant="caption" color="text.secondary">Cost</Typography>
+                        <Typography variant="body2" fontWeight="bold">{formatCurrency(cat.stock_value_at_cost)}</Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="caption" color="text.secondary">Retail</Typography>
+                        <Typography variant="body2" color="green" fontWeight="bold">{formatCurrency(cat.stock_value_at_retail)}</Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="caption" color="text.secondary">Profit</Typography>
+                        <Typography variant="body2" color="primary.main" fontWeight="bold">{formatCurrency(cat.potential_profit)}</Typography>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              ))}
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Top Products</Typography>
+              <Divider sx={{ mb: 1.5 }} />
+              <Paper sx={{ border: '1px solid #e5e7eb' }}>
+                <TableContainer sx={{ maxHeight: 400 }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                        <TableCell>Product</TableCell>
+                        <TableCell align="right">Sold</TableCell>
+                        <TableCell align="right">Revenue</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {topProducts.map((p, i) => (
+                        <TableRow key={i} hover>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="bold">{p.product_name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{p.sku}</Typography>
+                          </TableCell>
+                          <TableCell align="right" fontWeight="bold">{p.total_sold} units</TableCell>
+                          <TableCell align="right" color="success.main" fontWeight="bold">{formatCurrency(p.total_revenue)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </Grid>
+          </Grid>
+        </Fade>
+      )}
+
+      {/* ==================== TAB 6: EXPENSES ==================== */}
+      {activeTab === 6 && (
+        <Fade in>
+          <Grid container spacing={isMobile ? 1 : 2}>
+            <Grid item xs={12} md={5}>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Expense Distribution</Typography>
+              <Divider sx={{ mb: 1.5 }} />
+              {expenseSummary.map((exp, i) => (
+                <Card key={i} sx={{ mb: 1.5, borderLeft: '4px solid #f59e0b' }}>
+                  <CardContent sx={{ p: isMobile ? 1.5 : 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box>
+                      <Typography fontWeight="bold">{exp.category}</Typography>
+                      <Typography variant="caption" color="text.secondary">{exp.count} transactions</Typography>
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography fontWeight="bold" color="error.main">{formatCurrency(exp.total)}</Typography>
+                      <Typography variant="caption" sx={{ bgcolor: '#fef3c7', px: 1, borderRadius: 1 }}>{exp.percentage.toFixed(1)}%</Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))}
+            </Grid>
+            <Grid item xs={12} md={7}>
+              <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+                <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+                  <Grid item xs={5}><TextField fullWidth size="small" type="date" label="From" value={expFrom} onChange={(e) => setExpFrom(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
+                  <Grid item xs={5}><TextField fullWidth size="small" type="date" label="To" value={expTo} onChange={(e) => setExpTo(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
+                  <Grid item xs={2}><Button fullWidth variant="outlined" size="small" onClick={loadExpenses}><Refresh /></Button></Grid>
+                </Grid>
+              </Paper>
+
+              <Paper sx={{ border: '1px solid #e5e7eb' }}>
+                <TableContainer sx={{ maxHeight: 'calc(100vh - 350px)' }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        {['Date', 'Category', 'Description', 'Mode', 'Amount'].map(h => (
+                          <TableCell key={h} sx={{ bgcolor: '#ef4444', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {expenseData.map(e => (
+                        <TableRow key={e.id} hover>
+                          <TableCell sx={{ fontSize: isMobile ? '0.65rem' : '0.8rem' }}>{formatDate(e.date)}</TableCell>
+                          <TableCell><Chip label={e.category_name || 'General'} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.5rem' }} /></TableCell>
+                          <TableCell>{e.description || '-'}</TableCell>
+                          <TableCell>{String(e.payment_mode || 'Cash').toUpperCase()}</TableCell>
+                          <TableCell align="right" fontWeight="bold" color="error.main">{formatCurrency(e.amount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </Grid>
+          </Grid>
+        </Fade>
+      )}
+
+      {/* ==================== DETAIL DIALOG ==================== */}
+      <Dialog open={detailDialog} onClose={() => setDetailDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>
+        <DialogTitle sx={{ borderBottom: '1px solid #e5e7eb', bgcolor: '#10b981', color: 'white' }}>
+          Asset Audit: {selectedProduct?.product_name}
+        </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
           {selectedProduct && (
             <Box>
-              <Grid container spacing={2} sx={{ mb: 3, textAlign: 'center' }}>
-                <Grid item xs={6} md={4}><Paper sx={{ p: 1.5, bgcolor: '#f9fafb' }}><Typography variant="caption" color="text.secondary">Total Sales Volume</Typography><Typography variant="h6" fontWeight="bold" color="primary.main">{productHistory.summary.total_sold || 0} units</Typography></Paper></Grid>
-                <Grid item xs={6} md={4}><Paper sx={{ p: 1.5, bgcolor: '#f9fafb' }}><Typography variant="caption" color="text.secondary">Gross Sales revenues</Typography><Typography variant="h6" fontWeight="bold" color="green">{formatCurrency(productHistory.summary.total_revenue)}</Typography></Paper></Grid>
-                <Grid item xs={12} md={4}><Paper sx={{ p: 1.5, bgcolor: '#f9fafb' }}><Typography variant="caption" color="text.secondary">Net Consolidated Profits</Typography><Typography variant="h6" fontWeight="bold" color="green">{formatCurrency(productHistory.summary.total_profit)}</Typography></Paper></Grid>
+              <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 3, textAlign: 'center' }}>
+                <Grid item xs={6} md={4}>
+                  <Paper sx={{ p: 1.5, bgcolor: '#f9fafb' }}>
+                    <Typography variant="caption" color="text.secondary">Total Sold</Typography>
+                    <Typography variant="h6" fontWeight="bold" color="primary.main">{productHistory.summary.total_sold || 0} units</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={6} md={4}>
+                  <Paper sx={{ p: 1.5, bgcolor: '#f9fafb' }}>
+                    <Typography variant="caption" color="text.secondary">Revenue</Typography>
+                    <Typography variant="h6" fontWeight="bold" color="green">{formatCurrency(productHistory.summary.total_revenue)}</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Paper sx={{ p: 1.5, bgcolor: '#f9fafb' }}>
+                    <Typography variant="caption" color="text.secondary">Profit</Typography>
+                    <Typography variant="h6" fontWeight="bold" color="green">{formatCurrency(productHistory.summary.total_profit)}</Typography>
+                  </Paper>
+                </Grid>
               </Grid>
 
-              <Typography variant="subtitle2" fontWeight="bold" color="secondary" gutterBottom>Downstream Consumer Manifest Rows</Typography>
-              <TableContainer component={Paper} variant="outlined" sx={{ boxShadow: 0, maxHeight: 250 }}><Table size="small" stickyHeader>
-                <TableHead><TableRow><TableCell>Date</TableCell><TableCell>Invoice ID</TableCell><TableCell>Client Account</TableCell><TableCell align="right">Qty</TableCell><TableCell align="right">Price</TableCell><TableCell align="right">Total Net</TableCell></TableRow></TableHead>
-                <TableBody>
-                  {productHistory.sales?.map((s, i) => (
-                    <TableRow key={i} hover>
-                      <TableCell sx={{ fontSize: '0.78rem' }}>{formatDate(s.date)}</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>{s.invoice_no}</TableCell>
-                      <TableCell>{s.customer_name}</TableCell>
-                      <TableCell align="right">{s.quantity}</TableCell>
-                      <TableCell align="right">{formatCurrency(s.price)}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(s.total)}</TableCell>
+              <Typography variant="subtitle2" fontWeight="bold" color="secondary" gutterBottom>Sales History</Typography>
+              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 250 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Invoice</TableCell>
+                      <TableCell>Customer</TableCell>
+                      <TableCell align="right">Qty</TableCell>
+                      <TableCell align="right">Price</TableCell>
+                      <TableCell align="right">Total</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table></TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {productHistory.sales?.map((s, i) => (
+                      <TableRow key={i} hover>
+                        <TableCell sx={{ fontSize: isMobile ? '0.65rem' : '0.78rem' }}>{formatDate(s.date)}</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>{s.invoice_no}</TableCell>
+                        <TableCell>{s.customer_name}</TableCell>
+                        <TableCell align="right">{s.quantity}</TableCell>
+                        <TableCell align="right">{formatCurrency(s.price)}</TableCell>
+                        <TableCell align="right" fontWeight="bold">{formatCurrency(s.total)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Box>
           )}
         </DialogContent>
-        <DialogActions><Button onClick={() => setDetailDialog(false)}>Dismiss View</Button></DialogActions>
+        <DialogActions>
+          <Button onClick={() => setDetailDialog(false)}>Close</Button>
+        </DialogActions>
       </Dialog>
+
+      {/* ==================== MOBILE DRAWER ==================== */}
+      <Drawer anchor="bottom" open={mobileDrawer} onClose={() => setMobileDrawer(false)}>
+        <Box sx={{ p: 2, pb: 4 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>Reports Menu</Typography>
+          <List>
+            <ListItem button onClick={() => { setMobileDrawer(false); setActiveTab(0); }}>
+              <ListItemIcon><Timeline /></ListItemIcon>
+              <ListItemText primary="Forecast" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); setActiveTab(1); }}>
+              <ListItemIcon><PointOfSale /></ListItemIcon>
+              <ListItemText primary="Sales" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); setActiveTab(2); }}>
+              <ListItemIcon><LocalShipping /></ListItemIcon>
+              <ListItemText primary="Suppliers" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); setActiveTab(3); }}>
+              <ListItemIcon><People /></ListItemIcon>
+              <ListItemText primary="Customers" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); setActiveTab(4); }}>
+              <ListItemIcon><ShowChart /></ListItemIcon>
+              <ListItemText primary="P&L" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); setActiveTab(5); }}>
+              <ListItemIcon><Inventory /></ListItemIcon>
+              <ListItemText primary="Stock" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); setActiveTab(6); }}>
+              <ListItemIcon><MoneyOff /></ListItemIcon>
+              <ListItemText primary="Expenses" />
+            </ListItem>
+          </List>
+        </Box>
+      </Drawer>
+
+      {/* ==================== FAB BUTTON ==================== */}
+      {isMobile && (
+        <Fab
+          color="primary"
+          sx={{ position: 'fixed', bottom: 80, right: 16, bgcolor: '#10b981' }}
+          onClick={() => loadForecasting()}
+        >
+          <Refresh />
+        </Fab>
+      )}
     </Box>
   );
 }

@@ -1,25 +1,30 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Box, Tabs, Tab, Paper, Typography, Button, Table, TableBody, TableCell,
+  Box, Tabs, Tab, Paper, Typography, Button, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle,
-  DialogContent, DialogActions, TextField, Grid, MenuItem, Chip,
+  DialogContent, DialogActions, Grid, MenuItem, Chip,
   FormControl, InputLabel, Select, Card, CardContent,
   Divider, InputAdornment, Tooltip, Fade, Stack,
   List, ListItem, ListItemText, CircularProgress, Autocomplete,
-  TablePagination, Alert, Snackbar
+  TablePagination, Alert, Snackbar, useMediaQuery, useTheme,
+  Drawer, Collapse, Fab, SwipeableDrawer, Avatar, Badge,
+  ListItemIcon  // ✅ ADDED
 } from '@mui/material';
 import {
   Add, Edit, Delete, Search, QrCode, PhoneAndroid, Straighten,
   LocalGroceryStore, Save, Category, Scale, Inventory, LocalShipping,
-  AddCircle, History, Warning, Close, Print, Visibility
+  AddCircle, History, Warning, Close, Print, Visibility,
+  Menu as MenuIcon, ArrowUpward, ArrowDownward, Store,
+  TrendingUp, TrendingDown, CheckCircle, Cancel,
+  Refresh  // ✅ ADDED
 } from '@mui/icons-material';
 import db from '../database/db';
 
 const PRODUCT_TYPES = [
-  { value: 'standard', label: 'Standard (Shoes/General)', icon: <Inventory fontSize="small" /> },
-  { value: 'imei', label: 'IMEI Product (Mobile/Electronics)', icon: <PhoneAndroid fontSize="small" /> },
-  { value: 'fabric', label: 'Fabric/Cloth (Material)', icon: <Straighten fontSize="small" /> },
-  { value: 'grocery', label: 'Grocery/Food (Medicine)', icon: <LocalGroceryStore fontSize="small" /> },
+  { value: 'standard', label: 'Standard', icon: <Inventory fontSize="small" /> },
+  { value: 'imei', label: 'IMEI Product', icon: <PhoneAndroid fontSize="small" /> },
+  { value: 'fabric', label: 'Fabric/Cloth', icon: <Straighten fontSize="small" /> },
+  { value: 'grocery', label: 'Grocery/Food', icon: <LocalGroceryStore fontSize="small" /> },
 ];
 
 const DEFAULT_UNITS = ['Piece', 'Pair', 'KG', 'Gram', 'Meter', 'Than', 'Liter', 'Box', 'Dozen', 'Pack', 'Bag', 'Roll'];
@@ -39,7 +44,158 @@ const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(amount || 0);
 };
 
+// ==================== MOBILE PRODUCT CARD ====================
+const MobileProductCard = ({ product, onEdit, onDelete, getTypeChip, getStockBadge }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card sx={{ mb: 1.5, borderLeft: product.status === 'active' ? '4px solid #10b981' : '4px solid #94a3b8' }}>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="subtitle2" fontWeight="bold" noWrap>
+              {product.product_name || product.name}
+            </Typography>
+            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5 }}>
+              <Chip label={product.sku} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.55rem' }} />
+              {getTypeChip(product.product_type || product.type)}
+            </Stack>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="subtitle1" fontWeight="bold" color={Number(product.current_stock) <= 0 ? 'error.main' : 'success.main'}>
+              {product.current_stock || 0}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">{product.base_unit || product.unit}</Typography>
+          </Box>
+        </Box>
+
+        {getStockBadge(product.current_stock, product.stock_alert_quantity)}
+
+        <Collapse in={expanded}>
+          <Divider sx={{ my: 1 }} />
+          <Grid container spacing={1}>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Category</Typography>
+              <Typography variant="body2">{product.category_name || '-'}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Status</Typography>
+              <Chip size="small" color={product.status === 'active' ? 'success' : 'default'} label={product.status} sx={{ height: 18, fontSize: '0.55rem' }} />
+            </Grid>
+            <Grid item xs={4}>
+              <Typography variant="caption" color="text.secondary">Cost</Typography>
+              <Typography variant="body2" fontWeight="bold">{formatCurrency(product.purchase_price)}</Typography>
+            </Grid>
+            <Grid item xs={4}>
+              <Typography variant="caption" color="text.secondary">Retail</Typography>
+              <Typography variant="body2" fontWeight="bold" color="primary.main">{formatCurrency(product.retail_price)}</Typography>
+            </Grid>
+            <Grid item xs={4}>
+              <Typography variant="caption" color="text.secondary">Wholesale</Typography>
+              <Typography variant="body2" fontWeight="bold" color="secondary.main">{formatCurrency(product.wholesale_price)}</Typography>
+            </Grid>
+            {product.barcode && (
+              <Grid item xs={12}>
+                <Typography variant="caption" color="text.secondary">Barcode</Typography>
+                <Typography variant="body2" fontFamily="monospace">{product.barcode}</Typography>
+              </Grid>
+            )}
+          </Grid>
+        </Collapse>
+
+        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+          <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => onEdit(product)} sx={{ flex: 1 }}>
+            Edit
+          </Button>
+          <Button size="small" variant="outlined" color="error" startIcon={<Delete />} onClick={() => onDelete(product.id)} sx={{ flex: 1 }}>
+            Delete
+          </Button>
+          <IconButton size="small" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ArrowUpward fontSize="small" /> : <ArrowDownward fontSize="small" />}
+          </IconButton>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+};
+
+// ==================== MOBILE PURCHASE CARD ====================
+const MobilePurchaseCard = ({ purchase, onView, onEdit, onDelete, getPaymentStatusChip }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card sx={{ mb: 1.5, borderLeft: purchase.status === 'received' ? '4px solid #10b981' : '4px solid #f59e0b' }}>
+      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="subtitle2" fontWeight="bold" noWrap>
+              {purchase.purchase_no}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {purchase.supplier_name || 'Unknown Supplier'}
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="subtitle1" fontWeight="bold" color="primary.main">
+              {formatCurrency(purchase.grand_total)}
+            </Typography>
+            {getPaymentStatusChip(purchase.payment_status)}
+          </Box>
+        </Box>
+
+        <Collapse in={expanded}>
+          <Divider sx={{ my: 1 }} />
+          <Grid container spacing={1}>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Date</Typography>
+              <Typography variant="body2">{formatDate(purchase.purchase_date)}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Status</Typography>
+              <Chip size="small" color={purchase.status === 'received' ? 'success' : 'warning'} label={purchase.status} sx={{ height: 18, fontSize: '0.55rem' }} />
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Paid</Typography>
+              <Typography variant="body2" fontWeight="bold" color="success.main">{formatCurrency(purchase.paid_amount)}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Due</Typography>
+              <Typography variant="body2" fontWeight="bold" color="error.main">{formatCurrency(purchase.grand_total - purchase.paid_amount)}</Typography>
+            </Grid>
+            {purchase.supplier_invoice_no && (
+              <Grid item xs={12}>
+                <Typography variant="caption" color="text.secondary">Supplier Invoice</Typography>
+                <Typography variant="body2">{purchase.supplier_invoice_no}</Typography>
+              </Grid>
+            )}
+          </Grid>
+        </Collapse>
+
+        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+          <Button size="small" variant="contained" startIcon={<Visibility />} onClick={() => onView(purchase)} sx={{ flex: 1, bgcolor: '#10b981' }}>
+            View
+          </Button>
+          <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => onEdit(purchase)} sx={{ flex: 1 }}>
+            Edit
+          </Button>
+          <IconButton size="small" color="error" onClick={() => onDelete(purchase.id)}>
+            <Delete fontSize="small" />
+          </IconButton>
+          <IconButton size="small" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ArrowUpward fontSize="small" /> : <ArrowDownward fontSize="small" />}
+          </IconButton>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+};
+
+// ==================== MAIN COMPONENT ====================
 export default function InventoryPage() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
   const [activeTab, setActiveTab] = useState(0);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -54,12 +210,13 @@ export default function InventoryPage() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [mobileDrawer, setMobileDrawer] = useState(false);
 
   // Pagination
   const [productPage, setProductPage] = useState(0);
-  const [productRowsPerPage, setProductRowsPerPage] = useState(10);
+  const [productRowsPerPage, setProductRowsPerPage] = useState(isMobile ? 5 : 10);
   const [purchasePage, setPurchasePage] = useState(0);
-  const [purchaseRowsPerPage, setPurchaseRowsPerPage] = useState(10);
+  const [purchaseRowsPerPage, setPurchaseRowsPerPage] = useState(isMobile ? 5 : 10);
 
   // Dialog states
   const [productDialog, setProductDialog] = useState(false);
@@ -152,14 +309,14 @@ export default function InventoryPage() {
   const getStockBadge = (stock, minStock) => {
     const s = Number(stock) || 0;
     const m = Number(minStock) || 0;
-    if (s <= 0) return <Chip size="small" color="error" label="Out of Stock" />;
-    if (s <= m) return <Chip size="small" color="warning" label="Low Stock" icon={<Warning fontSize="small" />} />;
-    return <Chip size="small" color="success" label="In Stock" />;
+    if (s <= 0) return <Chip size="small" color="error" label="Out" sx={{ height: 18, fontSize: '0.55rem' }} />;
+    if (s <= m) return <Chip size="small" color="warning" label="Low" icon={<Warning fontSize="small" />} sx={{ height: 18, fontSize: '0.55rem' }} />;
+    return <Chip size="small" color="success" label="In Stock" sx={{ height: 18, fontSize: '0.55rem' }} />;
   };
 
   const getTypeChip = (type) => {
     const t = PRODUCT_TYPES.find(p => p.value === type);
-    return <Chip size="small" icon={t?.icon} label={t?.label} variant="outlined" />;
+    return <Chip size="small" icon={t?.icon} label={t?.label} variant="outlined" sx={{ height: 18, fontSize: '0.55rem' }} />;
   };
 
   const parseMeta = (desc) => {
@@ -225,7 +382,6 @@ export default function InventoryPage() {
     if (name === 'type') setDialogProductType(value);
   };
 
-  // FIXED: Auto merging iPhone duplicate SKUs flawlessly + Adding IMEIs safely
   const handleSaveProduct = async (e) => {
     e.preventDefault();
     const sku = productForm.sku.trim();
@@ -284,7 +440,7 @@ export default function InventoryPage() {
       setProductDialog(false);
       setEditingProduct(null);
       resetProductForm();
-      setSnackbar({ open: true, message: 'Product configuration saved!', severity: 'success' });
+      setSnackbar({ open: true, message: 'Product saved!', severity: 'success' });
     } catch (err) {
       setSnackbar({ open: true, message: 'Error saving product: ' + err.message, severity: 'error' });
     }
@@ -295,7 +451,7 @@ export default function InventoryPage() {
       try {
         await db.deleteVariant(id);
         await loadData();
-        setSnackbar({ open: true, message: 'Product deleted successfully!', severity: 'success' });
+        setSnackbar({ open: true, message: 'Product deleted!', severity: 'success' });
       } catch (err) {
         setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
       }
@@ -341,7 +497,7 @@ export default function InventoryPage() {
       setUnits(updated);
       localStorage.setItem('custom_units', JSON.stringify(updated));
       e.target.reset();
-      setSnackbar({ open: true, message: 'Unit registered!', severity: 'success' });
+      setSnackbar({ open: true, message: 'Unit added!', severity: 'success' });
     }
   };
 
@@ -354,7 +510,7 @@ export default function InventoryPage() {
     }
   };
 
-  // ==================== PURCHASE FUNCTIONS (FIXED IMEI & LEDGER SYNC) ====================
+  // ==================== PURCHASE FUNCTIONS ====================
 
   const handleOpenPurchase = (purchase = null) => {
     setEditingPurchase(purchase);
@@ -465,7 +621,6 @@ export default function InventoryPage() {
     return { subtotal, grandTotal, balance, paid: Number(purchaseForm.paid_amount) || 0 };
   };
 
-  // CRITICAL FIXED SAVING MACHINE: Automatically mapping child IMEIs & General Ledger
   const handleSavePurchase = async (e) => {
     e.preventDefault();
     if (!purchaseForm.supplier_id) return alert('Select supplier!');
@@ -501,7 +656,6 @@ export default function InventoryPage() {
           });
           await db.updateVariantStock(item.product_variant_id, Number(item.quantity));
 
-          // FIXED: Appending live IMEI arrays direct into serialized schema during purchase flow
           if (item.type === 'imei' && item.imeiList) {
             const imeis = item.imeiList.split('\n').map(s => s.trim()).filter(Boolean);
             if (imeis.length > 0) {
@@ -514,12 +668,12 @@ export default function InventoryPage() {
           await db.updateSupplierBalance(purchaseForm.supplier_id, totals.balance);
           await db.addLedgerEntry({
             supplier_id: purchaseForm.supplier_id, type: 'purchase', amount: totals.balance,
-            description: `Purchase ${purchaseForm.purchase_no} - Ledger Registered`, date: purchaseForm.purchase_date
+            description: `Purchase ${purchaseForm.purchase_no}`, date: purchaseForm.purchase_date
           });
         }
 
         if (db.logToGeneralLedger) {
-          await db.logToGeneralLedger('purchase', purchaseId, 0, totals.grandTotal, `Purchase Order: ${purchaseForm.purchase_no}`);
+          await db.logToGeneralLedger('purchase', purchaseId, 0, totals.grandTotal, `Purchase: ${purchaseForm.purchase_no}`);
         }
       }
 
@@ -527,18 +681,18 @@ export default function InventoryPage() {
       setPurchaseDialog(false);
       setEditingPurchase(null);
       setItems([]);
-      setSnackbar({ open: true, message: 'Stock Ledger Successfully Synchronized!', severity: 'success' });
+      setSnackbar({ open: true, message: 'Purchase saved!', severity: 'success' });
     } catch (err) {
       setSnackbar({ open: true, message: 'Error saving purchase: ' + err.message, severity: 'error' });
     }
   };
 
   const handleDeletePurchase = async (id) => {
-    if (window.confirm('Delete this purchase? This will not reverse stock.')) {
+    if (window.confirm('Delete this purchase?')) {
       try {
         await db.deletePurchase(id);
         await loadData();
-        setSnackbar({ open: true, message: 'Purchase record flushed!', severity: 'success' });
+        setSnackbar({ open: true, message: 'Purchase deleted!', severity: 'success' });
       } catch (err) {
         setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
       }
@@ -558,11 +712,11 @@ export default function InventoryPage() {
 
   const getPaymentStatusChip = (status) => {
     const statusMap = {
-      paid: <Chip size="small" color="success" label="Paid" />,
-      partial: <Chip size="small" color="warning" label="Partial" />,
-      due: <Chip size="small" color="error" label="Due" />
+      paid: <Chip size="small" color="success" label="Paid" sx={{ height: 18, fontSize: '0.55rem' }} />,
+      partial: <Chip size="small" color="warning" label="Partial" sx={{ height: 18, fontSize: '0.55rem' }} />,
+      due: <Chip size="small" color="error" label="Due" sx={{ height: 18, fontSize: '0.55rem' }} />
     };
-    return statusMap[status] || <Chip size="small" label={status} />;
+    return statusMap[status] || <Chip size="small" label={status} sx={{ height: 18, fontSize: '0.55rem' }} />;
   };
 
   if (loading) {
@@ -574,18 +728,58 @@ export default function InventoryPage() {
   }
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="h4" gutterBottom fontWeight="bold" color="primary">
-        <Inventory sx={{ mr: 1, verticalAlign: 'middle' }} />
-        Inventory Management
-      </Typography>
+    <Box sx={{ p: isMobile ? 1 : 2, pb: isMobile ? 8 : 2 }}>
+      
+      {/* HEADER */}
+      <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', mb: 2, gap: 1 }}>
+        <Typography variant={isMobile ? 'h5' : 'h4'} fontWeight="bold" color="primary">
+          <Inventory sx={{ mr: 1, verticalAlign: 'middle', fontSize: isMobile ? 28 : 32 }} />
+          {isMobile ? 'Inventory' : 'Inventory Management'}
+        </Typography>
+        <Stack direction="row" spacing={1} sx={{ width: isMobile ? '100%' : 'auto' }}>
+          {isMobile && (
+            <Button variant="outlined" size="small" startIcon={<MenuIcon />} onClick={() => setMobileDrawer(true)}>
+              Menu
+            </Button>
+          )}
+          <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCategoryDialog(true)}>
+            {isMobile ? 'Category' : 'Add Category'}
+          </Button>
+          <Button variant="contained" size="small" startIcon={<Add />} onClick={() => handleOpenPurchase()} sx={{ bgcolor: '#10b981' }}>
+            {isMobile ? 'Purchase' : 'New Purchase'}
+          </Button>
+        </Stack>
+      </Box>
 
-      <Paper sx={{ mb: 2 }}>
-        <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto">
-          <Tab icon={<Inventory fontSize="small" />} label="Products" />
-          <Tab icon={<Category fontSize="small" />} label="Categories" />
-          <Tab icon={<Scale fontSize="small" />} label="Units" />
-          <Tab icon={<LocalShipping fontSize="small" />} label="Purchases" />
+      {/* TABS */}
+      <Paper sx={{ mb: 2, overflowX: 'auto' }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={(e, v) => setActiveTab(v)} 
+          variant={isMobile ? 'fullWidth' : 'scrollable'}
+          scrollButtons={isMobile ? false : 'auto'}
+          sx={{ minHeight: isMobile ? 40 : 48 }}
+        >
+          <Tab 
+            icon={<Inventory fontSize="small" />} 
+            label={isMobile ? 'Products' : 'Products'} 
+            sx={{ fontSize: isMobile ? '0.65rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<Category fontSize="small" />} 
+            label={isMobile ? 'Cats' : 'Categories'} 
+            sx={{ fontSize: isMobile ? '0.65rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<Scale fontSize="small" />} 
+            label={isMobile ? 'Units' : 'Units'} 
+            sx={{ fontSize: isMobile ? '0.65rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
+          <Tab 
+            icon={<LocalShipping fontSize="small" />} 
+            label={isMobile ? 'Purchases' : 'Purchases'} 
+            sx={{ fontSize: isMobile ? '0.65rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+          />
         </Tabs>
       </Paper>
 
@@ -593,86 +787,121 @@ export default function InventoryPage() {
       {activeTab === 0 && (
         <Fade in>
           <Box>
-            <Paper sx={{ p: 2, mb: 2 }}>
-              <Grid container spacing={2} alignItems="center">
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+              <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
                 <Grid item xs={12} md={4}>
-                  <TextField fullWidth size="small" placeholder="Search by name or SKU..." value={searchProduct} onChange={(e) => setSearchProduct(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} /> }} />
+                  <TextField fullWidth size="small" placeholder="Search..." value={searchProduct} onChange={(e) => setSearchProduct(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} /> }} />
                 </Grid>
                 <Grid item xs={6} md={3}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Category</InputLabel>
                     <Select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} label="Category">
-                      <MenuItem value="">All Categories</MenuItem>
+                      <MenuItem value="">All</MenuItem>
                       {categories.map(cat => <MenuItem key={cat.id} value={cat.id}>{cat.name}</MenuItem>)}
                     </Select>
                   </FormControl>
                 </Grid>
                 <Grid item xs={6} md={3}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Product Type</InputLabel>
-                    <Select value={filterType} onChange={(e) => setFilterType(e.target.value)} label="Product Type">
-                      <MenuItem value="">All Types</MenuItem>
+                    <InputLabel>Type</InputLabel>
+                    <Select value={filterType} onChange={(e) => setFilterType(e.target.value)} label="Type">
+                      <MenuItem value="">All</MenuItem>
                       {PRODUCT_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
                     </Select>
                   </FormControl>
                 </Grid>
                 <Grid item xs={12} md={2}>
-                  <Button fullWidth variant="contained" startIcon={<Add />} onClick={() => handleOpenProduct()}>Add Product</Button>
+                  <Button fullWidth variant="contained" startIcon={<Add />} onClick={() => handleOpenProduct()} size={isMobile ? 'small' : 'medium'}>
+                    {isMobile ? 'Add' : 'Add Product'}
+                  </Button>
                 </Grid>
               </Grid>
             </Paper>
 
-            <TableContainer component={Paper}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ backgroundColor: 'primary.main' }}>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Product</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>SKU</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Type</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Category</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Stock</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Status</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Prices</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredProducts
-                    .slice(productPage * productRowsPerPage, productPage * productRowsPerPage + productRowsPerPage)
-                    .map((product) => (
-                    <TableRow key={product.id} hover>
-                      <TableCell>
-                        <Typography variant="subtitle2">{product.product_name || product.name}</Typography>
-                        {product.barcode && <Typography variant="caption" color="text.secondary"><QrCode fontSize="inherit" /> {product.barcode}</Typography>}
-                      </TableCell>
-                      <TableCell><Chip label={product.sku} size="small" variant="outlined" /></TableCell>
-                      <TableCell>{getTypeChip(product.product_type || product.type)}</TableCell>
-                      <TableCell>{product.category_name || '-'}</TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography fontWeight="bold">{product.current_stock || 0}</Typography>
-                          <Typography variant="caption" color="text.secondary">{product.base_unit || product.unit}</Typography>
-                        </Box>
-                        {getStockBadge(product.current_stock, product.stock_alert_quantity)}
-                      </TableCell>
-                      <TableCell><Chip size="small" color={product.status === 'active' ? 'success' : 'default'} label={product.status} /></TableCell>
-                      <TableCell>
-                        <Stack spacing={0.5}>
-                          <Typography variant="caption">Cost: {formatCurrency(product.purchase_price)}</Typography>
-                          <Typography variant="caption">Retail: {formatCurrency(product.retail_price)}</Typography>
-                          <Typography variant="caption">Wholesale: {formatCurrency(product.wholesale_price)}</Typography>
-                        </Stack>
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton size="small" color="primary" onClick={() => handleOpenProduct(product)}><Edit fontSize="small" /></IconButton>
-                        <IconButton size="small" color="error" onClick={() => handleDeleteProduct(product.id)}><Delete fontSize="small" /></IconButton>
-                      </TableCell>
-                    </TableRow>
+            {isMobile ? (
+              // Mobile Cards View
+              <Box>
+                {filteredProducts
+                  .slice(productPage * productRowsPerPage, productPage * productRowsPerPage + productRowsPerPage)
+                  .map((product) => (
+                    <MobileProductCard
+                      key={product.id}
+                      product={product}
+                      onEdit={handleOpenProduct}
+                      onDelete={handleDeleteProduct}
+                      getTypeChip={getTypeChip}
+                      getStockBadge={getStockBadge}
+                    />
                   ))}
-                </TableBody>
-              </Table>
-              <TablePagination component="div" count={filteredProducts.length} page={productPage} onPageChange={(e, p) => setProductPage(p)} rowsPerPage={productRowsPerPage} onRowsPerPageChange={(e) => { setProductRowsPerPage(parseInt(e.target.value, 10)); setProductPage(0); }} rowsPerPageOptions={[5, 10, 25, 50]} />
-            </TableContainer>
+                {filteredProducts.length > productRowsPerPage && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    <TablePagination
+                      component="div"
+                      count={filteredProducts.length}
+                      page={productPage}
+                      onPageChange={(e, p) => setProductPage(p)}
+                      rowsPerPage={productRowsPerPage}
+                      onRowsPerPageChange={(e) => { setProductRowsPerPage(parseInt(e.target.value, 10)); setProductPage(0); }}
+                      rowsPerPageOptions={[5, 10, 15]}
+                      labelRowsPerPage="Rows:"
+                    />
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              // Desktop Table View
+              <TableContainer component={Paper}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: 'primary.main' }}>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Product</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>SKU</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Type</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Category</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Stock</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Status</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Prices</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {filteredProducts
+                      .slice(productPage * productRowsPerPage, productPage * productRowsPerPage + productRowsPerPage)
+                      .map((product) => (
+                      <TableRow key={product.id} hover>
+                        <TableCell>
+                          <Typography variant="subtitle2">{product.product_name || product.name}</Typography>
+                          {product.barcode && <Typography variant="caption" color="text.secondary"><QrCode fontSize="inherit" /> {product.barcode}</Typography>}
+                        </TableCell>
+                        <TableCell><Chip label={product.sku} size="small" variant="outlined" /></TableCell>
+                        <TableCell>{getTypeChip(product.product_type || product.type)}</TableCell>
+                        <TableCell>{product.category_name || '-'}</TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography fontWeight="bold">{product.current_stock || 0}</Typography>
+                            <Typography variant="caption" color="text.secondary">{product.base_unit || product.unit}</Typography>
+                          </Box>
+                          {getStockBadge(product.current_stock, product.stock_alert_quantity)}
+                        </TableCell>
+                        <TableCell><Chip size="small" color={product.status === 'active' ? 'success' : 'default'} label={product.status} /></TableCell>
+                        <TableCell>
+                          <Stack spacing={0.5}>
+                            <Typography variant="caption">Cost: {formatCurrency(product.purchase_price)}</Typography>
+                            <Typography variant="caption">Retail: {formatCurrency(product.retail_price)}</Typography>
+                            <Typography variant="caption">Wholesale: {formatCurrency(product.wholesale_price)}</Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton size="small" color="primary" onClick={() => handleOpenProduct(product)}><Edit fontSize="small" /></IconButton>
+                          <IconButton size="small" color="error" onClick={() => handleDeleteProduct(product.id)}><Delete fontSize="small" /></IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination component="div" count={filteredProducts.length} page={productPage} onPageChange={(e, p) => setProductPage(p)} rowsPerPage={productRowsPerPage} onRowsPerPageChange={(e) => { setProductRowsPerPage(parseInt(e.target.value, 10)); setProductPage(0); }} rowsPerPageOptions={[5, 10, 25, 50]} />
+              </TableContainer>
+            )}
           </Box>
         </Fade>
       )}
@@ -684,21 +913,32 @@ export default function InventoryPage() {
             <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
               <Button variant="contained" startIcon={<Add />} onClick={() => setCategoryDialog(true)}>Add Category</Button>
             </Box>
-            <Grid container spacing={2}>
+            <Grid container spacing={isMobile ? 1 : 2}>
               {categories.map(cat => (
                 <Grid item xs={12} sm={6} md={4} key={cat.id}>
-                  <Card><CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <Box>
-                        <Typography variant="h6">{cat.name}</Typography>
-                        {cat.parent_name && <Typography variant="caption" color="text.secondary">Parent: {cat.parent_name}</Typography>}
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Slug: {cat.slug}</Typography>
+                  <Card>
+                    <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Box>
+                          <Typography variant={isMobile ? 'subtitle1' : 'h6'}>{cat.name}</Typography>
+                          {cat.parent_name && <Typography variant="caption" color="text.secondary">Parent: {cat.parent_name}</Typography>}
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Slug: {cat.slug}</Typography>
+                        </Box>
+                        <IconButton size="small" color="error" onClick={() => handleDeleteCategory(cat.id)}><Delete fontSize="small" /></IconButton>
                       </Box>
-                      <IconButton size="small" color="error" onClick={() => handleDeleteCategory(cat.id)}><Delete fontSize="small" /></IconButton>
-                    </Box>
-                  </CardContent></Card>
+                    </CardContent>
+                  </Card>
                 </Grid>
               ))}
+              {categories.length === 0 && (
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 4, textAlign: 'center' }}>
+                    <Category sx={{ fontSize: 48, color: '#d1d5db' }} />
+                    <Typography color="text.secondary">No categories</Typography>
+                    <Button variant="contained" startIcon={<Add />} onClick={() => setCategoryDialog(true)} sx={{ mt: 2 }}>Add Category</Button>
+                  </Paper>
+                </Grid>
+              )}
             </Grid>
           </Box>
         </Fade>
@@ -708,11 +948,11 @@ export default function InventoryPage() {
       {activeTab === 2 && (
         <Fade in>
           <Box>
-            <Paper sx={{ p: 2, mb: 2 }}>
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
               <form onSubmit={handleAddUnit}>
-                <Grid container spacing={2} alignItems="center">
-                  <Grid item xs={12} md={4}><TextField fullWidth size="small" name="unitName" label="New Unit Name" required /></Grid>
-                  <Grid item xs={12} md={2}><Button type="submit" variant="contained" startIcon={<Add />} fullWidth>Add Unit</Button></Grid>
+                <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+                  <Grid item xs={8} md={10}><TextField fullWidth size="small" name="unitName" label="New Unit Name" required /></Grid>
+                  <Grid item xs={4} md={2}><Button type="submit" variant="contained" startIcon={<Add />} fullWidth size={isMobile ? 'small' : 'medium'}>Add</Button></Grid>
                 </Grid>
               </form>
             </Paper>
@@ -734,57 +974,98 @@ export default function InventoryPage() {
         <Fade in>
           <Box>
             <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
-              <Button variant="contained" startIcon={<Add />} onClick={() => handleOpenPurchase()}>New Purchase</Button>
+              <Button variant="contained" startIcon={<Add />} onClick={() => handleOpenPurchase()} size={isMobile ? 'small' : 'medium'}>
+                {isMobile ? 'New' : 'New Purchase'}
+              </Button>
             </Box>
-            <TableContainer component={Paper}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ backgroundColor: 'primary.main' }}>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Purchase #</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Supplier</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Status</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Total</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Paid</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Payment</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {purchases.slice(purchasePage * purchaseRowsPerPage, purchasePage * purchaseRowsPerPage + purchaseRowsPerPage).map((purchase) => (
-                    <TableRow key={purchase.id} hover>
-                      <TableCell><Typography variant="subtitle2">{purchase.purchase_no}</Typography>{purchase.supplier_invoice_no && <Typography variant="caption" color="text.secondary">Inv: {purchase.supplier_invoice_no}</Typography>}</TableCell>
-                      <TableCell><Typography variant="body2">{purchase.supplier_name}</Typography></TableCell>
-                      <TableCell>{formatDate(purchase.purchase_date)}</TableCell>
-                      <TableCell><Chip size="small" color={purchase.status === 'received' ? 'success' : 'warning'} label={purchase.status} /></TableCell>
-                      <TableCell>{formatCurrency(purchase.grand_total)}</TableCell>
-                      <TableCell>{formatCurrency(purchase.paid_amount)}</TableCell>
-                      <TableCell>{getPaymentStatusChip(purchase.payment_status)}</TableCell>
-                      <TableCell align="right">
-                        <IconButton size="small" color="info" onClick={() => handleViewPurchase(purchase)}><Visibility fontSize="small" /></IconButton>
-                        <IconButton size="small" color="primary" onClick={() => handleOpenPurchase(purchase)}><Edit fontSize="small" /></IconButton>
-                        <IconButton size="small" color="error" onClick={() => handleDeletePurchase(purchase.id)}><Delete fontSize="small" /></IconButton>
-                      </TableCell>
+
+            {isMobile ? (
+              // Mobile Purchase Cards
+              <Box>
+                {purchases.slice(purchasePage * purchaseRowsPerPage, purchasePage * purchaseRowsPerPage + purchaseRowsPerPage).map((purchase) => (
+                  <MobilePurchaseCard
+                    key={purchase.id}
+                    purchase={purchase}
+                    onView={handleViewPurchase}
+                    onEdit={handleOpenPurchase}
+                    onDelete={handleDeletePurchase}
+                    getPaymentStatusChip={getPaymentStatusChip}
+                  />
+                ))}
+                {purchases.length > purchaseRowsPerPage && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    <TablePagination
+                      component="div"
+                      count={purchases.length}
+                      page={purchasePage}
+                      onPageChange={(e, p) => setPurchasePage(p)}
+                      rowsPerPage={purchaseRowsPerPage}
+                      onRowsPerPageChange={(e) => { setPurchaseRowsPerPage(parseInt(e.target.value, 10)); setPurchasePage(0); }}
+                      rowsPerPageOptions={[5, 10, 15]}
+                      labelRowsPerPage="Rows:"
+                    />
+                  </Box>
+                )}
+              </Box>
+            ) : (
+              // Desktop Table View
+              <TableContainer component={Paper}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: 'primary.main' }}>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Purchase #</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Supplier</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Status</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Total</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Paid</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Payment</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <TablePagination component="div" count={purchases.length} page={purchasePage} onPageChange={(e, p) => setPurchasePage(p)} rowsPerPage={purchaseRowsPerPage} onRowsPerPageChange={(e) => { setPurchaseRowsPerPage(parseInt(e.target.value, 10)); setPurchasePage(0); }} rowsPerPageOptions={[5, 10, 25, 50]} />
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {purchases.slice(purchasePage * purchaseRowsPerPage, purchasePage * purchaseRowsPerPage + purchaseRowsPerPage).map((purchase) => (
+                      <TableRow key={purchase.id} hover>
+                        <TableCell>
+                          <Typography variant="subtitle2">{purchase.purchase_no}</Typography>
+                          {purchase.supplier_invoice_no && <Typography variant="caption" color="text.secondary">Inv: {purchase.supplier_invoice_no}</Typography>}
+                        </TableCell>
+                        <TableCell><Typography variant="body2">{purchase.supplier_name}</Typography></TableCell>
+                        <TableCell>{formatDate(purchase.purchase_date)}</TableCell>
+                        <TableCell><Chip size="small" color={purchase.status === 'received' ? 'success' : 'warning'} label={purchase.status} /></TableCell>
+                        <TableCell>{formatCurrency(purchase.grand_total)}</TableCell>
+                        <TableCell>{formatCurrency(purchase.paid_amount)}</TableCell>
+                        <TableCell>{getPaymentStatusChip(purchase.payment_status)}</TableCell>
+                        <TableCell align="right">
+                          <IconButton size="small" color="info" onClick={() => handleViewPurchase(purchase)}><Visibility fontSize="small" /></IconButton>
+                          <IconButton size="small" color="primary" onClick={() => handleOpenPurchase(purchase)}><Edit fontSize="small" /></IconButton>
+                          <IconButton size="small" color="error" onClick={() => handleDeletePurchase(purchase.id)}><Delete fontSize="small" /></IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination component="div" count={purchases.length} page={purchasePage} onPageChange={(e, p) => setPurchasePage(p)} rowsPerPage={purchaseRowsPerPage} onRowsPerPageChange={(e) => { setPurchaseRowsPerPage(parseInt(e.target.value, 10)); setPurchasePage(0); }} rowsPerPageOptions={[5, 10, 25, 50]} />
+              </TableContainer>
+            )}
           </Box>
         </Fade>
       )}
 
+      {/* ==================== DIALOGS ==================== */}
+
       {/* PRODUCT DIALOG */}
-      <Dialog open={productDialog} onClose={() => setProductDialog(false)} maxWidth="md" fullWidth>
+      <Dialog open={productDialog} onClose={() => setProductDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>
+        <DialogTitle sx={{ bgcolor: '#10b981', color: 'white' }}>
+          {editingProduct ? 'Edit Product' : 'Add New Product'}
+        </DialogTitle>
         <form onSubmit={handleSaveProduct}>
-          <DialogTitle>{editingProduct ? 'Edit Product' : 'Add New Product'}</DialogTitle>
-          <DialogContent>
-            <Grid container spacing={2} sx={{ mt: 0.5 }}>
-              <Grid item xs={12} md={6}><TextField fullWidth label="Product Name *" name="name" value={productForm.name} onChange={handleProductChange} required /></Grid>
-              <Grid item xs={12} md={6}><TextField fullWidth label="SKU *" name="sku" value={productForm.sku} onChange={handleProductChange} required /></Grid>
+          <DialogContent sx={{ pt: 2 }}>
+            <Grid container spacing={isMobile ? 1.5 : 2} sx={{ mt: 0.5 }}>
+              <Grid item xs={12} md={6}><TextField fullWidth label="Product Name *" name="name" value={productForm.name} onChange={handleProductChange} required size="small" /></Grid>
+              <Grid item xs={12} md={6}><TextField fullWidth label="SKU *" name="sku" value={productForm.sku} onChange={handleProductChange} required size="small" /></Grid>
               <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth size="small">
                   <InputLabel>Product Type</InputLabel>
                   <Select name="type" value={productForm.type} onChange={handleProductChange} label="Product Type">
                     {PRODUCT_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
@@ -792,7 +1073,7 @@ export default function InventoryPage() {
                 </FormControl>
               </Grid>
               <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth size="small">
                   <InputLabel>Category</InputLabel>
                   <Select name="category_id" value={productForm.category_id} onChange={handleProductChange} label="Category">
                     <MenuItem value="">None</MenuItem>
@@ -801,36 +1082,35 @@ export default function InventoryPage() {
                 </FormControl>
               </Grid>
               <Grid item xs={12} md={4}>
-                <FormControl fullWidth>
+                <FormControl fullWidth size="small">
                   <InputLabel>Unit</InputLabel>
                   <Select name="unit" value={productForm.unit} onChange={handleProductChange} label="Unit">
                     {units.map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} md={4}><TextField fullWidth label="Barcode" name="barcode" value={productForm.barcode} onChange={handleProductChange} InputProps={{ startAdornment: <InputAdornment position="start"><QrCode /></InputAdornment> }} /></Grid>
-              <Grid item xs={12} md={4}><TextField fullWidth label="Current Stock" name="stock" type="number" value={productForm.stock} onChange={handleProductChange} /></Grid>
-              <Grid item xs={12} md={4}><TextField fullWidth label="Min Stock Alert" name="minStock" type="number" value={productForm.minStock} onChange={handleProductChange} /></Grid>
-              <Grid item xs={12} md={4}><TextField fullWidth label="Cost Price" name="costPrice" type="number" value={productForm.costPrice} onChange={handleProductChange} InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} /></Grid>
-              <Grid item xs={12} md={4}><TextField fullWidth label="Retail Price" name="retailPrice" type="number" value={productForm.retailPrice} onChange={handleProductChange} InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} /></Grid>
-              <Grid item xs={12} md={4}><TextField fullWidth label="Wholesale Price" name="wholesalePrice" type="number" value={productForm.wholesalePrice} onChange={handleProductChange} InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} /></Grid>
+              <Grid item xs={12} md={4}><TextField fullWidth label="Barcode" name="barcode" value={productForm.barcode} onChange={handleProductChange} size="small" InputProps={{ startAdornment: <InputAdornment position="start"><QrCode /></InputAdornment> }} /></Grid>
+              <Grid item xs={12} md={4}><TextField fullWidth label="Stock" name="stock" type="number" value={productForm.stock} onChange={handleProductChange} size="small" /></Grid>
+              <Grid item xs={12} md={4}><TextField fullWidth label="Min Stock" name="minStock" type="number" value={productForm.minStock} onChange={handleProductChange} size="small" /></Grid>
+              <Grid item xs={12} md={4}><TextField fullWidth label="Cost Price" name="costPrice" type="number" value={productForm.costPrice} onChange={handleProductChange} size="small" InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} /></Grid>
+              <Grid item xs={12} md={4}><TextField fullWidth label="Retail Price" name="retailPrice" type="number" value={productForm.retailPrice} onChange={handleProductChange} size="small" InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} /></Grid>
 
               {dialogProductType === 'imei' && (
-                <Grid item xs={12}><TextField fullWidth multiline rows={4} label="IMEI / Serial Numbers (one per line)" name="imeiList" value={productForm.imeiList} onChange={handleProductChange} /></Grid>
+                <Grid item xs={12}><TextField fullWidth multiline rows={4} label="IMEI Numbers (one per line)" name="imeiList" value={productForm.imeiList} onChange={handleProductChange} size="small" /></Grid>
               )}
               {dialogProductType === 'fabric' && (
-                <Grid item xs={12} md={6}><TextField fullWidth label="Fabric Length" name="fabricLength" type="number" value={productForm.fabricLength} onChange={handleProductChange} /></Grid>
+                <Grid item xs={12} md={6}><TextField fullWidth label="Fabric Length" name="fabricLength" type="number" value={productForm.fabricLength} onChange={handleProductChange} size="small" /></Grid>
               )}
               {dialogProductType === 'grocery' && (
                 <>
-                  <Grid item xs={12} md={4}><TextField fullWidth label="Weight (kg)" name="weight" type="number" value={productForm.weight} onChange={handleProductChange} /></Grid>
-                  <Grid item xs={12} md={4}><TextField fullWidth label="Expiry Date" name="expiryDate" type="date" value={productForm.expiryDate} onChange={handleProductChange} InputLabelProps={{ shrink: true }} /></Grid>
-                  <Grid item xs={12} md={4}><TextField fullWidth label="Batch Number" name="batchNumber" value={productForm.batchNumber} onChange={handleProductChange} /></Grid>
+                  <Grid item xs={12} md={4}><TextField fullWidth label="Weight (kg)" name="weight" type="number" value={productForm.weight} onChange={handleProductChange} size="small" /></Grid>
+                  <Grid item xs={12} md={4}><TextField fullWidth label="Expiry Date" name="expiryDate" type="date" value={productForm.expiryDate} onChange={handleProductChange} size="small" InputLabelProps={{ shrink: true }} /></Grid>
+                  <Grid item xs={12} md={4}><TextField fullWidth label="Batch #" name="batchNumber" value={productForm.batchNumber} onChange={handleProductChange} size="small" /></Grid>
                 </>
               )}
-              <Grid item xs={12}><TextField fullWidth multiline rows={2} label="Description" name="description" value={productForm.description} onChange={handleProductChange} /></Grid>
+              <Grid item xs={12}><TextField fullWidth multiline rows={2} label="Description" name="description" value={productForm.description} onChange={handleProductChange} size="small" /></Grid>
               <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth size="small">
                   <InputLabel>Status</InputLabel>
                   <Select name="status" value={productForm.status} onChange={handleProductChange} label="Status">
                     <MenuItem value="active">Active</MenuItem>
@@ -840,22 +1120,22 @@ export default function InventoryPage() {
               </Grid>
             </Grid>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setProductDialog(false)}>Cancel</Button>
-            <Button type="submit" variant="contained" startIcon={<Save />}>Save</Button>
+          <DialogActions sx={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+            <Button fullWidth={isMobile} onClick={() => setProductDialog(false)}>Cancel</Button>
+            <Button fullWidth={isMobile} type="submit" variant="contained" startIcon={<Save />} sx={{ bgcolor: '#10b981' }}>Save</Button>
           </DialogActions>
         </form>
       </Dialog>
 
       {/* CATEGORY DIALOG */}
       <Dialog open={categoryDialog} onClose={() => setCategoryDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Category</DialogTitle>
+        <DialogTitle sx={{ bgcolor: '#10b981', color: 'white' }}>Add Category</DialogTitle>
         <form onSubmit={handleAddCategory}>
           <DialogContent>
             <Grid container spacing={2}>
-              <Grid item xs={12}><TextField fullWidth label="Category Name" name="categoryName" required /></Grid>
+              <Grid item xs={12}><TextField fullWidth label="Category Name" name="categoryName" required size="small" /></Grid>
               <Grid item xs={12}>
-                <FormControl fullWidth>
+                <FormControl fullWidth size="small">
                   <InputLabel>Parent Category</InputLabel>
                   <Select name="parent_id" defaultValue="">
                     <MenuItem value="">None</MenuItem>
@@ -867,18 +1147,20 @@ export default function InventoryPage() {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setCategoryDialog(false)}>Cancel</Button>
-            <Button type="submit" variant="contained">Save</Button>
+            <Button type="submit" variant="contained" sx={{ bgcolor: '#10b981' }}>Save</Button>
           </DialogActions>
         </form>
       </Dialog>
 
       {/* PURCHASE DIALOG */}
-      <Dialog open={purchaseDialog} onClose={() => setPurchaseDialog(false)} maxWidth="lg" fullWidth>
+      <Dialog open={purchaseDialog} onClose={() => setPurchaseDialog(false)} maxWidth="lg" fullWidth fullScreen={isMobile}>
+        <DialogTitle sx={{ bgcolor: '#10b981', color: 'white' }}>
+          {editingPurchase ? 'Edit Purchase' : 'New Purchase'}
+        </DialogTitle>
         <form onSubmit={handleSavePurchase}>
-          <DialogTitle>{editingPurchase ? 'Edit Purchase' : 'New Purchase'}</DialogTitle>
-          <DialogContent>
-            <Paper sx={{ p: 2, mb: 2, backgroundColor: 'background.default' }}>
-              <Grid container spacing={2}>
+          <DialogContent sx={{ pt: 2 }}>
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2, backgroundColor: 'background.default' }}>
+              <Grid container spacing={isMobile ? 1 : 2}>
                 <Grid item xs={12} md={3}><TextField fullWidth size="small" label="Purchase #" name="purchase_no" value={purchaseForm.purchase_no} InputProps={{ readOnly: true }} /></Grid>
                 <Grid item xs={12} md={3}>
                   <FormControl fullWidth size="small">
@@ -888,8 +1170,16 @@ export default function InventoryPage() {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={3}><TextField fullWidth size="small" label="Supplier Invoice #" name="supplier_invoice_no" value={purchaseForm.supplier_invoice_no} onChange={handlePurchaseChange} /></Grid>
-                <Grid item xs={12} md={3}><FormControl fullWidth size="small"><InputLabel>Status</InputLabel><Select name="status" value={purchaseForm.status} onChange={handlePurchaseChange}>{/* options */}<MenuItem value="received">Received</MenuItem><MenuItem value="ordered">Ordered</MenuItem></Select></FormControl></Grid>
+                <Grid item xs={12} md={3}><TextField fullWidth size="small" label="Supplier Invoice" name="supplier_invoice_no" value={purchaseForm.supplier_invoice_no} onChange={handlePurchaseChange} /></Grid>
+                <Grid item xs={12} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select name="status" value={purchaseForm.status} onChange={handlePurchaseChange}>
+                      <MenuItem value="received">Received</MenuItem>
+                      <MenuItem value="ordered">Ordered</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
                 <Grid item xs={12} md={3}><TextField fullWidth size="small" type="date" name="purchase_date" value={purchaseForm.purchase_date} onChange={handlePurchaseChange} InputLabelProps={{ shrink: true }} required /></Grid>
                 <Grid item xs={12} md={3}><TextField fullWidth size="small" type="date" name="due_date" value={purchaseForm.due_date} onChange={handlePurchaseChange} InputLabelProps={{ shrink: true }} /></Grid>
                 <Grid item xs={12} md={3}>
@@ -906,8 +1196,8 @@ export default function InventoryPage() {
               </Grid>
             </Paper>
 
-            <Paper sx={{ p: 2, mb: 2 }}>
-              <Grid container spacing={2} alignItems="flex-end">
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+              <Grid container spacing={isMobile ? 1 : 2} alignItems="flex-end">
                 <Grid item xs={12} md={4}>
                   <Autocomplete size="small" options={products} getOptionLabel={(option) => `${option.product_name || option.name} (${option.sku})`} onChange={handleProductSelect} renderInput={(params) => <TextField {...params} label="Select Product" />} />
                 </Grid>
@@ -918,11 +1208,11 @@ export default function InventoryPage() {
                 
                 {currentItem.type === 'imei' && (
                   <Grid item xs={12}>
-                    <TextField fullWidth multiline rows={2} label={`Enter ${currentItem.quantity} IMEIs (one per line)`} name="imeiList" value={currentItem.imeiList || ''} onChange={handleItemChange} helperText="Required for IMEI products." />
+                    <TextField fullWidth multiline rows={2} label={`Enter ${currentItem.quantity} IMEIs`} name="imeiList" value={currentItem.imeiList || ''} onChange={handleItemChange} helperText="One per line" size="small" />
                   </Grid>
                 )}
                 
-                <Grid item xs={12}><Button variant="outlined" startIcon={<AddCircle />} onClick={handleAddItem} fullWidth>Add Item</Button></Grid>
+                <Grid item xs={12}><Button variant="outlined" startIcon={<AddCircle />} onClick={handleAddItem} fullWidth size="small">Add Item</Button></Grid>
               </Grid>
             </Paper>
 
@@ -952,7 +1242,7 @@ export default function InventoryPage() {
             </TableContainer>
 
             <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-              <Paper sx={{ p: 2, minWidth: 300 }}>
+              <Paper sx={{ p: isMobile ? 1.5 : 2, minWidth: isMobile ? '100%' : 300 }}>
                 {(() => {
                   const totals = calculatePurchaseTotals();
                   return (
@@ -966,16 +1256,18 @@ export default function InventoryPage() {
               </Paper>
             </Box>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setPurchaseDialog(false)}>Cancel</Button>
-            <Button type="submit" variant="contained" startIcon={<Save />}>Save Purchase</Button>
+          <DialogActions sx={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
+            <Button fullWidth={isMobile} onClick={() => setPurchaseDialog(false)}>Cancel</Button>
+            <Button fullWidth={isMobile} type="submit" variant="contained" startIcon={<Save />} sx={{ bgcolor: '#10b981' }}>Save Purchase</Button>
           </DialogActions>
         </form>
       </Dialog>
 
       {/* VIEW PURCHASE DIALOG */}
-      <Dialog open={viewPurchaseDialog} onClose={() => setViewPurchaseDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Purchase Details - {selectedPurchase?.purchase_no}</DialogTitle>
+      <Dialog open={viewPurchaseDialog} onClose={() => setViewPurchaseDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>
+        <DialogTitle sx={{ bgcolor: '#10b981', color: 'white' }}>
+          Purchase Details - {selectedPurchase?.purchase_no}
+        </DialogTitle>
         <DialogContent>
           {selectedPurchase && (
             <Box>
@@ -1004,11 +1296,61 @@ export default function InventoryPage() {
             </Box>
           )}
         </DialogContent>
-        <DialogActions><Button onClick={() => setViewPurchaseDialog(false)}>Close</Button></DialogActions>
+        <DialogActions>
+          <Button onClick={() => setViewPurchaseDialog(false)}>Close</Button>
+        </DialogActions>
       </Dialog>
 
-      {/* Snackbar */}
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}><Alert severity={snackbar.severity}>{snackbar.message}</Alert></Snackbar>
+      {/* ==================== MOBILE DRAWER ==================== */}
+      <Drawer anchor="bottom" open={mobileDrawer} onClose={() => setMobileDrawer(false)}>
+        <Box sx={{ p: 2, pb: 4 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>Menu</Typography>
+          <List>
+            <ListItem button onClick={() => { setMobileDrawer(false); handleOpenProduct(); }}>
+              <ListItemIcon><Add /></ListItemIcon>
+              <ListItemText primary="Add Product" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); handleOpenPurchase(); }}>
+              <ListItemIcon><LocalShipping /></ListItemIcon>
+              <ListItemText primary="New Purchase" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); setCategoryDialog(true); }}>
+              <ListItemIcon><Category /></ListItemIcon>
+              <ListItemText primary="Add Category" />
+            </ListItem>
+            <ListItem button onClick={() => { setMobileDrawer(false); loadData(); }}>
+              <ListItemIcon><Refresh /></ListItemIcon>
+              <ListItemText primary="Refresh Data" />
+            </ListItem>
+          </List>
+        </Box>
+      </Drawer>
+
+      {/* ==================== FAB BUTTON (Mobile) ==================== */}
+      {isMobile && activeTab === 0 && (
+        <Fab
+          color="primary"
+          sx={{ position: 'fixed', bottom: 80, right: 16, bgcolor: '#10b981' }}
+          onClick={() => handleOpenProduct()}
+        >
+          <Add />
+        </Fab>
+      )}
+
+      {isMobile && activeTab === 3 && (
+        <Fab
+          color="primary"
+          sx={{ position: 'fixed', bottom: 80, right: 16, bgcolor: '#10b981' }}
+          onClick={() => handleOpenPurchase()}
+        >
+          <LocalShipping />
+        </Fab>
+      )}
+
+      {/* ==================== SNACKBAR ==================== */}
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }} sx={{ mb: isMobile ? 8 : 0 }}>
+        <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}>{snackbar.message}</Alert>
+      </Snackbar>
     </Box>
   );
 }
