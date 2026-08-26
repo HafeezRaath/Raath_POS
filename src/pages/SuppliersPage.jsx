@@ -7,7 +7,8 @@ import {
   Tabs, Tab, List, ListItem, ListItemText, Avatar, Badge,
   Accordion, AccordionSummary, AccordionDetails,
   Pagination, MenuItem, useTheme, useMediaQuery, SwipeableDrawer,
-  CardActionArea, Collapse
+  CardActionArea, Collapse,
+  FormControl, InputLabel, Select, Alert  // ← YEH ADD KIYA
 } from '@mui/material';
 import {
   Add, Edit, Delete, Search, Person, Business, Phone,
@@ -54,6 +55,10 @@ export default function SuppliersPage() {
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
+  const [paymentMode, setPaymentMode] = useState('cash');
+  const [paymentPurchaseId, setPaymentPurchaseId] = useState('');
+  const [accounts, setAccounts] = useState([]);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   
   // Detail view dialogs for Activity Log
   const [selectedPurchase, setSelectedPurchase] = useState(null);
@@ -125,6 +130,10 @@ export default function SuppliersPage() {
     if (paymentDialog) {
       setPaymentAmount('');
       setPaymentNote('');
+      setPaymentMode('cash');
+      setPaymentPurchaseId('');
+      setSelectedAccount(null);
+      loadAccounts();
     }
   }, [paymentDialog]);
   
@@ -202,6 +211,20 @@ export default function SuppliersPage() {
     }
   };
   
+  const loadAccounts = async () => {
+    try {
+      const accs = await db.getAccounts ? await db.getAccounts({ status: 'active' }) : [];
+      setAccounts(accs || []);
+    } catch (err) {
+      console.error('Load accounts error:', err);
+    }
+  };
+
+  useEffect(() => {
+    const acc = accounts.find(a => a.type === paymentMode);
+    setSelectedAccount(acc || null);
+  }, [accounts, paymentMode]);
+
   const handlePayment = async (e) => {
     e.preventDefault();
     if (!viewSupplier || !paymentAmount) return;
@@ -213,37 +236,26 @@ export default function SuppliersPage() {
     }
     
     try {
-      const payRes = await db.addPayment({
+      await db.addSupplierPayment({
         supplier_id: viewSupplier.id,
+        purchase_id: paymentPurchaseId || null,
         amount: amount,
+        payment_mode: paymentMode,
         note: paymentNote,
-        date: new Date().toISOString(),
-        type: 'payment'
-      });
-      
-      await db.updateSupplierBalance(viewSupplier.id, -amount);
-      
-      await db.addLedgerEntry({
-        supplier_id: viewSupplier.id,
-        type: 'payment',
-        amount: amount,
-        description: paymentNote || 'Cash Paid to Supplier',
         date: new Date().toISOString()
       });
-      
-      if (db.logToGeneralLedger) {
-        await db.logToGeneralLedger('supplier_payment', payRes?.lastInsertRowid || viewSupplier.id, amount, 0, `Payment to ${viewSupplier.name} via ${paymentNote || 'Cash'}`);
-      }
       
       await loadData();
       setPaymentDialog(false);
       setPaymentAmount('');
       setPaymentNote('');
+      setPaymentMode('cash');
+      setPaymentPurchaseId('');
       
       const updated = await db.getSupplierById(viewSupplier.id);
       setViewSupplier(updated);
     } catch (err) {
-      alert('Payment execution failed: ' + err.message);
+      alert('Payment failed: ' + err.message);
     }
   };
   
@@ -1064,19 +1076,37 @@ export default function SuppliersPage() {
                       <TableRow sx={{ bgcolor: 'grey.50' }}>
                         <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Invoice</TableCell>
                         <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Date</TableCell>
+                        <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Mode</TableCell>
+                        <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Status</TableCell>
                         <TableCell align="right" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Total</TableCell>
+                        <TableCell align="right" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Paid</TableCell>
+                        <TableCell align="right" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Balance</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {getSupplierPurchases(viewSupplier.id).map(p => (
+                      {getSupplierPurchases(viewSupplier.id).map(p => {
+                        const due = Number(p.grand_total || 0) - Number(p.paid_amount || 0);
+                        return (
                         <TableRow key={p.id}>
                           <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>{p.purchase_no}</TableCell>
                           <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>{formatDate(p.purchase_date)}</TableCell>
+                          <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                            <Chip size="small" label={p.payment_mode?.toUpperCase() || 'CASH'} sx={{ fontSize: '0.6rem', height: 20 }} />
+                          </TableCell>
+                          <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                            <Chip size="small" color={p.payment_status === 'paid' ? 'success' : p.payment_status === 'partial' ? 'warning' : 'error'} label={p.payment_status?.toUpperCase() || 'DUE'} sx={{ fontSize: '0.6rem', height: 20 }} />
+                          </TableCell>
                           <TableCell align="right" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                             Rs. {Number(p.grand_total).toLocaleString()}
                           </TableCell>
+                          <TableCell align="right" sx={{ color: 'success.main', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                            Rs. {Number(p.paid_amount || 0).toLocaleString()}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: due > 0 ? 'error.main' : 'success.main', fontWeight: 'bold', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                            Rs. {due.toLocaleString()}
+                          </TableCell>
                         </TableRow>
-                      ))}
+                      )})}
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -1087,6 +1117,7 @@ export default function SuppliersPage() {
                     <TableHead>
                       <TableRow sx={{ bgcolor: 'grey.50' }}>
                         <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Date</TableCell>
+                        <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Mode</TableCell>
                         <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Note</TableCell>
                         <TableCell align="right" sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>Amount</TableCell>
                       </TableRow>
@@ -1095,6 +1126,9 @@ export default function SuppliersPage() {
                       {getSupplierPayments(viewSupplier.id).map(p => (
                         <TableRow key={p.id}>
                           <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>{formatDate(p.date)}</TableCell>
+                          <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                            <Chip size="small" label={p.payment_mode?.toUpperCase() || 'CASH'} sx={{ fontSize: '0.6rem', height: 20 }} />
+                          </TableCell>
                           <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>{p.note || 'N/A'}</TableCell>
                           <TableCell align="right" sx={{ color: 'success.main', fontWeight: 'bold', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                             Rs. {Number(p.amount).toLocaleString()}
@@ -1177,6 +1211,71 @@ export default function SuppliersPage() {
             Record Payment
           </DialogTitle>
           <DialogContent sx={{ pt: 3 }}>
+            {/* 🔴 PAYMENT MODE SELECTOR */}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Payment Mode *</InputLabel>
+                              <Select 
+                value={paymentMode} 
+                onChange={(e) => {
+                  const mode = e.target.value;
+                  setPaymentMode(mode);
+                  const acc = accounts.find(a => a.type === mode);
+                  setSelectedAccount(acc || null);
+                }} 
+                label="Payment Mode *"
+                size={isMobile ? 'small' : 'medium'}
+              >
+                <MenuItem value="cash">💵 Cash in Hand</MenuItem>
+                <MenuItem value="bank">🏦 Bank Account</MenuItem>
+                <MenuItem value="easypaisa">📱 EasyPaisa</MenuItem>
+                <MenuItem value="jazzcash">📲 JazzCash</MenuItem>
+                <MenuItem value="cheque">📝 Cheque</MenuItem>
+                <MenuItem value="other">🔹 Other</MenuItem>
+              </Select>
+            </FormControl>
+
+            {selectedAccount && (
+              <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: 1, bgcolor: 'grey.50' }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Box>
+                    <Typography variant="body2" fontWeight="bold">{selectedAccount.name}</Typography>
+                    <Typography variant="caption" color="text.secondary">{selectedAccount.type?.toUpperCase()} ACCOUNT</Typography>
+                  </Box>
+                  <Box textAlign="right">
+                    <Typography variant="caption" color="text.secondary" display="block">Available Balance</Typography>
+                    <Typography variant="body1" fontWeight="bold" color={Number(selectedAccount.current_balance) >= Number(paymentAmount || 0) ? 'success.main' : 'error.main'}>
+                      Rs. {Number(selectedAccount.current_balance).toLocaleString()}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Paper>
+            )}
+            {!selectedAccount && (
+              <Alert severity="warning" sx={{ mb: 2, borderRadius: 1 }}>
+                No active account found for {paymentMode.toUpperCase()}. Please create one in Accounts page.
+              </Alert>
+            )}
+
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Pay Against Purchase (Optional)</InputLabel>
+              <Select 
+                value={paymentPurchaseId} 
+                onChange={(e) => setPaymentPurchaseId(e.target.value)} 
+                label="Pay Against Purchase (Optional)"
+                size={isMobile ? 'small' : 'medium'}
+              >
+                <MenuItem value=""><em>General Payment (No specific purchase)</em></MenuItem>
+                {viewSupplier && getSupplierPurchases(viewSupplier.id)
+                  .filter(p => p.payment_status !== 'paid')
+                  .map(p => (
+                    <MenuItem key={p.id} value={p.id}>
+                      {p.purchase_no} — Rs. {Number(p.grand_total).toLocaleString()} 
+                      (Due: Rs. {Number((p.grand_total || 0) - (p.paid_amount || 0)).toLocaleString()})
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
+
             <TextField 
               autoFocus 
               fullWidth 

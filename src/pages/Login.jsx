@@ -57,18 +57,12 @@ export default function LoginPage() {
     setCopied(false);
 
     if (!forgotEmail.trim()) {
-      setForgotError('Please enter your email address');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(forgotEmail)) {
-      setForgotError('Please enter a valid email address');
+      setForgotError('Please enter your username or email address');
       return;
     }
 
     // ===== DEMO FORGOT PASSWORD =====
-    if (forgotEmail.toLowerCase() === 'admin@posit.com') {
+    if (forgotEmail.toLowerCase() === 'admin@posit.com' || forgotEmail.toLowerCase() === 'admin') {
       setFoundUser({
         name: 'Admin User',
         email: 'admin@posit.com',
@@ -80,9 +74,13 @@ export default function LoginPage() {
 
     setForgotLoading(true);
     try {
-      const user = await db.getUserByEmail(forgotEmail.trim().toLowerCase());
+      let user = await db.getUserByEmail(forgotEmail.trim().toLowerCase());
+      // ✅ Fallback: search by username if email not found
+      if (!user && db.getUserByUsername) {
+        user = await db.getUserByUsername(forgotEmail.trim().toLowerCase());
+      }
       if (!user) {
-        setForgotError('No account found with this email address');
+        setForgotError('No account found with this username or email');
         setForgotLoading(false);
         return;
       }
@@ -112,14 +110,8 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
 
-    if (!form.email || !form.password) {
-      setError('Please fill in all fields');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.email)) {
-      setError('Please enter a valid email address');
+    if (!form.email.trim() || !form.password) {
+      setError('Please enter username/email and password');
       return;
     }
 
@@ -145,7 +137,7 @@ export default function LoginPage() {
         return;
       }
 
-      setError(result.error || 'Invalid email or password');
+      setError(result.error || 'Invalid username/email or password');
     } catch (err) {
       console.error('Login error:', err);
       setError('Login failed. Please try again.');
@@ -191,9 +183,9 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <TextField
             fullWidth
-            label="Email Address"
+            label="Username or Email"
             name="email"
-            type="email"
+            type="text"
             value={form.email}
             onChange={handleChange}
             disabled={loading}
@@ -315,7 +307,7 @@ export default function LoginPage() {
             ⚡ DEMO LOGIN
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            <strong>admin@posit.com</strong> / <strong>admin123</strong>
+            <strong>admin</strong> or <strong>admin@posit.com</strong> / <strong>admin123</strong>
           </Typography>
           <Button
             size="small"
@@ -323,7 +315,7 @@ export default function LoginPage() {
             color="warning"
             sx={{ mt: 1, textTransform: 'none' }}
             onClick={() => {
-              setForm({ email: 'admin@posit.com', password: 'admin123' });
+              setForm({ email: 'admin', password: 'admin123' });
             }}
           >
             Auto-Fill Demo Credentials
@@ -360,7 +352,7 @@ export default function LoginPage() {
           {!foundUser ? (
             <>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Enter your registered email address to retrieve your password.
+                Enter your registered username or email address to retrieve your password.
               </Typography>
 
               {forgotError && (
@@ -371,15 +363,15 @@ export default function LoginPage() {
 
               <TextField
                 fullWidth
-                label="Email Address"
-                type="email"
+                label="Username or Email"
+                type="text"
                 value={forgotEmail}
                 onChange={(e) => {
                   setForgotEmail(e.target.value);
                   if (forgotError) setForgotError('');
                 }}
                 disabled={forgotLoading}
-                placeholder="your@email.com"
+                placeholder="Enter username or email"
                 slotProps={{
                   input: {
                     startAdornment: (

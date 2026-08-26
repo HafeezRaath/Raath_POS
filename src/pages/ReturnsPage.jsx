@@ -13,7 +13,8 @@ import {
   Search, FilterList, Visibility, Print, Refresh, Today, DateRange,
   TrendingUp, KeyboardReturn, AssignmentReturn, Phone, History,
   Menu as MenuIcon, Close, ArrowUpward, ArrowDownward, Receipt,
-  CheckCircle, Cancel, Warning, Error, ShoppingCart
+  CheckCircle, Cancel, Warning, Error, ShoppingCart, Delete,
+  DeleteSweep, CalendarToday
 } from '@mui/icons-material';
 import db from '../database/db';
 
@@ -59,8 +60,28 @@ const getStartOfMonth = () => {
   return d.toISOString().split('T')[0];
 };
 
-// ==================== MOBILE SALE CARD ====================
-const MobileSaleCard = ({ sale, onProcessReturn }) => {
+// ==================== PERMISSIONS HOOK ====================
+const usePermissions = () => {
+  const currentUser = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('current_user') || '{}'); }
+    catch { return {}; }
+  }, []);
+  const rolePermissions = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('role_permissions') || '{}'); }
+    catch { return {}; }
+  }, []);
+  const can = (page, action = 'view') => {
+    const roleId = currentUser?.role;
+    if (!roleId || !rolePermissions) return false;
+    if (roleId === 'admin') return true;
+    const pagePerms = rolePermissions[roleId]?.[page];
+    return !!pagePerms?.[action];
+  };
+  return { can, currentUser };
+};
+
+// ==================== MOBILE SALE CARD WITH DELETE ====================
+const MobileSaleCard = ({ sale, onProcessReturn, onDelete, index, canDelete }) => {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -69,7 +90,7 @@ const MobileSaleCard = ({ sale, onProcessReturn }) => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" fontWeight="bold" noWrap>
-              {sale.invoice_no}
+              #{index} {sale.invoice_no}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
               {sale.customer_name || 'Walk-in Customer'}
@@ -114,16 +135,23 @@ const MobileSaleCard = ({ sale, onProcessReturn }) => {
           </Grid>
         </Collapse>
 
-        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+        <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
           <Button 
             size="small" 
             variant="contained" 
             startIcon={<KeyboardReturn />} 
             onClick={() => onProcessReturn(sale)}
-            sx={{ flex: 1, bgcolor: '#f59e0b' }}
+            sx={{ flex: 1, bgcolor: '#f59e0b', fontSize: '0.6rem', py: 0.5 }}
           >
-            Process Return
+            Return
           </Button>
+          {canDelete && (
+            <Tooltip title="Delete Sale">
+              <IconButton size="small" color="error" onClick={() => onDelete(sale)}>
+                <Delete fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton size="small" onClick={() => setExpanded(!expanded)}>
             {expanded ? <ArrowUpward fontSize="small" /> : <ArrowDownward fontSize="small" />}
           </IconButton>
@@ -133,15 +161,17 @@ const MobileSaleCard = ({ sale, onProcessReturn }) => {
   );
 };
 
-// ==================== MOBILE RETURN CARD ====================
-const MobileReturnCard = ({ ret, onView }) => {
+// ==================== MOBILE RETURN CARD WITH DELETE ====================
+const MobileReturnCard = ({ ret, onView, onDelete, index, canDelete }) => {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <Card sx={{ mb: 1.5, borderLeft: '4px solid #f59e0b' }}>
       <CardContent sx={{ p: 1.5 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" fontWeight="bold" noWrap>
-              RET-{ret.id}
+              #{index} RET-{ret.id}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
               {ret.customer_name || 'Walk-in Customer'}
@@ -157,25 +187,44 @@ const MobileReturnCard = ({ ret, onView }) => {
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-          <Typography variant="caption" color="text.secondary">
-            Invoice: {ret.invoice_no || ret.original_invoice}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {formatDate(ret.return_date)}
-          </Typography>
-        </Box>
+        <Collapse in={expanded}>
+          <Divider sx={{ my: 1 }} />
+          <Grid container spacing={1}>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Date</Typography>
+              <Typography variant="body2">{formatDate(ret.return_date)}</Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="caption" color="text.secondary">Invoice</Typography>
+              <Typography variant="body2">{ret.invoice_no || ret.original_invoice}</Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="caption" color="text.secondary">Reason</Typography>
+              <Typography variant="body2">{ret.reason || 'General'}</Typography>
+            </Grid>
+          </Grid>
+        </Collapse>
 
-        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+        <Box sx={{ display: 'flex', gap: 0.5, mt: 1 }}>
           <Button 
             size="small" 
             variant="outlined" 
             startIcon={<Visibility />} 
             onClick={() => onView(ret)}
-            sx={{ flex: 1 }}
+            sx={{ flex: 1, fontSize: '0.6rem', py: 0.5 }}
           >
             View
           </Button>
+          {canDelete && (
+            <Tooltip title="Delete Return">
+              <IconButton size="small" color="error" onClick={() => onDelete(ret)}>
+                <Delete fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          <IconButton size="small" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ArrowUpward fontSize="small" /> : <ArrowDownward fontSize="small" />}
+          </IconButton>
         </Box>
       </CardContent>
     </Card>
@@ -219,6 +268,13 @@ export default function ReturnsPage() {
   const [selectedReturn, setSelectedReturn] = useState(null);
   const [returnItemsView, setReturnItemsView] = useState([]);
 
+  // Delete Dialogs
+  const [deleteDialog, setDeleteDialog] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteType, setDeleteType] = useState('sale');
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
+  const [bulkDeleteType, setBulkDeleteType] = useState('all');
+
   // Stats Counters
   const [stats, setStats] = useState({
     todayReturns: 0,
@@ -229,19 +285,18 @@ export default function ReturnsPage() {
   });
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const { can } = usePermissions();
 
   // ==================== LOAD DATA ====================
   const loadData = async () => {
     setLoading(true);
     try {
-      // Get sales with items count
       const allSales = await db.getSalesHistory().catch(() => []);
       const salesWithCount = await Promise.all(allSales.map(async (s) => {
         const items = await db.getSaleItems(s.id).catch(() => []);
         return { ...s, total_items: items.length };
       }));
 
-      // Filter sales by date and customer
       const filteredSales = salesWithCount.filter(sale => {
         if (sale.is_deleted) return false;
         const checkDate = String(sale.date || '').substring(0, 10);
@@ -251,23 +306,31 @@ export default function ReturnsPage() {
         return true;
       });
 
-      // Get returns
-      const allReturns = await db.getSaleReturns().catch(() => []);
+      const sortedSales = filteredSales.sort((a, b) => {
+        const dateA = new Date(a.date || 0);
+        const dateB = new Date(b.date || 0);
+        return dateB - dateA;
+      });
 
-      // Get customers
+      const allReturns = await db.getSaleReturns().catch(() => []);
+      
+      const sortedReturns = allReturns.sort((a, b) => {
+        const dateA = new Date(a.return_date || 0);
+        const dateB = new Date(b.return_date || 0);
+        return dateB - dateA;
+      });
+
       const customersList = await db.getCustomers().catch(() => []);
 
-      setSales(filteredSales);
-      setReturns(allReturns);
+      setSales(sortedSales);
+      setReturns(sortedReturns);
       setCustomers(customersList || []);
 
-      // Calculate stats
       const todayStr = getToday();
       const todayReturns = allReturns.filter(r => String(r.return_date || '').substring(0, 10) === todayStr);
       const todayRefundSum = todayReturns.reduce((sum, r) => sum + Number(r.refund_amount || 0), 0);
       const periodRefundSum = allReturns.reduce((sum, r) => sum + Number(r.refund_amount || 0), 0);
 
-      // Group by mode
       const modeMap = {};
       allReturns.forEach(r => {
         const mode = r.payment_mode || r.refund_mode || 'cash';
@@ -294,6 +357,92 @@ export default function ReturnsPage() {
   useEffect(() => {
     loadData();
   }, [filterDateFrom, filterDateTo, filterCustomer]);
+
+  // ==================== DELETE FUNCTIONS ====================
+
+  const handleDeleteSale = async (sale) => {
+    setDeleteTarget(sale);
+    setDeleteType('sale');
+    setDeleteDialog(true);
+  };
+
+  const handleDeleteReturn = async (ret) => {
+    setDeleteTarget(ret);
+    setDeleteType('return');
+    setDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    if (!can('sales', 'delete')) {
+      setSnackbar({ open: true, message: '🚫 Permission Denied: You cannot delete!', severity: 'error' });
+      setDeleteDialog(false);
+      return;
+    }
+    try {
+      if (deleteType === 'sale') {
+        await db.deleteSale(deleteTarget.id);
+        setSnackbar({ open: true, message: `Sale ${deleteTarget.invoice_no} deleted successfully!`, severity: 'success' });
+      } else if (deleteType === 'return') {
+        const items = await db.getSaleReturnItems(deleteTarget.id).catch(() => []);
+        for (const item of items) {
+          await db.updateVariantStock(item.product_variant_id, -item.quantity);
+        }
+        await db.deleteSaleReturn(deleteTarget.id);
+        setSnackbar({ open: true, message: `Return RET-${deleteTarget.id} deleted successfully! Stock restored.`, severity: 'success' });
+      }
+      setDeleteDialog(false);
+      setDeleteTarget(null);
+      loadData();
+    } catch (err) {
+      console.error('Delete error:', err);
+      setSnackbar({ open: true, message: 'Delete failed: ' + err.message, severity: 'error' });
+    }
+  };
+
+  const handleBulkDeleteByDate = async () => {
+    if (!can('sales', 'delete')) {
+      setSnackbar({ open: true, message: '🚫 Permission Denied: Bulk delete not allowed!', severity: 'error' });
+      setBulkDeleteDialog(false);
+      return;
+    }
+    let targetSales = [];
+    const today = new Date();
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    if (bulkDeleteType === 'all') {
+      targetSales = sales.map(s => s.id);
+    } else if (bulkDeleteType === 'weekly') {
+      targetSales = sales
+        .filter(s => new Date(s.date) >= oneWeekAgo)
+        .map(s => s.id);
+    } else if (bulkDeleteType === 'monthly') {
+      targetSales = sales
+        .filter(s => new Date(s.date) >= oneMonthAgo)
+        .map(s => s.id);
+    }
+
+    if (targetSales.length === 0) {
+      setSnackbar({ open: true, message: 'No sales found in this period!', severity: 'warning' });
+      setBulkDeleteDialog(false);
+      return;
+    }
+
+    try {
+      for (const id of targetSales) {
+        await db.deleteSale(id);
+      }
+      setSnackbar({ open: true, message: `${targetSales.length} sales deleted successfully!`, severity: 'success' });
+      setBulkDeleteDialog(false);
+      loadData();
+    } catch (err) {
+      console.error('Bulk delete error:', err);
+      setSnackbar({ open: true, message: 'Bulk delete failed: ' + err.message, severity: 'error' });
+    }
+  };
 
   // ==================== OPEN PROCESS RETURN ====================
   const handleOpenProcess = async (sale) => {
@@ -341,7 +490,7 @@ export default function ReturnsPage() {
       .reduce((sum, i) => sum + (i.returnQty * i.returnPrice), 0);
   }, [returnItems]);
 
-  // ==================== PROCESS RETURN - FIXED ====================
+  // ==================== PROCESS RETURN ====================
   const handleProcessReturn = async () => {
     const selectedItems = returnItems.filter(item => item.selected && item.returnQty > 0);
     if (selectedItems.length === 0) {
@@ -357,7 +506,6 @@ export default function ReturnsPage() {
     try {
       const generatedReturnNo = `RET-${Date.now().toString().slice(-5)}`;
       
-      // 1. Create return record
       const returnData = {
         sale_id: selectedSale.id,
         invoice_no: selectedSale.invoice_no,
@@ -372,11 +520,9 @@ export default function ReturnsPage() {
         notes: returnForm.notes
       };
 
-      // Use db.createSaleReturn (works in both Electron and Browser)
       const result = await db.createSaleReturn(returnData);
       const parentReturnId = result.lastInsertRowid || result.id;
 
-      // 2. Add return items and update stock
       for (const item of selectedItems) {
         const itemData = {
           sale_return_id: parentReturnId,
@@ -387,12 +533,9 @@ export default function ReturnsPage() {
           reason: returnForm.reason
         };
         await db.createSaleReturnItem(itemData);
-
-        // ✅ FIXED: Update stock - add back the returned quantity
         await db.updateVariantStock(item.product_variant_id, item.returnQty);
       }
 
-      // 3. Update customer balance if needed
       if (selectedSale.customer_id && selectedSale.payment_status !== 'paid') {
         const customer = await db.getCustomerById(selectedSale.customer_id);
         if (customer) {
@@ -405,7 +548,6 @@ export default function ReturnsPage() {
         }
       }
 
-      // 4. Log to general ledger
       if (db.logToGeneralLedger) {
         await db.logToGeneralLedger('return', parentReturnId, 0, totalRefund, `Return for invoice ${selectedSale.invoice_no}`);
       }
@@ -494,7 +636,7 @@ export default function ReturnsPage() {
           <KeyboardReturn sx={{ verticalAlign: 'middle', mr: 1, fontSize: isMobile ? 24 : 28 }} />
           {isMobile ? 'Returns' : 'Returns & Refunds Controller'}
         </Typography>
-        <Stack direction="row" spacing={1} sx={{ width: isMobile ? '100%' : 'auto' }}>
+        <Stack direction="row" spacing={1} sx={{ width: isMobile ? '100%' : 'auto', flexWrap: 'wrap' }}>
           {isMobile && (
             <Button variant="outlined" size="small" startIcon={<MenuIcon />} onClick={() => setMobileDrawer(true)}>
               Menu
@@ -506,6 +648,11 @@ export default function ReturnsPage() {
           <Button variant="contained" size="small" sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }} startIcon={<Refresh />} onClick={loadData}>
             {isMobile ? 'Sync' : 'Sync Tables'}
           </Button>
+          {can('sales', 'delete') && (
+            <Button variant="outlined" color="error" size="small" startIcon={<DeleteSweep />} onClick={() => setBulkDeleteDialog(true)}>
+              Bulk Delete
+            </Button>
+          )}
         </Stack>
       </Box>
 
@@ -593,11 +740,10 @@ export default function ReturnsPage() {
         </Paper>
       )}
 
-      {/* ==================== TAB 0: SALES ==================== */}
+      {/* ==================== TAB 0: SALES WITH DELETE ==================== */}
       {activeTab === 0 && (
         <Fade in>
           {isMobile ? (
-            // Mobile Cards
             <Box>
               {loading ? (
                 <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -610,11 +756,14 @@ export default function ReturnsPage() {
                   <Typography color="text.secondary">No sales found</Typography>
                 </Paper>
               ) : (
-                paginatedSales.map((sale) => (
+                paginatedSales.map((sale, idx) => (
                   <MobileSaleCard 
                     key={sale.id} 
-                    sale={sale} 
-                    onProcessReturn={handleOpenProcess} 
+                    sale={sale}
+                    index={(page - 1) * rowsPerPage + idx + 1}
+                    onProcessReturn={handleOpenProcess}
+                    onDelete={handleDeleteSale}
+                    canDelete={can('sales', 'delete')}
                   />
                 ))
               )}
@@ -631,20 +780,26 @@ export default function ReturnsPage() {
               )}
             </Box>
           ) : (
-            // Desktop Table
             <Paper>
               <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
-                      {['Invoice', 'Date', 'Customer', 'Items', 'Total', 'Paid', 'Status', 'Action'].map((h) => (
-                        <TableCell key={h} sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }}>{h}</TableCell>
-                      ))}
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }}>#</TableCell>
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }}>Invoice</TableCell>
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }}>Date</TableCell>
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }}>Customer</TableCell>
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }}>Items</TableCell>
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Total</TableCell>
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Paid</TableCell>
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }}>Status</TableCell>
+                      <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', py: 1.2 }} align="center">Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {paginatedSales.map((sale) => (
+                    {paginatedSales.map((sale, idx) => (
                       <TableRow key={sale.id} hover>
+                        <TableCell>{(page - 1) * rowsPerPage + idx + 1}</TableCell>
                         <TableCell>
                           <Typography variant="subtitle2" fontWeight="bold" color="primary">{sale.invoice_no}</Typography>
                           <Typography variant="caption" sx={{ bgcolor: '#f3f4f6', px: 0.5, borderRadius: 0.5, textTransform: 'uppercase', fontSize: '0.65rem' }}>{sale.sale_type || 'retail'}</Typography>
@@ -652,20 +807,37 @@ export default function ReturnsPage() {
                         <TableCell sx={{ fontSize: '0.8rem' }}>{formatDate(sale.date)}</TableCell>
                         <TableCell>{sale.customer_name || 'Walk-in'}</TableCell>
                         <TableCell><Chip size="small" label={`${sale.total_items || 1} items`} variant="outlined" sx={{ height: 20 }} /></TableCell>
-                        <TableCell sx={{ fontWeight: 'bold' }}>{formatCurrency(sale.grand_total)}</TableCell>
-                        <TableCell sx={{ color: 'success.main' }}>{formatCurrency(sale.paid_amount)}</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(sale.grand_total)}</TableCell>
+                        <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(sale.paid_amount)}</TableCell>
                         <TableCell>{getPaymentStatusChip(sale.payment_status)}</TableCell>
-                        <TableCell>
-                          <Button variant="contained" size="small" sx={{ bgcolor: '#f59e0b', textTransform: 'none', height: 26, fontSize: '0.75rem' }} startIcon={<KeyboardReturn />} onClick={() => handleOpenProcess(sale)}>
-                            Return
-                          </Button>
+                        <TableCell align="center">
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <Tooltip title="Process Return">
+                              <IconButton size="small" color="warning" onClick={() => handleOpenProcess(sale)}>
+                                <KeyboardReturn fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            {can('sales', 'delete') && (
+                              <Tooltip title="Delete Sale">
+                                <IconButton size="small" color="error" onClick={() => handleDeleteSale(sale)}>
+                                  <Delete fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     ))}
+                    {paginatedSales.length === 0 && (
+                      <TableRow><TableCell colSpan={9} align="center" sx={{ py: 8 }}><Typography color="text.secondary">No records found</Typography></TableCell></TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
-              <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'center' }}>
+              <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Showing {(page - 1) * rowsPerPage + 1} - {Math.min(page * rowsPerPage, filteredSales.length)} of {filteredSales.length}
+                </Typography>
                 <Pagination count={Math.ceil(filteredSales.length / rowsPerPage)} page={page} onChange={(e, p) => setPage(p)} color="primary" size="small" />
               </Box>
             </Paper>
@@ -673,54 +845,83 @@ export default function ReturnsPage() {
         </Fade>
       )}
 
-      {/* ==================== TAB 1: RETURNS ==================== */}
+      {/* ==================== TAB 1: RETURNS WITH DELETE ==================== */}
       {activeTab === 1 && (
         <Fade in>
           {isMobile ? (
-            // Mobile Returns Cards
             <Box>
-              {returns.length === 0 ? (
+              {loading ? (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <LinearProgress />
+                  <Typography sx={{ mt: 2 }}>Loading...</Typography>
+                </Box>
+              ) : returns.length === 0 ? (
                 <Paper sx={{ p: 4, textAlign: 'center' }}>
                   <AssignmentReturn sx={{ fontSize: 48, color: '#d1d5db' }} />
                   <Typography color="text.secondary">No returns found</Typography>
                 </Paper>
               ) : (
-                returns.map((ret) => (
+                returns.map((ret, idx) => (
                   <MobileReturnCard 
                     key={ret.id} 
-                    ret={ret} 
-                    onView={handleViewReturn} 
+                    ret={ret}
+                    index={idx + 1}
+                    onView={handleViewReturn}
+                    onDelete={handleDeleteReturn}
+                    canDelete={can('sales', 'delete')}
                   />
                 ))
               )}
             </Box>
           ) : (
-            // Desktop Table
             <Paper>
               <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
-                      {['Return ID', 'Original Invoice', 'Date', 'Customer', 'Reason', 'Refund', 'Mode', 'Action'].map((h) => (
-                        <TableCell key={h} sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }}>{h}</TableCell>
-                      ))}
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }}>#</TableCell>
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }}>Return ID</TableCell>
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }}>Original Invoice</TableCell>
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }}>Date</TableCell>
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }}>Customer</TableCell>
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }}>Reason</TableCell>
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Refund</TableCell>
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }}>Mode</TableCell>
+                      <TableCell sx={{ bgcolor: '#f59e0b', color: 'white', fontWeight: 'bold', py: 1.2 }} align="center">Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {returns.map((ret) => (
+                    {returns.map((ret, idx) => (
                       <TableRow key={ret.id} hover>
+                        <TableCell>{idx + 1}</TableCell>
                         <TableCell sx={{ fontWeight: 'bold' }}>RET-{ret.id}</TableCell>
-                        <TableCell color="primary" sx={{ fontWeight: 500 }}>{ret.invoice_no || ret.original_invoice}</TableCell>
+                        <TableCell sx={{ color: 'primary.main', fontWeight: 500 }}>{ret.invoice_no || ret.original_invoice}</TableCell>
                         <TableCell sx={{ fontSize: '0.8rem' }}>{formatDate(ret.return_date)}</TableCell>
                         <TableCell>{ret.customer_name || 'Walk-in'}</TableCell>
                         <TableCell><Chip size="small" label={ret.reason || 'General'} color="warning" variant="outlined" sx={{ height: 20 }} /></TableCell>
                         <TableCell align="right" sx={{ color: 'error.main', fontWeight: 'bold' }}>{formatCurrency(ret.refund_amount)}</TableCell>
                         <TableCell sx={{ textTransform: 'uppercase', fontSize: '0.8rem' }}>{ret.payment_mode || 'cash'}</TableCell>
-                        <TableCell>
-                          <IconButton size="small" color="info" onClick={() => handleViewReturn(ret)}><Visibility fontSize="small" /></IconButton>
+                        <TableCell align="center">
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <Tooltip title="View">
+                              <IconButton size="small" color="info" onClick={() => handleViewReturn(ret)}>
+                                <Visibility fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            {can('sales', 'delete') && (
+                              <Tooltip title="Delete Return">
+                                <IconButton size="small" color="error" onClick={() => handleDeleteReturn(ret)}>
+                                  <Delete fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     ))}
+                    {returns.length === 0 && (
+                      <TableRow><TableCell colSpan={9} align="center" sx={{ py: 6 }}><Typography color="text.secondary">No returns found</Typography></TableCell></TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -783,6 +984,88 @@ export default function ReturnsPage() {
           </Grid>
         </Fade>
       )}
+
+      {/* ==================== DELETE CONFIRMATION DIALOG ==================== */}
+      <Dialog open={deleteDialog} onClose={() => setDeleteDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ bgcolor: '#ef4444', color: 'white' }}>
+          <Warning sx={{ verticalAlign: 'middle', mr: 1 }} />
+          Confirm Delete
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography>
+            {deleteType === 'sale' ? (
+              <>Are you sure you want to delete invoice <strong>{deleteTarget?.invoice_no}</strong>?</>
+            ) : (
+              <>Are you sure you want to delete return <strong>RET-{deleteTarget?.id}</strong>?</>
+            )}
+          </Typography>
+          <Typography variant="caption" color="error.main" display="block" sx={{ mt: 1 }}>
+            This action cannot be undone!
+          </Typography>
+          {deleteType === 'return' && (
+            <Typography variant="caption" color="warning.main" display="block">
+              Stock will be restored automatically.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={confirmDelete}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ==================== BULK DELETE DIALOG ==================== */}
+      <Dialog open={bulkDeleteDialog} onClose={() => setBulkDeleteDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ bgcolor: '#ef4444', color: 'white' }}>
+          <DeleteSweep sx={{ verticalAlign: 'middle', mr: 1 }} />
+          Bulk Delete Sales
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Select the period for which you want to delete all sales:
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 2 }}>
+            <Button 
+              variant="outlined" 
+              color="error" 
+              fullWidth
+              onClick={() => { setBulkDeleteType('weekly'); handleBulkDeleteByDate(); }}
+              startIcon={<CalendarToday />}
+              sx={{ py: 1.5 }}
+            >
+              Last 7 Days
+            </Button>
+            <Button 
+              variant="outlined" 
+              color="error" 
+              fullWidth
+              onClick={() => { setBulkDeleteType('monthly'); handleBulkDeleteByDate(); }}
+              startIcon={<CalendarToday />}
+              sx={{ py: 1.5 }}
+            >
+              Last 30 Days
+            </Button>
+            <Button 
+              variant="contained" 
+              color="error" 
+              fullWidth
+              onClick={() => { setBulkDeleteType('all'); handleBulkDeleteByDate(); }}
+              startIcon={<DeleteSweep />}
+              sx={{ py: 1.5 }}
+            >
+              Delete All
+            </Button>
+          </Box>
+          <Box sx={{ mt: 2, p: 2, bgcolor: '#fef2f2', borderRadius: 1, border: '1px solid #fecaca' }}>
+            <Typography variant="caption" color="error.main">
+              ⚠️ This will permanently delete all sales in the selected period. This action cannot be undone!
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteDialog(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ==================== PROCESS RETURN DIALOG ==================== */}
       <Dialog open={processDialog} onClose={() => !processingReturn && setProcessDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>
@@ -993,6 +1276,12 @@ export default function ReturnsPage() {
               <ListItemIcon><Refresh /></ListItemIcon>
               <ListItemText primary="Sync Data" />
             </ListItem>
+            {can('sales', 'delete') && (
+              <ListItem button onClick={() => { setMobileDrawer(false); setBulkDeleteDialog(true); }}>
+                <ListItemIcon><DeleteSweep /></ListItemIcon>
+                <ListItemText primary="Bulk Delete Sales" />
+              </ListItem>
+            )}
           </List>
         </Box>
       </Drawer>

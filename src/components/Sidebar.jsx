@@ -2,14 +2,14 @@ import {
   AccountBalance, Assessment,
   AssignmentReturn,
   AttachMoney,
-  Build,  // <-- NAYA: Services icon
+  Build,
   Category,
   Close,
   CloudUpload,
   Dashboard,
   Group,
   History,
-  HomeRepairService,  // <-- NAYA: Alternative services icon
+  HomeRepairService,
   Inventory,
   KeyboardArrowDown,
   LocalShipping,
@@ -51,8 +51,6 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
-
-// ==================== FIX #1: Sync versions import karo ====================
 import { getRoleColorSync, getRoleLabelSync } from '../role';
 
 // ==================== PATH PERMISSION MAP ====================
@@ -69,7 +67,8 @@ const PATH_PERMISSION_MAP = {
   '/stock-tracking': 'inventory',
   '/customers': 'customers',
   '/suppliers': 'suppliers',
-  '/services': 'services',        // <-- NAYA
+  '/services': 'services',
+  '/distribution': 'services',
   '/emi': 'emi',
   '/expenses': 'expenses',
   '/recovery': 'customers',
@@ -100,7 +99,7 @@ const NAV_GROUPS = [
     icon: <Inventory fontSize="small" />,
     items: [
       { id: 'products', label: 'Products', icon: <Category fontSize="small" />, path: '/products' },
-      { id: 'inventory', label: 'Inventory', icon: <Inventory fontSize="small" />, path: '/inventory' },
+      { id: 'inventory', label: 'Purchase', icon: <Inventory fontSize="small" />, path: '/inventory' },
       { id: 'inventory', label: 'Stock Tracking', icon: <TrackChanges fontSize="small" />, path: '/stock-tracking' },
     ]
   },
@@ -115,11 +114,12 @@ const NAV_GROUPS = [
     ]
   },
   {
-    key: 'services',  // <-- NAYA: Services Group
+    key: 'services',
     label: 'Services',
     icon: <Build fontSize="small" />,
     items: [
       { id: 'services', label: 'Work Orders', icon: <HomeRepairService fontSize="small" />, path: '/services' },
+     { id: 'services', label: 'Distribution', icon: <LocalShipping fontSize="small" />, path: '/distribution' }, 
     ]
   },
   {
@@ -200,12 +200,52 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user: authUser, checkPermissionSync, rolePermissions } = useAuth();
+  const { logout, user: authUser, checkPermissionSync } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [localUser, setLocalUser] = useState(null);
 
+  // ==================== PAGE VISIBILITY STATE ====================
+  const [pageVisibility, setPageVisibility] = useState(() => {
+    const saved = localStorage.getItem('page_visibility');
+    if (saved) {
+      try { 
+        const parsed = JSON.parse(saved);
+        console.log('📋 Loaded page visibility:', parsed);
+        return parsed; 
+      } catch (e) { 
+        console.error('Error parsing page_visibility:', e);
+      }
+    }
+    // Default: sab visible
+    return {
+      dashboard: true, pos: true, sales: true, inventory: true,
+      products: true, customers: true, suppliers: true,
+      purchases: true, expenses: true, reports: true,
+      settings: true, emi: true, users: true, backup: true,
+      services: true,
+    };
+  });
+
+  // ==================== STORAGE CHANGE LISTENER ====================
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key === 'page_visibility') {
+        try {
+          const newVisibility = JSON.parse(e.newValue);
+          console.log('🔄 Page visibility updated from storage:', newVisibility);
+          setPageVisibility(newVisibility);
+        } catch (err) {
+          console.error('Error parsing storage event:', err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // ==================== USER SYNC ====================
   useEffect(() => {
     const syncFromStorage = () => {
       try {
@@ -224,7 +264,7 @@ export default function Navbar() {
   const userEmail = currentUser?.email || '';
   const userInitial = userName.charAt(0).toUpperCase();
 
-  // ==================== FIX #2: canAccess mein currentUser fallback add karo ====================
+  // ==================== PERMISSIONS ====================
   const canAccess = useCallback((permId) => {
     const authResult = checkPermissionSync(permId);
     if (authResult) return true;
@@ -248,8 +288,9 @@ export default function Navbar() {
   const isActive = useCallback((path) => location.pathname === path, [location.pathname]);
   const isGroupActive = useCallback((items) => items.some(item => isActive(item.path)), [isActive]);
 
+  // ==================== ANCHORS ====================
   const [anchors, setAnchors] = useState({
-    invoices: null, inventory: null, people: null, services: null,  // <-- NAYA: services anchor
+    invoices: null, inventory: null, people: null, services: null,
     finance: null, reports: null, system: null,
     profile: null, notif: null,
   });
@@ -274,7 +315,6 @@ export default function Navbar() {
     navigate('/login');
   }, [logout, closeMenu, navigate]);
 
-  // ==================== REFRESH FUNCTION ====================
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -285,35 +325,54 @@ export default function Navbar() {
     }
   }, []);
 
-  // ==================== FIX #3: Sync versions use karo (showLabel error fix) ====================
   const roleColor = useMemo(() => getRoleColorSync(userRole), [userRole]);
   const roleLabel = useMemo(() => getRoleLabelSync(userRole), [userRole]);
 
+  // ==================== 🔥 FIX: FILTER GROUPS BY PAGE VISIBILITY ====================
   const filteredGroups = useMemo(() => {
     return NAV_GROUPS.map(group => ({
       ...group,
-      items: group.items.filter(item => canAccess(item.id))
+      items: group.items.filter(item => {
+        // Check permission first
+        if (!canAccess(item.id)) return false;
+        
+        // 🔥 Check page visibility - agar page hide hai toh show mat karo
+        // Agar pageVisibility[item.id] === false toh hide karo
+        // Default: visible (undefined ya true)
+        if (pageVisibility[item.id] === false) {
+          console.log(`👁️ Page hidden: ${item.id}`);
+          return false;
+        }
+        
+        return true;
+      })
     })).filter(group => group.items.length > 0);
-  }, [canAccess]);
+  }, [canAccess, pageVisibility]);
 
   const currentPage = useMemo(() => 
     allPaths.find(p => isActive(p.path))?.label || 'Dashboard',
   [isActive]);
 
+  // ==================== MOBILE GROUPS WITH VISIBILITY FILTER ====================
   const mobileGroups = useMemo(() => {
     const dashboardGroup = {
       title: 'DASHBOARD',
       items: [{ id: 'dashboard', icon: <Dashboard fontSize="small" />, label: 'Dashboard', path: '/' }]
     };
+    
+    // Filter dashboard based on visibility
+    const dashItems = dashboardGroup.items.filter(item => pageVisibility[item.id] !== false);
+    
     return [
-      dashboardGroup,
+      { ...dashboardGroup, items: dashItems },
       ...filteredGroups.map(g => ({
         title: g.label.toUpperCase(),
         items: g.items
       }))
     ].filter(g => g.items.length > 0);
-  }, [filteredGroups]);
+  }, [filteredGroups, pageVisibility]);
 
+  // ==================== MOBILE DRAWER CONTENT ====================
   const mobileDrawerContent = useMemo(() => (
     <Box sx={{ width: 300, bgcolor: 'background.paper', height: '100%' }}>
       <Box sx={{ p: 2.5, bgcolor: '#1a237e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -342,13 +401,16 @@ export default function Navbar() {
       )}
 
       <Divider />
-      <Box sx={{ p: 2, pb: 0 }}>
-        {canAccess('pos') && (
+      
+      {/* New Bill Button - Check visibility */}
+      {pageVisibility.pos !== false && canAccess('pos') && (
+        <Box sx={{ p: 2, pb: 0 }}>
           <Button fullWidth variant="contained" color="success" component={Link} to="/billing" onClick={() => setMobileMenuOpen(false)} startIcon={<PointOfSale />} sx={{ mb: 1, py: 1.2, fontWeight: 'bold', borderRadius: 2 }}>
             New Bill
           </Button>
-        )}
-      </Box>
+        </Box>
+      )}
+      
       <List dense sx={{ pt: 1 }}>
         {mobileGroups.map((group, gIdx) => (
           <React.Fragment key={group.title}>
@@ -376,8 +438,9 @@ export default function Navbar() {
         ))}
       </List>
     </Box>
-  ), [currentUser, userRole, userName, userInitial, theme, canAccess, isActive, mobileGroups, roleColor, roleLabel]);
+  ), [currentUser, userRole, userName, userInitial, theme, canAccess, isActive, mobileGroups, roleColor, roleLabel, pageVisibility]);
 
+  // ==================== RENDER DROPDOWN WITH VISIBILITY FILTER ====================
   const renderDropdown = useCallback((group) => {
     if (group.items.length === 0) return null;
     const key = group.key;
@@ -427,6 +490,7 @@ export default function Navbar() {
     );
   }, [anchors, openMenu, closeMenu, isActive, isGroupActive, theme]);
 
+  // ==================== MAIN RENDER ====================
   return (
     <>
       <AppBar position="fixed" elevation={0} sx={{ bgcolor: '#1a237e', background: 'linear-gradient(135deg, #1a237e 0%, #283593 50%, #3949ab 100%)', color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}>
@@ -444,11 +508,25 @@ export default function Navbar() {
             </Box>
           </Box>
 
-          {/* DESKTOP NAV */}
+          {/* DESKTOP NAV - FILTERED BY VISIBILITY */}
           {!isMobile && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1, justifyContent: 'center' }}>
-              {canAccess('dashboard') && (
-                <Button component={Link} to="/" startIcon={<Dashboard fontSize="small" />} size="small" sx={{ color: isActive('/') ? '#fff' : alpha('#fff', 0.75), bgcolor: isActive('/') ? alpha('#fff', 0.15) : 'transparent', fontWeight: isActive('/') ? 700 : 500, px: 1.5, py: 0.6, borderRadius: 2, textTransform: 'none', fontSize: '0.8rem', '&:hover': { bgcolor: isActive('/') ? alpha('#fff', 0.2) : alpha('#fff', 0.1) }, transition: 'all 0.2s' }}>
+              {/* Dashboard - Check visibility */}
+              {pageVisibility.dashboard !== false && canAccess('dashboard') && (
+                <Button 
+                  component={Link} 
+                  to="/" 
+                  startIcon={<Dashboard fontSize="small" />} 
+                  size="small" 
+                  sx={{ 
+                    color: isActive('/') ? '#fff' : alpha('#fff', 0.75), 
+                    bgcolor: isActive('/') ? alpha('#fff', 0.15) : 'transparent', 
+                    fontWeight: isActive('/') ? 700 : 500, 
+                    px: 1.5, py: 0.6, borderRadius: 2, textTransform: 'none', fontSize: '0.8rem', 
+                    '&:hover': { bgcolor: isActive('/') ? alpha('#fff', 0.2) : alpha('#fff', 0.1) }, 
+                    transition: 'all 0.2s' 
+                  }}
+                >
                   Dashboard
                 </Button>
               )}
@@ -464,7 +542,8 @@ export default function Navbar() {
           )}
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto' }}>
-            {!isMobile && canAccess('pos') && (
+            {/* New Bill Button - Check visibility */}
+            {!isMobile && pageVisibility.pos !== false && canAccess('pos') && (
               <Tooltip title="Quick New Bill">
                 <Button variant="contained" size="small" component={Link} to="/billing" startIcon={<PointOfSale fontSize="small" />} sx={{ mr: 1.5, bgcolor: '#00c853', fontWeight: 'bold', textTransform: 'none', borderRadius: 2, px: 2, boxShadow: '0 4px 12px rgba(0,200,83,0.3)', '&:hover': { bgcolor: '#00e676', boxShadow: '0 6px 16px rgba(0,200,83,0.4)', transform: 'translateY(-1px)' }, transition: 'all 0.2s' }}>
                   Bill
@@ -583,7 +662,7 @@ export default function Navbar() {
           <Person fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} />
           <Typography variant="body2">My Profile</Typography>
         </MenuItem>
-        {canAccess('settings') && (
+        {pageVisibility.settings !== false && canAccess('settings') && (
           <MenuItem component={Link} to="/settings" onClick={() => closeMenu('profile')} sx={{ py: 1 }}>
             <Settings fontSize="small" sx={{ mr: 1.5, color: 'text.secondary' }} />
             <Typography variant="body2">Settings</Typography>

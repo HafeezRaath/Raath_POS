@@ -6,14 +6,17 @@ import {
   InputLabel, Select, Stack, Card, CardContent, Tabs, Tab,
   Pagination, Divider, LinearProgress, Tooltip, useMediaQuery, useTheme,
   Drawer, Collapse, Fab, Avatar, Badge, List, ListItem, ListItemText,
-  ListItemIcon, Fade, Zoom
+  ListItemIcon, Fade, Zoom, Snackbar, Alert, TablePagination,
+  Switch, FormControlLabel, Popover, ListSubheader
 } from '@mui/material';
 import {
   Search, Refresh, Visibility, Assessment, Timeline, PointOfSale,
-  LocalShipping, People, ShowChart, Inventory, MoneyOff, Warning, Error, 
+  LocalShipping, People, ShowChart, Inventory, MoneyOff, Warning, Error,
   CheckCircle, AccessTime, RemoveShoppingCart, Speed, TrendingDown,
   Menu as MenuIcon, Close, ArrowUpward, ArrowDownward, Receipt,
-  TrendingUp, AccountBalance, Store, Person, AttachMoney
+  TrendingUp, AccountBalance, Store, Person, AttachMoney, Add,
+  Edit, Delete, Save, Cancel, Print, Download, FilterList,
+  MoreVert, Done, Clear, PostAdd, AddCircle, RemoveCircle
 } from '@mui/icons-material';
 import db from '../database/db';
 
@@ -27,6 +30,15 @@ const formatDate = (dateStr) => {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch { return dateStr; }
+};
+
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return 'Never';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   } catch { return dateStr; }
 };
 
@@ -48,7 +60,7 @@ const FORECAST_STATUS = {
 };
 
 // ==================== MOBILE FORECAST CARD ====================
-const MobileForecastCard = ({ item, onView }) => {
+const MobileForecastCard = ({ item, onView, onEdit, onDelete }) => {
   const [expanded, setExpanded] = useState(false);
   const status = FORECAST_STATUS[item.status] || FORECAST_STATUS.ok;
 
@@ -125,7 +137,7 @@ const MobileForecastCard = ({ item, onView }) => {
           </Grid>
         </Collapse>
 
-        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+        <Box sx={{ display: 'flex', gap: 0.5, mt: 1 }}>
           <Button 
             size="small" 
             variant="contained" 
@@ -133,14 +145,144 @@ const MobileForecastCard = ({ item, onView }) => {
             onClick={() => onView(item)}
             sx={{ flex: 1, bgcolor: '#10b981' }}
           >
-            View Detail
+            View
           </Button>
+          <IconButton size="small" color="primary" onClick={() => onEdit(item)}>
+            <Edit fontSize="small" />
+          </IconButton>
+          <IconButton size="small" color="error" onClick={() => onDelete(item)}>
+            <Delete fontSize="small" />
+          </IconButton>
           <IconButton size="small" onClick={() => setExpanded(!expanded)}>
             {expanded ? <ArrowUpward fontSize="small" /> : <ArrowDownward fontSize="small" />}
           </IconButton>
         </Box>
       </CardContent>
     </Card>
+  );
+};
+
+// ==================== NEW ENTRY DIALOG ====================
+const EntryDialog = ({ open, onClose, onSave, title, fields, initialData, isEdit }) => {
+  const [formData, setFormData] = useState(initialData || {});
+  const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData(initialData);
+    } else {
+      const defaults = {};
+      fields.forEach(f => {
+        if (f.type === 'date') defaults[f.name] = new Date().toISOString().split('T')[0];
+        else if (f.type === 'select') defaults[f.name] = f.options?.[0]?.value || '';
+        else if (f.type === 'number') defaults[f.name] = 0;
+        else defaults[f.name] = '';
+      });
+      setFormData(defaults);
+    }
+    setErrors({});
+  }, [initialData, fields, open]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const handleSubmit = () => {
+    const newErrors = {};
+    fields.forEach(f => {
+      if (f.required && !formData[f.name]) {
+        newErrors[f.name] = `${f.label} is required`;
+      }
+    });
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    onSave(formData);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ bgcolor: '#10b981', color: 'white' }}>
+        {isEdit ? 'Edit' : 'New'} {title}
+      </DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        <Grid container spacing={2} sx={{ mt: 0 }}>
+          {fields.map((field) => (
+            <Grid item xs={field.fullWidth ? 12 : 6} key={field.name}>
+              {field.type === 'select' ? (
+                <FormControl fullWidth size="small" error={!!errors[field.name]}>
+                  <InputLabel>{field.label}</InputLabel>
+                  <Select
+                    name={field.name}
+                    value={formData[field.name] || ''}
+                    onChange={handleChange}
+                    label={field.label}
+                  >
+                    {field.options?.map(opt => (
+                      <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                    ))}
+                  </Select>
+                  {errors[field.name] && <Typography variant="caption" color="error">{errors[field.name]}</Typography>}
+                </FormControl>
+              ) : field.type === 'textarea' ? (
+                <TextField
+                  fullWidth
+                  size="small"
+                  multiline
+                  rows={3}
+                  name={field.name}
+                  label={field.label}
+                  value={formData[field.name] || ''}
+                  onChange={handleChange}
+                  error={!!errors[field.name]}
+                  helperText={errors[field.name]}
+                />
+              ) : (
+                <TextField
+                  fullWidth
+                  size="small"
+                  type={field.type || 'text'}
+                  name={field.name}
+                  label={field.label}
+                  value={formData[field.name] || ''}
+                  onChange={handleChange}
+                  error={!!errors[field.name]}
+                  helperText={errors[field.name]}
+                  InputProps={field.startAdornment ? { startAdornment: field.startAdornment } : {}}
+                />
+              )}
+            </Grid>
+          ))}
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} startIcon={<Cancel />}>Cancel</Button>
+        <Button variant="contained" onClick={handleSubmit} startIcon={<Save />} sx={{ bgcolor: '#10b981' }}>
+          {isEdit ? 'Update' : 'Save'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+// ==================== CONFIRM DELETE DIALOG ====================
+const ConfirmDialog = ({ open, onClose, onConfirm, title, message }) => {
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle sx={{ color: 'error.main' }}>{title}</DialogTitle>
+      <DialogContent>
+        <Typography>{message}</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" color="error" onClick={onConfirm} startIcon={<Delete />}>
+          Delete
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
@@ -154,6 +296,14 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [mobileDrawer, setMobileDrawer] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+  // ==================== DIALOG STATES ====================
+  const [entryDialog, setEntryDialog] = useState({ open: false, mode: 'add', data: null });
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, data: null, type: '' });
+  const [detailDialog, setDetailDialog] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [productHistory, setProductHistory] = useState({ sales: [], purchases: [], summary: {} });
 
   // ==================== FORECASTING STATES ====================
   const [forecastData, setForecastData] = useState([]);
@@ -162,8 +312,8 @@ export default function ReportsPage() {
   const [overstockMultiplier, setOverstockMultiplier] = useState(60);
   const [fcSearch, setFcSearch] = useState('');
   const [fcStatus, setFcStatus] = useState('all');
-  const [fcPage, setFcPage] = useState(1);
-  const fcPerPage = isMobile ? 10 : 25;
+  const [fcPage, setFcPage] = useState(0);
+  const [fcRowsPerPage, setFcRowsPerPage] = useState(isMobile ? 10 : 25);
 
   // ==================== SALES REPORT STATES ====================
   const [salesData, setSalesData] = useState([]);
@@ -171,6 +321,8 @@ export default function ReportsPage() {
   const [salesFrom, setSalesFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0]; });
   const [salesTo, setSalesTo] = useState(() => new Date().toISOString().split('T')[0]);
   const [salesPaymentMode, setSalesPaymentMode] = useState('all');
+  const [salesPage, setSalesPage] = useState(0);
+  const [salesRowsPerPage, setSalesRowsPerPage] = useState(isMobile ? 10 : 25);
 
   // ==================== PURCHASE / SUPPLIER STATES ====================
   const [purchaseData, setPurchaseData] = useState([]);
@@ -202,10 +354,187 @@ export default function ReportsPage() {
   const [expFrom, setExpFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0]; });
   const [expTo, setExpTo] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // ==================== DETAIL DIALOG ====================
-  const [detailDialog, setDetailDialog] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [productHistory, setProductHistory] = useState({ sales: [], purchases: [], summary: {} });
+  // ==================== HELPER FUNCTIONS ====================
+  const showSnackbar = (message, severity = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  // ==================== CRUD OPERATIONS ====================
+  
+  // FORECAST CRUD (Product Variant Management)
+  const handleAddForecast = async (data) => {
+    try {
+      await db.addVariant(data);
+      showSnackbar('Product variant added successfully');
+      loadForecasting();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error adding variant: ' + err.message, 'error');
+    }
+  };
+
+  const handleEditForecast = async (data) => {
+    try {
+      await db.updateVariant(data.id, data);
+      showSnackbar('Product variant updated successfully');
+      loadForecasting();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error updating variant: ' + err.message, 'error');
+    }
+  };
+
+  const handleDeleteForecast = async (item) => {
+    try {
+      await db.deleteVariant(item.id);
+      showSnackbar('Product variant deleted successfully');
+      loadForecasting();
+      setConfirmDialog({ open: false, data: null, type: '' });
+    } catch (err) {
+      showSnackbar('Error deleting variant: ' + err.message, 'error');
+    }
+  };
+
+  // SALES CRUD
+  const handleAddSale = async (data) => {
+    try {
+      const saleId = await db.addSale(data);
+      if (data.items) {
+        for (const item of data.items) {
+          await db.addSaleItem(saleId, item);
+        }
+      }
+      showSnackbar('Sale added successfully');
+      loadSalesReport();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error adding sale: ' + err.message, 'error');
+    }
+  };
+
+  const handleEditSale = async (data) => {
+    try {
+      await db.updateSale(data.id, data);
+      showSnackbar('Sale updated successfully');
+      loadSalesReport();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error updating sale: ' + err.message, 'error');
+    }
+  };
+
+  const handleDeleteSale = async (item) => {
+    try {
+      await db.deleteSale(item.id);
+      showSnackbar('Sale deleted successfully');
+      loadSalesReport();
+      setConfirmDialog({ open: false, data: null, type: '' });
+    } catch (err) {
+      showSnackbar('Error deleting sale: ' + err.message, 'error');
+    }
+  };
+
+  // SUPPLIER CRUD
+  const handleAddSupplier = async (data) => {
+    try {
+      await db.addSupplier(data);
+      showSnackbar('Supplier added successfully');
+      loadPurchaseReport();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error adding supplier: ' + err.message, 'error');
+    }
+  };
+
+  const handleEditSupplier = async (data) => {
+    try {
+      await db.updateSupplier(data.id, data);
+      showSnackbar('Supplier updated successfully');
+      loadPurchaseReport();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error updating supplier: ' + err.message, 'error');
+    }
+  };
+
+  const handleDeleteSupplier = async (item) => {
+    try {
+      await db.deleteSupplier(item.id);
+      showSnackbar('Supplier deleted successfully');
+      loadPurchaseReport();
+      setConfirmDialog({ open: false, data: null, type: '' });
+    } catch (err) {
+      showSnackbar('Error deleting supplier: ' + err.message, 'error');
+    }
+  };
+
+  // CUSTOMER CRUD
+  const handleAddCustomer = async (data) => {
+    try {
+      await db.addCustomer(data);
+      showSnackbar('Customer added successfully');
+      loadCustomerReport();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error adding customer: ' + err.message, 'error');
+    }
+  };
+
+  const handleEditCustomer = async (data) => {
+    try {
+      await db.updateCustomer(data.id, data);
+      showSnackbar('Customer updated successfully');
+      loadCustomerReport();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error updating customer: ' + err.message, 'error');
+    }
+  };
+
+  const handleDeleteCustomer = async (item) => {
+    try {
+      await db.deleteCustomer(item.id);
+      showSnackbar('Customer deleted successfully');
+      loadCustomerReport();
+      setConfirmDialog({ open: false, data: null, type: '' });
+    } catch (err) {
+      showSnackbar('Error deleting customer: ' + err.message, 'error');
+    }
+  };
+
+  // EXPENSE CRUD
+  const handleAddExpense = async (data) => {
+    try {
+      await db.addExpense(data);
+      showSnackbar('Expense added successfully');
+      loadExpenses();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error adding expense: ' + err.message, 'error');
+    }
+  };
+
+  const handleEditExpense = async (data) => {
+    try {
+      await db.updateExpense(data.id, data);
+      showSnackbar('Expense updated successfully');
+      loadExpenses();
+      setEntryDialog({ open: false, mode: 'add', data: null });
+    } catch (err) {
+      showSnackbar('Error updating expense: ' + err.message, 'error');
+    }
+  };
+
+  const handleDeleteExpense = async (item) => {
+    try {
+      await db.deleteExpense(item.id);
+      showSnackbar('Expense deleted successfully');
+      loadExpenses();
+      setConfirmDialog({ open: false, data: null, type: '' });
+    } catch (err) {
+      showSnackbar('Error deleting expense: ' + err.message, 'error');
+    }
+  };
 
   // ==================== LOAD FUNCTIONS ====================
   const loadForecasting = async () => {
@@ -299,6 +628,7 @@ export default function ReportsPage() {
       setForecastData(enriched);
     } catch (err) {
       console.error(err);
+      showSnackbar('Error loading forecast: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
 
@@ -320,7 +650,8 @@ export default function ReportsPage() {
           ...s,
           total_items: items.length,
           total_qty: items.reduce((sum, i) => sum + (Number(i.quantity) || Number(i.qty) || 0), 0),
-          total_cost: items.reduce((sum, i) => sum + ((Number(i.quantity) || Number(i.qty) || 0) * (Number(i.unit_cost) || Number(i.purchase_price) || 0)), 0)
+          total_cost: items.reduce((sum, i) => sum + ((Number(i.quantity) || Number(i.qty) || 0) * (Number(i.unit_cost) || Number(i.purchase_price) || 0)), 0),
+          items: items
         };
       }));
 
@@ -340,6 +671,7 @@ export default function ReportsPage() {
       setSalesSummary(summary);
     } catch (err) {
       console.error(err);
+      showSnackbar('Error loading sales: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
 
@@ -372,6 +704,7 @@ export default function ReportsPage() {
       setSupplierSummary(summary);
     } catch (err) {
       console.error(err);
+      showSnackbar('Error loading suppliers: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
 
@@ -395,6 +728,7 @@ export default function ReportsPage() {
       setCustomerData(data);
     } catch (err) {
       console.error(err);
+      showSnackbar('Error loading customers: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
 
@@ -428,6 +762,7 @@ export default function ReportsPage() {
       });
     } catch (err) {
       console.error(err);
+      showSnackbar('Error loading P&L: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
 
@@ -460,6 +795,7 @@ export default function ReportsPage() {
       setTopProducts(top);
     } catch (err) {
       console.error(err);
+      showSnackbar('Error loading stock: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
 
@@ -484,6 +820,7 @@ export default function ReportsPage() {
       })).sort((a, b) => b.total - a.total));
     } catch (err) {
       console.error(err);
+      showSnackbar('Error loading expenses: ' + err.message, 'error');
     } finally { setLoading(false); }
   };
 
@@ -546,8 +883,8 @@ export default function ReportsPage() {
   }, [forecastData, fcSearch, fcStatus]);
 
   const paginatedForecast = useMemo(() => {
-    return filteredForecast.slice((fcPage - 1) * fcPerPage, fcPage * fcPerPage);
-  }, [filteredForecast, fcPage]);
+    return filteredForecast.slice(fcPage * fcRowsPerPage, fcPage * fcRowsPerPage + fcRowsPerPage);
+  }, [filteredForecast, fcPage, fcRowsPerPage]);
 
   const forecastStats = useMemo(() => {
     const criticalLow = forecastData.filter(v => v.status === 'critical_low').length;
@@ -561,6 +898,737 @@ export default function ReportsPage() {
   const filteredSuppliers = supplierSummary.filter(s => s.name?.toLowerCase().includes(supSearch.toLowerCase()) || s.company_name?.toLowerCase().includes(supSearch.toLowerCase()));
   const filteredCustomers = customerData.filter(c => c.name?.toLowerCase().includes(custSearch.toLowerCase()) || c.phone?.includes(custSearch));
 
+  // ==================== ENTRY FIELD CONFIGURATIONS ====================
+  const getForecastFields = () => [
+    { name: 'product_id', label: 'Product ID', type: 'number', required: true },
+    { name: 'variant_name', label: 'Variant Name', required: true },
+    { name: 'sku', label: 'SKU', required: true },
+    { name: 'purchase_price', label: 'Purchase Price', type: 'number', required: true, startAdornment: <AttachMoney fontSize="small" /> },
+    { name: 'retail_price', label: 'Retail Price', type: 'number', required: true, startAdornment: <AttachMoney fontSize="small" /> },
+    { name: 'current_stock', label: 'Current Stock', type: 'number', required: true },
+    { name: 'stock_alert_quantity', label: 'Alert Quantity', type: 'number', required: true },
+    { name: 'status', label: 'Status', type: 'select', options: [
+      { value: 'active', label: 'Active' },
+      { value: 'inactive', label: 'Inactive' },
+      { value: 'discontinued', label: 'Discontinued' }
+    ]}
+  ];
+
+  const getSaleFields = () => [
+    { name: 'customer_id', label: 'Customer ID', type: 'number' },
+    { name: 'customer_name', label: 'Customer Name' },
+    { name: 'invoice_no', label: 'Invoice No', required: true },
+    { name: 'date', label: 'Date', type: 'date', required: true },
+    { name: 'grand_total', label: 'Grand Total', type: 'number', required: true, startAdornment: <AttachMoney fontSize="small" /> },
+    { name: 'paid_amount', label: 'Paid Amount', type: 'number', startAdornment: <AttachMoney fontSize="small" /> },
+    { name: 'discount', label: 'Discount', type: 'number', startAdornment: <AttachMoney fontSize="small" /> },
+    { name: 'payment_mode', label: 'Payment Mode', type: 'select', options: [
+      { value: 'cash', label: 'Cash' },
+      { value: 'bank', label: 'Bank Transfer' },
+      { value: 'credit', label: 'Credit' },
+      { value: 'card', label: 'Card' }
+    ]}
+  ];
+
+  const getSupplierFields = () => [
+    { name: 'name', label: 'Supplier Name', required: true },
+    { name: 'company_name', label: 'Company Name' },
+    { name: 'phone', label: 'Phone' },
+    { name: 'email', label: 'Email' },
+    { name: 'address', label: 'Address', type: 'textarea' },
+    { name: 'current_balance', label: 'Balance', type: 'number', startAdornment: <AttachMoney fontSize="small" /> }
+  ];
+
+  const getCustomerFields = () => [
+    { name: 'name', label: 'Customer Name', required: true },
+    { name: 'shop_name', label: 'Shop/Business Name' },
+    { name: 'phone', label: 'Phone', required: true },
+    { name: 'email', label: 'Email' },
+    { name: 'address', label: 'Address', type: 'textarea' },
+    { name: 'current_balance', label: 'Balance', type: 'number', startAdornment: <AttachMoney fontSize="small" /> }
+  ];
+
+  const getExpenseFields = () => [
+    { name: 'date', label: 'Date', type: 'date', required: true },
+    { name: 'category_name', label: 'Category', required: true },
+    { name: 'description', label: 'Description', type: 'textarea' },
+    { name: 'amount', label: 'Amount', type: 'number', required: true, startAdornment: <AttachMoney fontSize="small" /> },
+    { name: 'payment_mode', label: 'Payment Mode', type: 'select', options: [
+      { value: 'cash', label: 'Cash' },
+      { value: 'bank', label: 'Bank' },
+      { value: 'credit', label: 'Credit' }
+    ]}
+  ];
+
+  // ==================== RENDER TAB CONTENT ====================
+  const renderTabContent = () => {
+    switch(activeTab) {
+      case 0: return renderForecastTab();
+      case 1: return renderSalesTab();
+      case 2: return renderSuppliersTab();
+      case 3: return renderCustomersTab();
+      case 4: return renderProfitLossTab();
+      case 5: return renderStockTab();
+      case 6: return renderExpensesTab();
+      default: return null;
+    }
+  };
+
+  // ==================== FORECAST TAB ====================
+  const renderForecastTab = () => (
+    <Fade in>
+      <Box>
+        <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 2 }}>
+          {[
+            { title: 'Critical Low', value: forecastStats.criticalLow, color: 'error' },
+            { title: 'Low Stock', value: forecastStats.lowStock, color: 'warning' },
+            { title: 'Out of Stock', value: forecastStats.outOfStock, color: 'error' },
+            { title: 'Over Stock', value: forecastStats.overStock, color: 'warning' },
+            { title: 'Optimal', value: forecastStats.ok, color: 'success' }
+          ].map((stat, i) => (
+            <Grid item xs={6} md={2.4} key={i}>
+              <Card sx={{ bgcolor: `${stat.color}.light`, borderLeft: '4px solid', borderLeftColor: `${stat.color}.main` }}>
+                <CardContent sx={{ p: isMobile ? 1 : 1.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: isMobile ? '0.55rem' : '0.75rem' }}>{stat.title}</Typography>
+                  <Typography variant="h6" fontWeight="bold">{stat.value}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+
+        <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2, border: '1px solid #10b981', bgcolor: '#fbfdfb' }}>
+          <Grid container spacing={isMobile ? 1 : 2}>
+            <Grid item xs={12} md={4}>
+              <TextField fullWidth size="small" placeholder="Search products..." value={fcSearch} onChange={(e) => setFcSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: '#10b981' }} /> }} />
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Period</InputLabel>
+                <Select value={forecastPeriod} onChange={(e) => setForecastPeriod(Number(e.target.value))} label="Period">
+                  <MenuItem value={7}>7 Days</MenuItem>
+                  <MenuItem value={30}>30 Days</MenuItem>
+                  <MenuItem value={90}>90 Days</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Status</InputLabel>
+                <Select value={fcStatus} onChange={(e) => setFcStatus(e.target.value)} label="Status">
+                  <MenuItem value="all">All</MenuItem>
+                  <MenuItem value="critical_low">Critical Low</MenuItem>
+                  <MenuItem value="low_stock">Low Stock</MenuItem>
+                  <MenuItem value="out_of_stock">Out of Stock</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={6} md={2}>
+              <Button fullWidth variant="outlined" color="success" size="small" onClick={() => { setFcSearch(''); setFcStatus('all'); }}>Clear</Button>
+            </Grid>
+            <Grid item xs={6} md={2}>
+             
+            </Grid>
+          </Grid>
+        </Paper>
+
+        {isMobile ? (
+          // Mobile Forecast Cards
+          <Box>
+            {paginatedForecast.map(v => (
+              <MobileForecastCard 
+                key={v.id} 
+                item={v} 
+                onView={handleViewDetail}
+                onEdit={() => setEntryDialog({ open: true, mode: 'edit', data: v })}
+                onDelete={() => setConfirmDialog({ open: true, data: v, type: 'forecast' })}
+              />
+            ))}
+            {paginatedForecast.length === 0 && (
+              <Paper sx={{ p: 4, textAlign: 'center' }}>
+                <Timeline sx={{ fontSize: 48, color: '#d1d5db' }} />
+                <Typography color="text.secondary">No products found</Typography>
+              </Paper>
+            )}
+            <TablePagination
+              component="div"
+              count={filteredForecast.length}
+              page={fcPage}
+              onPageChange={(e, p) => setFcPage(p)}
+              rowsPerPage={fcRowsPerPage}
+              onRowsPerPageChange={(e) => setFcRowsPerPage(parseInt(e.target.value, 10))}
+              rowsPerPageOptions={[5, 10, 25]}
+            />
+          </Box>
+        ) : (
+          // Desktop Forecast Table
+          <Paper sx={{ border: '1px solid #e5e7eb' }}>
+            <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    {['Product', 'SKU', 'Stock', 'Sold', 'Velocity', 'Days Left', 'Status', 'Order', 'Value', 'Actions'].map(h => (
+                      <TableCell key={h} sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }}>{h}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {paginatedForecast.map(v => {
+                    const status = FORECAST_STATUS[v.status] || FORECAST_STATUS.ok;
+                    return (
+                      <TableRow key={v.id} hover>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="bold">{v.product_name}</Typography>
+                          <Typography variant="caption" color="text.secondary">{v.variant_name}</Typography>
+                        </TableCell>
+                        <TableCell><Typography variant="caption" fontFamily="monospace">{v.sku}</Typography></TableCell>
+                        <TableCell align="right" fontWeight="bold">{v.current_stock}</TableCell>
+                        <TableCell align="right">{v.total_sold_period}</TableCell>
+                        <TableCell align="right" fontWeight="bold">{v.daily_velocity.toFixed(2)}/d</TableCell>
+                        <TableCell align="right">
+                          {v.daily_velocity > 0 ? (
+                            <Box>
+                              <Typography fontWeight="bold" color={v.days_remaining <= 7 ? 'error.main' : 'success.main'}>
+                                {v.days_remaining} days
+                              </Typography>
+                              <LinearProgress variant="determinate" value={Math.min((v.days_remaining / 60) * 100, 100)} color={v.days_remaining <= 7 ? 'error' : 'success'} sx={{ height: 4, borderRadius: 2 }} />
+                            </Box>
+                          ) : 'No data'}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip size="small" color={status.color} label={status.label} sx={{ height: 18, fontSize: '0.6rem' }} />
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: v.suggested_order > 0 ? 'error.main' : 'inherit', fontWeight: 'bold' }}>
+                          {v.suggested_order > 0 ? `+${v.suggested_order}` : '-'}
+                        </TableCell>
+                        <TableCell align="right" fontWeight="500">{formatCurrency(v.stock_value)}</TableCell>
+                        <TableCell align="center">
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <IconButton size="small" color="primary" onClick={() => handleViewDetail(v)}>
+                              <Visibility fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" color="info" onClick={() => setEntryDialog({ open: true, mode: 'edit', data: v })}>
+                              <Edit fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" color="error" onClick={() => setConfirmDialog({ open: true, data: v, type: 'forecast' })}>
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <TablePagination
+              component="div"
+              count={filteredForecast.length}
+              page={fcPage}
+              onPageChange={(e, p) => setFcPage(p)}
+              rowsPerPage={fcRowsPerPage}
+              onRowsPerPageChange={(e) => setFcRowsPerPage(parseInt(e.target.value, 10))}
+              rowsPerPageOptions={[5, 10, 25, 50]}
+            />
+          </Paper>
+        )}
+      </Box>
+    </Fade>
+  );
+
+  // ==================== SALES TAB ====================
+  const renderSalesTab = () => (
+    <Fade in>
+      <Box>
+        <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+          <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+            <Grid item xs={5} md={2}>
+              <TextField fullWidth size="small" type="date" label="From" value={salesFrom} onChange={(e) => setSalesFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={5} md={2}>
+              <TextField fullWidth size="small" type="date" label="To" value={salesTo} onChange={(e) => setSalesTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={6} md={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Payment Mode</InputLabel>
+                <Select value={salesPaymentMode} onChange={(e) => setSalesPaymentMode(e.target.value)} label="Payment Mode">
+                  <MenuItem value="all">All</MenuItem>
+                  <MenuItem value="cash">Cash</MenuItem>
+                  <MenuItem value="bank">Bank Transfer</MenuItem>
+                  <MenuItem value="credit">Credit</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={6} md={2}>
+                </Grid>
+            <Grid item xs={12} md={2}>
+             
+            </Grid>
+          </Grid>
+        </Paper>
+
+        {!isMobile && (
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid item xs={12} md={3}>
+              <Card sx={{ bgcolor: '#f0fdf4' }}>
+                <CardContent><Typography variant="caption">Total Revenue</Typography>
+                  <Typography variant="h5" fontWeight="bold" color="green">{formatCurrency(salesSummary.total_sales)}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Card><CardContent><Typography variant="caption">Gross Profit</Typography>
+                <Typography variant="h5" fontWeight="bold" color="primary">{formatCurrency(salesSummary.gross_profit)}</Typography>
+              </CardContent></Card>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Card><CardContent><Typography variant="caption">Receivable</Typography>
+                <Typography variant="h5" fontWeight="bold" color="error">{formatCurrency(salesSummary.total_due)}</Typography>
+              </CardContent></Card>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <Card><CardContent><Typography variant="caption">Bills</Typography>
+                <Typography variant="h5" fontWeight="bold">{salesSummary.total_bills || 0}</Typography>
+              </CardContent></Card>
+            </Grid>
+          </Grid>
+        )}
+
+        <Paper sx={{ border: '1px solid #e5e7eb' }}>
+          <TableContainer sx={{ maxHeight: isMobile ? 'calc(100vh - 350px)' : 'calc(100vh - 360px)' }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  {['Invoice', 'Date', 'Customer', 'Qty', 'Total', 'Paid', 'Due', 'Mode', 'Actions'].map(h => (
+                    <TableCell key={h} sx={{ bgcolor: '#4b5563', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {salesData.slice(salesPage * salesRowsPerPage, salesPage * salesRowsPerPage + salesRowsPerPage).map(sale => (
+                  <TableRow key={sale.id} hover>
+                    <TableCell sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: isMobile ? '0.7rem' : '0.875rem' }}>{sale.invoice_no}</TableCell>
+                    <TableCell sx={{ fontSize: isMobile ? '0.65rem' : '0.8rem' }}>{formatDate(sale.date)}</TableCell>
+                    <TableCell sx={{ fontSize: isMobile ? '0.7rem' : '0.875rem' }}>{sale.customer_name || 'Walk-in'}</TableCell>
+                    <TableCell align="right">{sale.total_qty || 0}</TableCell>
+                    <TableCell align="right" fontWeight="bold">{formatCurrency(sale.grand_total)}</TableCell>
+                    <TableCell align="right" color="success.main">{formatCurrency(sale.paid_amount)}</TableCell>
+                    <TableCell align="right" color={sale.due_amount > 0 ? 'error.main' : 'inherit'}>{formatCurrency(sale.due_amount)}</TableCell>
+                    <TableCell align="center"><Chip size="small" label={String(sale.payment_mode || 'Cash').toUpperCase()} variant="outlined" sx={{ height: 16, fontSize: '0.5rem' }} /></TableCell>
+                    <TableCell align="center">
+                      <Stack direction="row" spacing={0.5} justifyContent="center">
+                        <IconButton size="small" color="info" onClick={() => setEntryDialog({ open: true, mode: 'edit', data: sale })}>
+                          <Edit fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" color="error" onClick={() => setConfirmDialog({ open: true, data: sale, type: 'sale' })}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            component="div"
+            count={salesData.length}
+            page={salesPage}
+            onPageChange={(e, p) => setSalesPage(p)}
+            rowsPerPage={salesRowsPerPage}
+            onRowsPerPageChange={(e) => setSalesRowsPerPage(parseInt(e.target.value, 10))}
+            rowsPerPageOptions={[5, 10, 25, 50]}
+          />
+        </Paper>
+      </Box>
+    </Fade>
+  );
+
+  // ==================== SUPPLIERS TAB ====================
+  const renderSuppliersTab = () => (
+    <Fade in>
+      <Box>
+        <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+          <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+            <Grid item xs={5} md={2}>
+              <TextField fullWidth size="small" type="date" label="From" value={purchaseFrom} onChange={(e) => setPurchaseFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={5} md={2}>
+              <TextField fullWidth size="small" type="date" label="To" value={purchaseTo} onChange={(e) => setPurchaseTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={6} md={2}>
+                </Grid>
+            <Grid item xs={6} md={2}>
+             
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField fullWidth size="small" placeholder="Search suppliers..." value={supSearch} onChange={(e) => setSupSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray' }} /> }} />
+            </Grid>
+          </Grid>
+        </Paper>
+
+        <Paper sx={{ border: '1px solid #e5e7eb' }}>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  {['Supplier', 'Company', 'Contact', 'Bills', 'Total', 'Paid', 'Payable', 'Actions'].map(h => (
+                    <TableCell key={h} sx={{ bgcolor: '#0284c7', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredSuppliers.map(sup => (
+                  <TableRow key={sup.id} hover>
+                    <TableCell fontWeight="bold">{sup.name}</TableCell>
+                    <TableCell>{sup.company_name || '-'}</TableCell>
+                    <TableCell>{sup.phone || '-'}</TableCell>
+                    <TableCell align="center">{sup.bill_count}</TableCell>
+                    <TableCell align="right">{formatCurrency(sup.total_purchases)}</TableCell>
+                    <TableCell align="right" color="success.main">{formatCurrency(sup.total_paid)}</TableCell>
+                    <TableCell align="right" color={sup.current_balance > 0 ? 'error.main' : 'inherit'} fontWeight="bold">{formatCurrency(sup.current_balance)}</TableCell>
+                    <TableCell align="center">
+                      <Stack direction="row" spacing={0.5} justifyContent="center">
+                        <IconButton size="small" color="info" onClick={() => setEntryDialog({ open: true, mode: 'edit', data: sup })}>
+                          <Edit fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" color="error" onClick={() => setConfirmDialog({ open: true, data: sup, type: 'supplier' })}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      </Box>
+    </Fade>
+  );
+
+  // ==================== CUSTOMERS TAB ====================
+  const renderCustomersTab = () => (
+    <Fade in>
+      <Box>
+        <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+          <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+            <Grid item xs={5} md={2}>
+              <TextField fullWidth size="small" type="date" label="From" value={customerFrom} onChange={(e) => setCustomerFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={5} md={2}>
+              <TextField fullWidth size="small" type="date" label="To" value={customerTo} onChange={(e) => setCustomerTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={6} md={2}>
+             </Grid>
+            <Grid item xs={6} md={2}>
+          
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField fullWidth size="small" placeholder="Search customers..." value={custSearch} onChange={(e) => setCustSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray' }} /> }} />
+            </Grid>
+          </Grid>
+        </Paper>
+
+        <Paper sx={{ border: '1px solid #e5e7eb' }}>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  {['Customer', 'Phone', 'Shop', 'Period Sales', 'Period Paid', 'Balance', 'Actions'].map(h => (
+                    <TableCell key={h} sx={{ bgcolor: '#7c3aed', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredCustomers.map(cust => (
+                  <TableRow key={cust.id} hover>
+                    <TableCell fontWeight="bold">{cust.name}</TableCell>
+                    <TableCell>{cust.phone || '-'}</TableCell>
+                    <TableCell>{cust.shop_name || '-'}</TableCell>
+                    <TableCell align="right">{formatCurrency(cust.period_sales)}</TableCell>
+                    <TableCell align="right" color="success.main">{formatCurrency(cust.period_paid)}</TableCell>
+                    <TableCell align="right" color={cust.current_balance > 0 ? 'error.main' : 'inherit'} fontWeight="bold">{formatCurrency(cust.current_balance)}</TableCell>
+                    <TableCell align="center">
+                      <Stack direction="row" spacing={0.5} justifyContent="center">
+                        <IconButton size="small" color="info" onClick={() => setEntryDialog({ open: true, mode: 'edit', data: cust })}>
+                          <Edit fontSize="small" />
+                        </IconButton>
+                        <IconButton size="small" color="error" onClick={() => setConfirmDialog({ open: true, data: cust, type: 'customer' })}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      </Box>
+    </Fade>
+  );
+
+  // ==================== PROFIT & LOSS TAB ====================
+  const renderProfitLossTab = () => (
+    <Fade in>
+      <Box>
+        <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+          <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+            <Grid item xs={5} md={3}>
+              <TextField fullWidth size="small" type="date" label="From" value={plFrom} onChange={(e) => setPlFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={5} md={3}>
+              <TextField fullWidth size="small" type="date" label="To" value={plTo} onChange={(e) => setPlTo(e.target.value)} InputLabelProps={{ shrink: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+               </Grid>
+          </Grid>
+        </Paper>
+
+        <Paper sx={{ p: isMobile ? 2 : 3, maxWidth: 800, mx: 'auto', border: '1px solid #e5e7eb' }}>
+          <Typography variant={isMobile ? 'h6' : 'h6'} align="center" fontWeight="bold" color="primary" gutterBottom>Profit & Loss Statement</Typography>
+          <Typography variant="caption" align="center" display="block" color="text.secondary" sx={{ mb: 3 }}>
+            {formatDate(plFrom)} to {formatDate(plTo)}
+          </Typography>
+          <Divider sx={{ mb: 3 }} />
+
+          <Stack spacing={isMobile ? 1.5 : 2}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#f0fdf4', borderRadius: 1 }}>
+              <Typography fontWeight="bold" color="green">Revenue</Typography>
+              <Typography fontWeight="bold" color="green">{formatCurrency(plSummary.revenue)}</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#fef2f2', borderRadius: 1 }}>
+              <Typography fontWeight="bold" color="red">COGS</Typography>
+              <Typography fontWeight="bold" color="red">-{formatCurrency(plSummary.cogs)}</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#eff6ff', borderRadius: 1 }}>
+              <Typography variant="subtitle1" fontWeight="bold">Gross Profit</Typography>
+              <Typography variant="subtitle1" fontWeight="bold" color="primary.main">{formatCurrency(plSummary.gross)}</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#fffbeb', borderRadius: 1 }}>
+              <Typography variant="body2">Expenses</Typography>
+              <Typography variant="body2">-{formatCurrency(plSummary.expenses)}</Typography>
+            </Box>
+            <Divider />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: plSummary.net >= 0 ? '#10b981' : '#ef4444', color: 'white', borderRadius: 2 }}>
+              <Typography variant="h6" fontWeight="bold">NET INCOME</Typography>
+              <Typography variant="h6" fontWeight="bold">{formatCurrency(plSummary.net)}</Typography>
+            </Box>
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#f3f4f6', borderRadius: 1 }}>
+                  <Typography variant="caption" color="text.secondary">Gross Margin</Typography>
+                  <Typography variant="subtitle1" fontWeight="bold" color="primary.main">{plSummary.grossMargin.toFixed(1)}%</Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6}>
+                <Box sx={{ textAlign: 'center', p: 1, bgcolor: '#f3f4f6', borderRadius: 1 }}>
+                  <Typography variant="caption" color="text.secondary">Net Margin</Typography>
+                  <Typography variant="subtitle1" fontWeight="bold" color={plSummary.netMargin >= 0 ? 'success.main' : 'error.main'}>{plSummary.netMargin.toFixed(1)}%</Typography>
+                </Box>
+              </Grid>
+            </Grid>
+          </Stack>
+        </Paper>
+      </Box>
+    </Fade>
+  );
+
+  // ==================== STOCK TAB ====================
+  const renderStockTab = () => (
+    <Fade in>
+      <Grid container spacing={isMobile ? 1 : 2}>
+        <Grid item xs={12} md={6}>
+          <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Category Distribution</Typography>
+          <Divider sx={{ mb: 1.5 }} />
+          {stockValuation.map((cat, i) => (
+            <Card key={i} variant="outlined" sx={{ mb: 1.5, bgcolor: '#f9fafb' }}>
+              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography fontWeight="bold">{cat.category_name}</Typography>
+                  <Chip size="small" label={`${cat.total_qty} units`} variant="outlined" sx={{ height: 18, fontSize: '0.55rem' }} />
+                </Box>
+                <Grid container spacing={1}>
+                  <Grid item xs={4}>
+                    <Typography variant="caption" color="text.secondary">Cost</Typography>
+                    <Typography variant="body2" fontWeight="bold">{formatCurrency(cat.stock_value_at_cost)}</Typography>
+                  </Grid>
+                  <Grid item xs={4}>
+                    <Typography variant="caption" color="text.secondary">Retail</Typography>
+                    <Typography variant="body2" color="green" fontWeight="bold">{formatCurrency(cat.stock_value_at_retail)}</Typography>
+                  </Grid>
+                  <Grid item xs={4}>
+                    <Typography variant="caption" color="text.secondary">Profit</Typography>
+                    <Typography variant="body2" color="primary.main" fontWeight="bold">{formatCurrency(cat.potential_profit)}</Typography>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          ))}
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Top Products</Typography>
+          <Divider sx={{ mb: 1.5 }} />
+          <Paper sx={{ border: '1px solid #e5e7eb' }}>
+            <TableContainer sx={{ maxHeight: 400 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f9fafb' }}>
+                    <TableCell>Product</TableCell>
+                    <TableCell align="right">Sold</TableCell>
+                    <TableCell align="right">Revenue</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {topProducts.map((p, i) => (
+                    <TableRow key={i} hover>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="bold">{p.product_name}</Typography>
+                        <Typography variant="caption" color="text.secondary">{p.sku}</Typography>
+                      </TableCell>
+                      <TableCell align="right" fontWeight="bold">{p.total_sold} units</TableCell>
+                      <TableCell align="right" color="success.main" fontWeight="bold">{formatCurrency(p.total_revenue)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </Grid>
+      </Grid>
+    </Fade>
+  );
+
+  // ==================== EXPENSES TAB ====================
+  const renderExpensesTab = () => (
+    <Fade in>
+      <Grid container spacing={isMobile ? 1 : 2}>
+        <Grid item xs={12} md={5}>
+          <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Expense Distribution</Typography>
+          <Divider sx={{ mb: 1.5 }} />
+          {expenseSummary.map((exp, i) => (
+            <Card key={i} sx={{ mb: 1.5, borderLeft: '4px solid #f59e0b' }}>
+              <CardContent sx={{ p: isMobile ? 1.5 : 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography fontWeight="bold">{exp.category}</Typography>
+                  <Typography variant="caption" color="text.secondary">{exp.count} transactions</Typography>
+                </Box>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography fontWeight="bold" color="error.main">{formatCurrency(exp.total)}</Typography>
+                  <Typography variant="caption" sx={{ bgcolor: '#fef3c7', px: 1, borderRadius: 1 }}>{exp.percentage.toFixed(1)}%</Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
+        </Grid>
+        <Grid item xs={12} md={7}>
+          <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
+            <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
+              <Grid item xs={4}><TextField fullWidth size="small" type="date" label="From" value={expFrom} onChange={(e) => setExpFrom(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
+              <Grid item xs={4}><TextField fullWidth size="small" type="date" label="To" value={expTo} onChange={(e) => setExpTo(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
+              <Grid item xs={4}>
+                <Button fullWidth variant="outlined" size="small" onClick={loadExpenses}><Refresh /></Button>
+              </Grid>
+            </Grid>
+          </Paper>
+
+          
+
+          <Paper sx={{ border: '1px solid #e5e7eb' }}>
+            <TableContainer sx={{ maxHeight: 'calc(100vh - 350px)' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    {['Date', 'Category', 'Description', 'Mode', 'Amount', 'Actions'].map(h => (
+                      <TableCell key={h} sx={{ bgcolor: '#ef4444', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {expenseData.map(e => (
+                    <TableRow key={e.id} hover>
+                      <TableCell sx={{ fontSize: isMobile ? '0.65rem' : '0.8rem' }}>{formatDate(e.date)}</TableCell>
+                      <TableCell><Chip label={e.category_name || 'General'} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.5rem' }} /></TableCell>
+                      <TableCell>{e.description || '-'}</TableCell>
+                      <TableCell>{String(e.payment_mode || 'Cash').toUpperCase()}</TableCell>
+                      <TableCell align="right" fontWeight="bold" color="error.main">{formatCurrency(e.amount)}</TableCell>
+                      <TableCell align="center">
+                        <Stack direction="row" spacing={0.5} justifyContent="center">
+                          <IconButton size="small" color="info" onClick={() => setEntryDialog({ open: true, mode: 'edit', data: e })}>
+                            <Edit fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" color="error" onClick={() => setConfirmDialog({ open: true, data: e, type: 'expense' })}>
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </Grid>
+      </Grid>
+    </Fade>
+  );
+
+  // ==================== HANDLE ENTRY SAVE ====================
+  const handleEntrySave = (data) => {
+    const type = entryDialog.mode === 'add' ? 'add' : 'edit';
+    const handlers = {
+      forecast: type === 'add' ? handleAddForecast : handleEditForecast,
+      sale: type === 'add' ? handleAddSale : handleEditSale,
+      supplier: type === 'add' ? handleAddSupplier : handleEditSupplier,
+      customer: type === 'add' ? handleAddCustomer : handleEditCustomer,
+      expense: type === 'add' ? handleAddExpense : handleEditExpense,
+    };
+    const handler = handlers[entryDialog.type] || handlers.forecast;
+    handler(data);
+  };
+
+  // ==================== HANDLE CONFIRM DELETE ====================
+  const handleConfirmDelete = () => {
+    const { data, type } = confirmDialog;
+    const handlers = {
+      forecast: handleDeleteForecast,
+      sale: handleDeleteSale,
+      supplier: handleDeleteSupplier,
+      customer: handleDeleteCustomer,
+      expense: handleDeleteExpense,
+    };
+    const handler = handlers[type] || handlers.forecast;
+    handler(data);
+  };
+
+  // ==================== GET ENTRY FIELDS ====================
+  const getEntryFields = () => {
+    const type = entryDialog.type || 'forecast';
+    const fieldMap = {
+      forecast: getForecastFields,
+      sale: getSaleFields,
+      supplier: getSupplierFields,
+      customer: getCustomerFields,
+      expense: getExpenseFields,
+    };
+    return (fieldMap[type] || getForecastFields)();
+  };
+
+  // ==================== GET ENTRY TITLE ====================
+  const getEntryTitle = () => {
+    const type = entryDialog.type || 'forecast';
+    const titleMap = {
+      forecast: 'Product Variant',
+      sale: 'Sale',
+      supplier: 'Supplier',
+      customer: 'Customer',
+      expense: 'Expense',
+    };
+    return titleMap[type] || 'Entry';
+  };
+
+  // ==================== MAIN RENDER ====================
   return (
     <Box sx={{ p: isMobile ? 1 : 2, pb: isMobile ? 8 : 2 }}>
       
@@ -631,485 +1699,28 @@ export default function ReportsPage() {
         </Tabs>
       </Paper>
 
-      {/* ==================== TAB 0: FORECAST ==================== */}
-      {activeTab === 0 && (
-        <Fade in>
-          <Box>
-            <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 2 }}>
-              {[
-                { title: 'Critical Low', value: forecastStats.criticalLow, color: 'error' },
-                { title: 'Low Stock', value: forecastStats.lowStock, color: 'warning' },
-                { title: 'Out of Stock', value: forecastStats.outOfStock, color: 'error' },
-                { title: 'Over Stock', value: forecastStats.overStock, color: 'warning' },
-                { title: 'Optimal', value: forecastStats.ok, color: 'success' }
-              ].map((stat, i) => (
-                <Grid item xs={6} md={2.4} key={i}>
-                  <Card sx={{ bgcolor: `${stat.color}.light`, borderLeft: '4px solid', borderLeftColor: `${stat.color}.main` }}>
-                    <CardContent sx={{ p: isMobile ? 1 : 1.5 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: isMobile ? '0.55rem' : '0.75rem' }}>{stat.title}</Typography>
-                      <Typography variant="h6" fontWeight="bold">{stat.value}</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
+      {/* TAB CONTENT */}
+      {renderTabContent()}
 
-            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2, border: '1px solid #10b981', bgcolor: '#fbfdfb' }}>
-              <Grid container spacing={isMobile ? 1 : 2}>
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth size="small" placeholder="Search products..." value={fcSearch} onChange={(e) => setFcSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: '#10b981' }} /> }} />
-                </Grid>
-                <Grid item xs={6} md={3}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Period</InputLabel>
-                    <Select value={forecastPeriod} onChange={(e) => setForecastPeriod(Number(e.target.value))} label="Period">
-                      <MenuItem value={7}>7 Days</MenuItem>
-                      <MenuItem value={30}>30 Days</MenuItem>
-                      <MenuItem value={90}>90 Days</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={6} md={3}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Status</InputLabel>
-                    <Select value={fcStatus} onChange={(e) => setFcStatus(e.target.value)} label="Status">
-                      <MenuItem value="all">All</MenuItem>
-                      <MenuItem value="critical_low">Critical Low</MenuItem>
-                      <MenuItem value="low_stock">Low Stock</MenuItem>
-                      <MenuItem value="out_of_stock">Out of Stock</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} md={2}>
-                  <Button fullWidth variant="outlined" color="success" size="small" onClick={() => { setFcSearch(''); setFcStatus('all'); }}>Clear</Button>
-                </Grid>
-              </Grid>
-            </Paper>
+      {/* ==================== ENTRY DIALOG ==================== */}
+      <EntryDialog
+        open={entryDialog.open}
+        onClose={() => setEntryDialog({ open: false, mode: 'add', data: null })}
+        onSave={handleEntrySave}
+        title={getEntryTitle()}
+        fields={getEntryFields()}
+        initialData={entryDialog.mode === 'edit' ? entryDialog.data : null}
+        isEdit={entryDialog.mode === 'edit'}
+      />
 
-            {isMobile ? (
-              // Mobile Forecast Cards
-              <Box>
-                {paginatedForecast.map(v => (
-                  <MobileForecastCard key={v.id} item={v} onView={handleViewDetail} />
-                ))}
-                {paginatedForecast.length === 0 && (
-                  <Paper sx={{ p: 4, textAlign: 'center' }}>
-                    <Timeline sx={{ fontSize: 48, color: '#d1d5db' }} />
-                    <Typography color="text.secondary">No products found</Typography>
-                  </Paper>
-                )}
-                {filteredForecast.length > fcPerPage && (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                    <Pagination count={Math.ceil(filteredForecast.length / fcPerPage)} page={fcPage} onChange={(e, p) => setFcPage(p)} color="primary" size="small" />
-                  </Box>
-                )}
-              </Box>
-            ) : (
-              // Desktop Forecast Table
-              <Paper sx={{ border: '1px solid #e5e7eb' }}>
-                <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        {['Product', 'SKU', 'Stock', 'Sold', 'Velocity', 'Days Left', 'Status', 'Order', 'Value', 'Action'].map(h => (
-                          <TableCell key={h} sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }}>{h}</TableCell>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {paginatedForecast.map(v => {
-                        const status = FORECAST_STATUS[v.status] || FORECAST_STATUS.ok;
-                        return (
-                          <TableRow key={v.id} hover>
-                            <TableCell>
-                              <Typography variant="body2" fontWeight="bold">{v.product_name}</Typography>
-                              <Typography variant="caption" color="text.secondary">{v.variant_name}</Typography>
-                            </TableCell>
-                            <TableCell><Typography variant="caption" fontFamily="monospace">{v.sku}</Typography></TableCell>
-                            <TableCell align="right" fontWeight="bold">{v.current_stock}</TableCell>
-                            <TableCell align="right">{v.total_sold_period}</TableCell>
-                            <TableCell align="right" fontWeight="bold">{v.daily_velocity.toFixed(2)}/d</TableCell>
-                            <TableCell align="right">
-                              {v.daily_velocity > 0 ? (
-                                <Box>
-                                  <Typography fontWeight="bold" color={v.days_remaining <= 7 ? 'error.main' : 'success.main'}>
-                                    {v.days_remaining} days
-                                  </Typography>
-                                  <LinearProgress variant="determinate" value={Math.min((v.days_remaining / 60) * 100, 100)} color={v.days_remaining <= 7 ? 'error' : 'success'} sx={{ height: 4, borderRadius: 2 }} />
-                                </Box>
-                              ) : 'No data'}
-                            </TableCell>
-                            <TableCell align="center">
-                              <Chip size="small" color={status.color} label={status.label} sx={{ height: 18, fontSize: '0.6rem' }} />
-                            </TableCell>
-                            <TableCell align="right" sx={{ color: v.suggested_order > 0 ? 'error.main' : 'inherit', fontWeight: 'bold' }}>
-                              {v.suggested_order > 0 ? `+${v.suggested_order}` : '-'}
-                            </TableCell>
-                            <TableCell align="right" fontWeight="500">{formatCurrency(v.stock_value)}</TableCell>
-                            <TableCell align="center">
-                              <IconButton size="small" color="primary" onClick={() => handleViewDetail(v)}>
-                                <Visibility fontSize="small" />
-                              </IconButton>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                <Box sx={{ p: 1, display: 'flex', justifyContent: 'center' }}>
-                  <Pagination count={Math.ceil(filteredForecast.length / fcPerPage)} page={fcPage} onChange={(e, p) => setFcPage(p)} color="primary" size="small" />
-                </Box>
-              </Paper>
-            )}
-          </Box>
-        </Fade>
-      )}
-
-      {/* ==================== TAB 1: SALES ==================== */}
-      {activeTab === 1 && (
-        <Fade in>
-          <Box>
-            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
-              <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
-                <Grid item xs={6} md={3}>
-                  <TextField fullWidth size="small" type="date" label="From" value={salesFrom} onChange={(e) => setSalesFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={6} md={3}>
-                  <TextField fullWidth size="small" type="date" label="To" value={salesTo} onChange={(e) => setSalesTo(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Payment Mode</InputLabel>
-                    <Select value={salesPaymentMode} onChange={(e) => setSalesPaymentMode(e.target.value)} label="Payment Mode">
-                      <MenuItem value="all">All</MenuItem>
-                      <MenuItem value="cash">Cash</MenuItem>
-                      <MenuItem value="bank">Bank Transfer</MenuItem>
-                      <MenuItem value="credit">Credit</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <Button fullWidth variant="contained" size="small" onClick={loadSalesReport} sx={{ bgcolor: '#10b981' }}>Load</Button>
-                </Grid>
-              </Grid>
-            </Paper>
-
-            {!isMobile && (
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={12} md={4}>
-                  <Card sx={{ bgcolor: '#f0fdf4' }}>
-                    <CardContent><Typography variant="caption">Total Revenue</Typography>
-                      <Typography variant="h5" fontWeight="bold" color="green">{formatCurrency(salesSummary.total_sales)}</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid item xs={6} md={4}>
-                  <Card><CardContent><Typography variant="caption">Gross Profit</Typography>
-                    <Typography variant="h5" fontWeight="bold" color="primary">{formatCurrency(salesSummary.gross_profit)}</Typography>
-                  </CardContent></Card>
-                </Grid>
-                <Grid item xs={6} md={4}>
-                  <Card><CardContent><Typography variant="caption">Receivable</Typography>
-                    <Typography variant="h5" fontWeight="bold" color="error">{formatCurrency(salesSummary.total_due)}</Typography>
-                  </CardContent></Card>
-                </Grid>
-              </Grid>
-            )}
-
-            <Paper sx={{ border: '1px solid #e5e7eb' }}>
-              <TableContainer sx={{ maxHeight: isMobile ? 'calc(100vh - 350px)' : 'calc(100vh - 360px)' }}>
-                <Table size="small" stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      {['Invoice', 'Date', 'Customer', 'Qty', 'Total', 'Paid', 'Due', 'Mode'].map(h => (
-                        <TableCell key={h} sx={{ bgcolor: '#4b5563', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {salesData.map(sale => (
-                      <TableRow key={sale.id} hover>
-                        <TableCell sx={{ fontWeight: 'bold', color: 'primary.main', fontSize: isMobile ? '0.7rem' : '0.875rem' }}>{sale.invoice_no}</TableCell>
-                        <TableCell sx={{ fontSize: isMobile ? '0.65rem' : '0.8rem' }}>{formatDate(sale.date)}</TableCell>
-                        <TableCell sx={{ fontSize: isMobile ? '0.7rem' : '0.875rem' }}>{sale.customer_name || 'Walk-in'}</TableCell>
-                        <TableCell align="right">{sale.total_qty || 0}</TableCell>
-                        <TableCell align="right" fontWeight="bold">{formatCurrency(sale.grand_total)}</TableCell>
-                        <TableCell align="right" color="success.main">{formatCurrency(sale.paid_amount)}</TableCell>
-                        <TableCell align="right" color={sale.due_amount > 0 ? 'error.main' : 'inherit'}>{formatCurrency(sale.due_amount)}</TableCell>
-                        <TableCell align="center"><Chip size="small" label={String(sale.payment_mode || 'Cash').toUpperCase()} variant="outlined" sx={{ height: 16, fontSize: '0.5rem' }} /></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          </Box>
-        </Fade>
-      )}
-
-      {/* ==================== TAB 2: SUPPLIERS ==================== */}
-      {activeTab === 2 && (
-        <Fade in>
-          <Box>
-            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
-              <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
-                <Grid item xs={6} md={4}>
-                  <TextField fullWidth size="small" type="date" label="From" value={purchaseFrom} onChange={(e) => setPurchaseFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={6} md={4}>
-                  <TextField fullWidth size="small" type="date" label="To" value={purchaseTo} onChange={(e) => setPurchaseTo(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <Button fullWidth variant="contained" size="small" onClick={loadPurchaseReport} sx={{ bgcolor: '#10b981' }}>Load</Button>
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField fullWidth size="small" placeholder="Search suppliers..." value={supSearch} onChange={(e) => setSupSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray' }} /> }} />
-                </Grid>
-              </Grid>
-            </Paper>
-
-            <Paper sx={{ border: '1px solid #e5e7eb' }}>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      {['Supplier', 'Company', 'Contact', 'Bills', 'Total', 'Paid', 'Payable'].map(h => (
-                        <TableCell key={h} sx={{ bgcolor: '#0284c7', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filteredSuppliers.map(sup => (
-                      <TableRow key={sup.id} hover>
-                        <TableCell fontWeight="bold">{sup.name}</TableCell>
-                        <TableCell>{sup.company_name || '-'}</TableCell>
-                        <TableCell>{sup.phone || '-'}</TableCell>
-                        <TableCell align="center">{sup.bill_count}</TableCell>
-                        <TableCell align="right">{formatCurrency(sup.total_purchases)}</TableCell>
-                        <TableCell align="right" color="success.main">{formatCurrency(sup.total_paid)}</TableCell>
-                        <TableCell align="right" color={sup.current_balance > 0 ? 'error.main' : 'inherit'} fontWeight="bold">{formatCurrency(sup.current_balance)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          </Box>
-        </Fade>
-      )}
-
-      {/* ==================== TAB 3: CUSTOMERS ==================== */}
-      {activeTab === 3 && (
-        <Fade in>
-          <Box>
-            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
-              <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
-                <Grid item xs={6} md={4}>
-                  <TextField fullWidth size="small" type="date" label="From" value={customerFrom} onChange={(e) => setCustomerFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={6} md={4}>
-                  <TextField fullWidth size="small" type="date" label="To" value={customerTo} onChange={(e) => setCustomerTo(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <Button fullWidth variant="contained" size="small" onClick={loadCustomerReport} sx={{ bgcolor: '#10b981' }}>Load</Button>
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField fullWidth size="small" placeholder="Search customers..." value={custSearch} onChange={(e) => setCustSearch(e.target.value)} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray' }} /> }} />
-                </Grid>
-              </Grid>
-            </Paper>
-
-            <Paper sx={{ border: '1px solid #e5e7eb' }}>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      {['Customer', 'Phone', 'Shop', 'Period Sales', 'Period Paid', 'Balance'].map(h => (
-                        <TableCell key={h} sx={{ bgcolor: '#7c3aed', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filteredCustomers.map(cust => (
-                      <TableRow key={cust.id} hover>
-                        <TableCell fontWeight="bold">{cust.name}</TableCell>
-                        <TableCell>{cust.phone || '-'}</TableCell>
-                        <TableCell>{cust.shop_name || '-'}</TableCell>
-                        <TableCell align="right">{formatCurrency(cust.period_sales)}</TableCell>
-                        <TableCell align="right" color="success.main">{formatCurrency(cust.period_paid)}</TableCell>
-                        <TableCell align="right" color={cust.current_balance > 0 ? 'error.main' : 'inherit'} fontWeight="bold">{formatCurrency(cust.current_balance)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          </Box>
-        </Fade>
-      )}
-
-      {/* ==================== TAB 4: P&L ==================== */}
-      {activeTab === 4 && (
-        <Fade in>
-          <Paper sx={{ p: isMobile ? 2 : 3, maxWidth: 800, mx: 'auto', border: '1px solid #e5e7eb' }}>
-            <Typography variant={isMobile ? 'h6' : 'h6'} align="center" fontWeight="bold" color="primary" gutterBottom>Profit & Loss Statement</Typography>
-            <Typography variant="caption" align="center" display="block" color="text.secondary" sx={{ mb: 3 }}>
-              {formatDate(plFrom)} to {formatDate(plTo)}
-            </Typography>
-            <Divider sx={{ mb: 3 }} />
-
-            <Stack spacing={isMobile ? 1.5 : 2}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#f0fdf4', borderRadius: 1 }}>
-                <Typography fontWeight="bold" color="green">Revenue</Typography>
-                <Typography fontWeight="bold" color="green">{formatCurrency(plSummary.revenue)}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#fef2f2', borderRadius: 1 }}>
-                <Typography fontWeight="bold" color="red">COGS</Typography>
-                <Typography fontWeight="bold" color="red">-{formatCurrency(plSummary.cogs)}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#eff6ff', borderRadius: 1 }}>
-                <Typography variant="subtitle1" fontWeight="bold">Gross Profit</Typography>
-                <Typography variant="subtitle1" fontWeight="bold" color="primary.main">{formatCurrency(plSummary.gross)}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: '#fffbeb', borderRadius: 1 }}>
-                <Typography variant="body2">Expenses</Typography>
-                <Typography variant="body2">-{formatCurrency(plSummary.expenses)}</Typography>
-              </Box>
-              <Divider />
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2, bgcolor: plSummary.net >= 0 ? '#10b981' : '#ef4444', color: 'white', borderRadius: 2 }}>
-                <Typography variant="h6" fontWeight="bold">NET INCOME</Typography>
-                <Typography variant="h6" fontWeight="bold">{formatCurrency(plSummary.net)}</Typography>
-              </Box>
-            </Stack>
-          </Paper>
-        </Fade>
-      )}
-
-      {/* ==================== TAB 5: STOCK ==================== */}
-      {activeTab === 5 && (
-        <Fade in>
-          <Grid container spacing={isMobile ? 1 : 2}>
-            <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Category Distribution</Typography>
-              <Divider sx={{ mb: 1.5 }} />
-              {stockValuation.map((cat, i) => (
-                <Card key={i} variant="outlined" sx={{ mb: 1.5, bgcolor: '#f9fafb' }}>
-                  <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography fontWeight="bold">{cat.category_name}</Typography>
-                      <Chip size="small" label={`${cat.total_qty} units`} variant="outlined" sx={{ height: 18, fontSize: '0.55rem' }} />
-                    </Box>
-                    <Grid container spacing={1}>
-                      <Grid item xs={4}>
-                        <Typography variant="caption" color="text.secondary">Cost</Typography>
-                        <Typography variant="body2" fontWeight="bold">{formatCurrency(cat.stock_value_at_cost)}</Typography>
-                      </Grid>
-                      <Grid item xs={4}>
-                        <Typography variant="caption" color="text.secondary">Retail</Typography>
-                        <Typography variant="body2" color="green" fontWeight="bold">{formatCurrency(cat.stock_value_at_retail)}</Typography>
-                      </Grid>
-                      <Grid item xs={4}>
-                        <Typography variant="caption" color="text.secondary">Profit</Typography>
-                        <Typography variant="body2" color="primary.main" fontWeight="bold">{formatCurrency(cat.potential_profit)}</Typography>
-                      </Grid>
-                    </Grid>
-                  </CardContent>
-                </Card>
-              ))}
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Top Products</Typography>
-              <Divider sx={{ mb: 1.5 }} />
-              <Paper sx={{ border: '1px solid #e5e7eb' }}>
-                <TableContainer sx={{ maxHeight: 400 }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow sx={{ bgcolor: '#f9fafb' }}>
-                        <TableCell>Product</TableCell>
-                        <TableCell align="right">Sold</TableCell>
-                        <TableCell align="right">Revenue</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {topProducts.map((p, i) => (
-                        <TableRow key={i} hover>
-                          <TableCell>
-                            <Typography variant="body2" fontWeight="bold">{p.product_name}</Typography>
-                            <Typography variant="caption" color="text.secondary">{p.sku}</Typography>
-                          </TableCell>
-                          <TableCell align="right" fontWeight="bold">{p.total_sold} units</TableCell>
-                          <TableCell align="right" color="success.main" fontWeight="bold">{formatCurrency(p.total_revenue)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-            </Grid>
-          </Grid>
-        </Fade>
-      )}
-
-      {/* ==================== TAB 6: EXPENSES ==================== */}
-      {activeTab === 6 && (
-        <Fade in>
-          <Grid container spacing={isMobile ? 1 : 2}>
-            <Grid item xs={12} md={5}>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Expense Distribution</Typography>
-              <Divider sx={{ mb: 1.5 }} />
-              {expenseSummary.map((exp, i) => (
-                <Card key={i} sx={{ mb: 1.5, borderLeft: '4px solid #f59e0b' }}>
-                  <CardContent sx={{ p: isMobile ? 1.5 : 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
-                      <Typography fontWeight="bold">{exp.category}</Typography>
-                      <Typography variant="caption" color="text.secondary">{exp.count} transactions</Typography>
-                    </Box>
-                    <Box sx={{ textAlign: 'right' }}>
-                      <Typography fontWeight="bold" color="error.main">{formatCurrency(exp.total)}</Typography>
-                      <Typography variant="caption" sx={{ bgcolor: '#fef3c7', px: 1, borderRadius: 1 }}>{exp.percentage.toFixed(1)}%</Typography>
-                    </Box>
-                  </CardContent>
-                </Card>
-              ))}
-            </Grid>
-            <Grid item xs={12} md={7}>
-              <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
-                <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
-                  <Grid item xs={5}><TextField fullWidth size="small" type="date" label="From" value={expFrom} onChange={(e) => setExpFrom(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-                  <Grid item xs={5}><TextField fullWidth size="small" type="date" label="To" value={expTo} onChange={(e) => setExpTo(e.target.value)} InputLabelProps={{ shrink: true }} /></Grid>
-                  <Grid item xs={2}><Button fullWidth variant="outlined" size="small" onClick={loadExpenses}><Refresh /></Button></Grid>
-                </Grid>
-              </Paper>
-
-              <Paper sx={{ border: '1px solid #e5e7eb' }}>
-                <TableContainer sx={{ maxHeight: 'calc(100vh - 350px)' }}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        {['Date', 'Category', 'Description', 'Mode', 'Amount'].map(h => (
-                          <TableCell key={h} sx={{ bgcolor: '#ef4444', color: 'white', fontWeight: 'bold', fontSize: isMobile ? '0.6rem' : '0.75rem' }}>{h}</TableCell>
-                        ))}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {expenseData.map(e => (
-                        <TableRow key={e.id} hover>
-                          <TableCell sx={{ fontSize: isMobile ? '0.65rem' : '0.8rem' }}>{formatDate(e.date)}</TableCell>
-                          <TableCell><Chip label={e.category_name || 'General'} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.5rem' }} /></TableCell>
-                          <TableCell>{e.description || '-'}</TableCell>
-                          <TableCell>{String(e.payment_mode || 'Cash').toUpperCase()}</TableCell>
-                          <TableCell align="right" fontWeight="bold" color="error.main">{formatCurrency(e.amount)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-            </Grid>
-          </Grid>
-        </Fade>
-      )}
+      {/* ==================== CONFIRM DELETE DIALOG ==================== */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onClose={() => setConfirmDialog({ open: false, data: null, type: '' })}
+        onConfirm={handleConfirmDelete}
+        title="Confirm Delete"
+        message={`Are you sure you want to delete this ${confirmDialog.type || 'item'}? This action cannot be undone.`}
+      />
 
       {/* ==================== DETAIL DIALOG ==================== */}
       <Dialog open={detailDialog} onClose={() => setDetailDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>
@@ -1222,6 +1833,18 @@ export default function ReportsPage() {
           <Refresh />
         </Fab>
       )}
+
+      {/* ==================== SNACKBAR ==================== */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

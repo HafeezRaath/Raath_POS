@@ -202,6 +202,10 @@ export default function ExpensesPage() {
   // Category form
   const [newCategory, setNewCategory] = useState({ name: '', color: CATEGORY_COLORS[0], description: '' });
 
+  // Payment accounts
+  const [paymentAccounts, setPaymentAccounts] = useState([]);
+  const [selectedPaymentAccount, setSelectedPaymentAccount] = useState(null);
+
   // Snackbar
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
@@ -235,6 +239,36 @@ export default function ExpensesPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Load accounts when expense dialog opens
+  useEffect(() => {
+    if (expenseDialog) {
+      db.getAccounts?.().then(accs => {
+        setPaymentAccounts(accs?.filter(a => a.status === 'active' && !a.is_deleted) || []);
+      }).catch(() => setPaymentAccounts([]));
+    } else {
+      setSelectedPaymentAccount(null);
+    }
+  }, [expenseDialog]);
+
+  // Auto-select account based on payment mode
+  useEffect(() => {
+    if (!paymentAccounts.length) {
+      setSelectedPaymentAccount(null);
+      return;
+    }
+    const map = {
+      cash: 'cash',
+      bank: 'bank',
+      card: 'bank',
+      cheque: 'cheque',
+      jazzcash: 'jazzcash',
+      easypaisa: 'easypaisa'
+    };
+    const accType = map[formData.payment_mode] || formData.payment_mode;
+    const found = paymentAccounts.find(a => a.type === accType);
+    setSelectedPaymentAccount(found || null);
+  }, [formData.payment_mode, paymentAccounts]);
 
   // ==================== KEYBOARD SHORTCUTS ====================
   const handleOpenExpense = useCallback((expense = null) => {
@@ -373,7 +407,8 @@ export default function ExpensesPage() {
     const payload = {
       ...formData,
       amount: Number(formData.amount),
-      category_id: formData.category_id ? Number(formData.category_id) : null
+      category_id: formData.category_id ? Number(formData.category_id) : null,
+      account_id: selectedPaymentAccount?.id || null
     };
 
     try {
@@ -384,6 +419,21 @@ export default function ExpensesPage() {
         await db.createExpense(payload);
         setSnackbar({ open: true, message: 'Expense added!', severity: 'success' });
       }
+
+      // ✅ Expense save hone ke baad account se paisa deduct karo
+      if (!editingExpense && selectedPaymentAccount?.id) {
+        await db.createTransaction({
+          account_id: selectedPaymentAccount.id,
+          transaction_type: 'debit',
+          amount: Number(formData.amount),
+          description: `Expense: ${formData.title}`,
+          payment_mode: formData.payment_mode,
+          reference_no: formData.receipt_no || `EXP-${Date.now()}`,
+          date: new Date().toISOString(),
+          reference_type: 'expense'
+        });
+      }
+
       setExpenseDialog(false);
       setEditingExpense(null);
       await loadData();
@@ -737,15 +787,15 @@ export default function ExpensesPage() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow sx={{ bgcolor: 'primary.main' }}>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', width: 50 }}>#</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Receipt #</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Title</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Category</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Payment</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Amount</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Status</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold', width: 50 }}>#</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Date</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Receipt #</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Title</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Category</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold' }}>Payment</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Amount</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="center">Status</TableCell>
+                    <TableCell sx={{ color: 'black', fontWeight: 'bold' }} align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -922,6 +972,28 @@ export default function ExpensesPage() {
                     </Select>
                   </FormControl>
                 </Grid>
+                {selectedPaymentAccount && (
+                  <Grid item xs={12}>
+                    <Paper sx={{ p: 1.5, bgcolor: '#f0fdf4', borderRadius: 1, border: '1px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">Payment will deduct from</Typography>
+                        <Typography variant="body2" fontWeight="bold" color="success.dark">
+                          {selectedPaymentAccount.name} ({selectedPaymentAccount.type?.toUpperCase()})
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" fontWeight="bold" color="success.main">
+                        Bal: {formatCurrency(selectedPaymentAccount.current_balance)}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                )}
+                {!selectedPaymentAccount && formData.payment_mode && paymentAccounts.length > 0 && (
+                  <Grid item xs={12}>
+                    <Alert severity="warning" sx={{ py: 0.5 }}>
+                      No active account found for <strong>{formData.payment_mode.replace(/_/g, ' ')}</strong>. Please create this account in Accounts page first.
+                    </Alert>
+                  </Grid>
+                )}
                 <Grid item xs={12} md={6}>
                   <TextField
                     fullWidth
