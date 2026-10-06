@@ -1,7 +1,7 @@
 // ============================================================
 //  electron/ipc/index.js - Complete IPC Handler Registry
 //  100% Match with public/preload.js channels
-//  ✅ All db: channels | ✅ Print | ✅ Backup | ✅ FBR
+//  All db: channels | Print | Backup | FBR
 // ============================================================
 
 const { ipcMain, dialog, shell } = require('electron');
@@ -69,9 +69,17 @@ const safeDbCall = (fnName, ...args) => {
   return fn(...args);
 };
 
+// ==================== HELPER: SAFE REGISTER IPC HANDLER ====================
+const safeRegister = (channel, handler) => {
+  try {
+    ipcMain.removeHandler(channel);
+  } catch (e) {}
+  ipcMain.handle(channel, handler);
+};
+
 // ==================== HELPER: REGISTER DB HANDLER ====================
 const registerDb = (channel, fnName) => {
-  ipcMain.handle(channel, async (event, ...args) => {
+  safeRegister(channel, async (event, ...args) => {
     try {
       return await safeDbCall(fnName, ...args);
     } catch (err) {
@@ -82,14 +90,22 @@ const registerDb = (channel, fnName) => {
 };
 
 // ==================== CORE DB ====================
-ipcMain.handle('db-query', async (event, sql, params) => {
+safeRegister('db-query', async (event, sql, params) => {
   return safeDbCall('query', sql, params);
 });
-ipcMain.handle('db-close', async () => {
+safeRegister('db-close', async () => {
   return safeDbCall('close');
 });
-ipcMain.handle('db-transaction', async (event, queries) => {
+safeRegister('db-transaction', async (event, queries) => {
   return safeDbCall('transaction', queries);
+});
+
+// ==================== SYNC BATCH ====================
+safeRegister('db:syncCollectionToSqlite', async (event, tableName, items) => {
+  return safeDbCall('syncBatch', tableName, items);
+});
+safeRegister('db:syncBatch', async (event, tableName, items) => {
+  return safeDbCall('syncBatch', tableName, items);
 });
 
 // ==================== TRANSACTIONS ====================
@@ -98,7 +114,10 @@ registerDb('commit-transaction', 'commitTransaction');
 registerDb('rollback-transaction', 'rollbackTransaction');
 
 // ==================== CREATE SALE ====================
-registerDb('create-sale', 'createSale');
+// Note: Handled by sales.js if registered, fallback to db
+if (db.createSale) {
+  registerDb('create-sale', 'createSale');
+}
 
 // ==================== PASSWORD HASHING ====================
 ipcMain.handle('pbkdf2-hash', async (event, password, salt) => {

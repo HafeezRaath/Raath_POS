@@ -6,24 +6,24 @@ const { loadBackupSettings, saveBackupSettings } = require('../utils/settings');
 function registerPrintHandlers() {
   ipcMain.handle('get-printers', async () => {
     try {
-      const win = BrowserWindow.getFocusedWindow();
+      const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
       if (!win) return [];
 
       const printers = await win.webContents.getPrintersAsync();
       return printers.map(p => ({
         name: p.name,
-        displayName: p.displayName,
+        displayName: p.displayName || p.name,
         isDefault: p.isDefault,
       }));
     } catch (err) {
       log(LOG_LEVELS.ERROR, 'Get printers error:', err);
       try {
-        const win = BrowserWindow.getFocusedWindow();
+        const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
         if (!win) return [];
         const printers = win.webContents.getPrinters();
         return printers.map(p => ({
           name: p.name,
-          displayName: p.displayName,
+          displayName: p.displayName || p.name,
           isDefault: p.isDefault,
         }));
       } catch (fallbackErr) {
@@ -33,13 +33,15 @@ function registerPrintHandlers() {
     }
   });
 
-  ipcMain.handle('print-receipt', async (event, htmlContent) => {
+  ipcMain.handle('print-receipt', async (event, htmlContent, options = {}) => {
     try {
       const settings = loadBackupSettings();
-      const printerName = settings?.defaultPrinter || '';
+      const printerName = options?.printerName || settings?.defaultPrinter || '';
+      const silent = options?.silent !== undefined ? options.silent : true;
+      const copies = options?.copies || 1;
 
       const printWindow = new BrowserWindow({
-        width: 300,
+        width: 350,
         height: 600,
         show: false,
         webPreferences: {
@@ -56,11 +58,32 @@ function registerPrintHandlers() {
       await new Promise(resolve => setTimeout(resolve, 800));
 
       const printOptions = {
-        silent: true,
+        silent: silent,
         printBackground: true,
         deviceName: printerName || undefined,
+        copies: copies,
         margins: { marginType: 'none' }
       };
+
+      // Handle thermal receipt & barcode page sizes properly for Electron
+      if (options?.pageSize) {
+        if (typeof options.pageSize === 'string') {
+          const lower = options.pageSize.toLowerCase().trim();
+          if (lower === '80mm') {
+            printOptions.pageSize = { width: 80000, height: 300000 };
+          } else if (lower === '58mm') {
+            printOptions.pageSize = { width: 58000, height: 300000 };
+          } else if (lower.endsWith('mm')) {
+            const mm = parseFloat(lower) || 80;
+            printOptions.pageSize = { width: Math.round(mm * 1000), height: 300000 };
+          } else {
+            // Standard string sizes: A4, Legal, etc.
+            printOptions.pageSize = options.pageSize;
+          }
+        } else if (typeof options.pageSize === 'object' && options.pageSize.width && options.pageSize.height) {
+          printOptions.pageSize = options.pageSize;
+        }
+      }
 
       return new Promise((resolve) => {
         printWindow.webContents.print(printOptions, (success, failureReason) => {
@@ -71,7 +94,7 @@ function registerPrintHandlers() {
             if (!printWindow.isDestroyed()) {
               printWindow.close();
             }
-            resolve({ success });
+            resolve({ success, failureReason });
           }, 500);
         });
       });

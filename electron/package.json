@@ -1,0 +1,14 @@
+{
+  "name": "raath-pos-electron",
+  "version": "2.0.0",
+  "private": true,
+  "main": "main.js",
+  "description": "RAATH POS Desktop Application Shell",
+  "scripts": {
+    "start": "electron main.js",
+    "dev": "electron main.js"
+  },
+  "dependencies": {
+    "electron": "^42.1.0"
+  }
+}

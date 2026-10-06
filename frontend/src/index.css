@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    font-size: 15.5px;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  body {
+    @apply bg-slate-100 text-slate-900 antialiased min-h-screen;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-size: 1rem;
+    line-height: 1.55;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  input, select, textarea, button {
+    font-family: inherit;
+    font-size: 1rem;
+  }
+
+  ::selection {
+    background-color: #1c2580;
+    color: #ffffff;
+  }
+}
+
+/* Custom sleek scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+/* Print styles for POS Thermal Receipt and Invoice Printing */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .no-print,
+  nav,
+  aside,
+  header,
+  .mobile-nav-bar {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+}
