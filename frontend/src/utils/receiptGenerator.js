@@ -228,7 +228,7 @@ export const generateReceiptHTML = (data = {}, options = {}) => {
       max-width: ${dims.printableWidthMm}mm;
       margin: 0 auto;
       padding: ${dims.paddingMm}mm 1mm;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: 'Carlito', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-size: ${dims.fontSizePx}px;
       font-weight: 600;
       line-height: 1.3;

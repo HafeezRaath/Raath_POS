@@ -135,9 +135,32 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'distributors', '`credit_limit` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'distributors', '`commission_percent` DECIMAL(5,2) DEFAULT 0');
 
+    await addColumnIfMissing(connection, 'product_variants', '`variant_name` VARCHAR(150) DEFAULT "Default"');
     await addColumnIfMissing(connection, 'product_variants', '`name` VARCHAR(150) DEFAULT "Default"');
+    await addColumnIfMissing(connection, 'product_variants', '`retail_price` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'product_variants', '`sale_price` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'product_variants', '`wholesale_price` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'product_variants', '`minimum_retail_price` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'product_variants', '`current_stock` DECIMAL(12,3) DEFAULT 0');
     await addColumnIfMissing(connection, 'product_variants', '`stock` DECIMAL(12,3) DEFAULT 0');
+    await addColumnIfMissing(connection, 'product_variants', '`stock_alert_quantity` DECIMAL(12,3) DEFAULT 5');
+    await addColumnIfMissing(connection, 'product_variants', '`image_url` LONGTEXT');
+    await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');
+
+    await addColumnIfMissing(connection, 'product_serialized_items', '`product_variant_id` INT NULL');
+    await addColumnIfMissing(connection, 'product_serialized_items', '`serial_number_or_imei` VARCHAR(100)');
+    await addColumnIfMissing(connection, 'product_serialized_items', '`purchase_item_id` INT NULL');
+
+    try {
+      await connection.query("UPDATE `product_variants` SET `variant_name` = COALESCE(`name`, 'Default') WHERE `variant_name` IS NULL OR `variant_name` = ''");
+      await connection.query("UPDATE `product_variants` SET `name` = COALESCE(`variant_name`, 'Default') WHERE `name` IS NULL OR `name` = ''");
+      await connection.query("UPDATE `product_variants` SET `retail_price` = `sale_price` WHERE (`retail_price` IS NULL OR `retail_price` = 0) AND `sale_price` > 0");
+      await connection.query("UPDATE `product_variants` SET `sale_price` = `retail_price` WHERE (`sale_price` IS NULL OR `sale_price` = 0) AND `retail_price` > 0");
+      await connection.query("UPDATE `product_variants` SET `current_stock` = `stock` WHERE (`current_stock` IS NULL OR `current_stock` = 0) AND `stock` > 0");
+      await connection.query("UPDATE `product_variants` SET `stock` = `current_stock` WHERE (`stock` IS NULL OR `stock` = 0) AND `current_stock` > 0");
+    } catch (syncErr) {
+      // Ignore if table was empty
+    }
 
     // 6. Ensure tenant_id on all 63 tables
     for (const tbl of TENANT_TABLES) {

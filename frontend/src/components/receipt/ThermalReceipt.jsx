@@ -285,7 +285,7 @@ export const ThermalReceipt = React.forwardRef(({
         border: currentDesign === 'design3' ? '1.5px solid #000000' : '1px solid #9ca3af',
         borderRadius: 0,
         boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        fontFamily: "'Carlito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
         fontWeight: 600,
         color: '#000000',
         boxSizing: 'border-box'

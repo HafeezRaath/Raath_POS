@@ -276,6 +276,7 @@ export const Typography = forwardRef(function Typography(
     align,
     fontWeight,
     gutterBottom,
+    noWrap = false,
     className = '',
     children,
     sx,
@@ -308,15 +309,15 @@ export const Typography = forwardRef(function Typography(
     h2: 'text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900',
     h3: 'text-xl sm:text-2xl font-bold tracking-tight text-slate-900',
     h4: 'text-lg sm:text-xl font-bold text-slate-900',
-    h5: 'text-base sm:text-lg font-bold text-slate-900',
-    h6: 'text-base sm:text-[17px] font-bold text-slate-900',
-    subtitle1: 'text-base sm:text-[16.5px] font-bold text-slate-900',
-    subtitle2: 'text-[15px] font-semibold text-slate-800',
-    body1: 'text-base text-slate-800 leading-relaxed font-normal',
-    body2: 'text-[14.5px] sm:text-[15px] text-slate-700 leading-normal',
-    caption: 'text-[13px] text-slate-500 leading-normal font-medium',
-    button: 'text-[14px] font-bold tracking-wide',
-    overline: 'text-[12.5px] font-bold uppercase tracking-widest text-slate-400',
+    h5: 'text-[17.5px] sm:text-lg font-bold text-slate-900',
+    h6: 'text-[16.5px] sm:text-[18px] font-bold text-slate-900',
+    subtitle1: 'text-[17px] sm:text-[18.5px] font-bold text-slate-900',
+    subtitle2: 'text-[16px] font-semibold text-slate-800',
+    body1: 'text-[16.5px] sm:text-[17px] text-slate-800 leading-relaxed font-normal',
+    body2: 'text-[15.5px] sm:text-[16px] text-slate-700 leading-normal',
+    caption: 'text-[13.5px] sm:text-[14px] text-slate-500 leading-normal font-medium',
+    button: 'text-[15px] sm:text-[15.5px] font-bold tracking-wide',
+    overline: 'text-[13.5px] font-bold uppercase tracking-widest text-slate-400',
   };
 
   const alignClass = align ? `text-${align}` : '';
@@ -330,11 +331,13 @@ export const Typography = forwardRef(function Typography(
       ? 'font-normal'
       : '';
 
+  const noWrapStyle = noWrap ? { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : {};
+
   return (
     <Component
       ref={ref}
-      className={`${variantClasses[variant] || 'text-sm'} ${alignClass} ${gutterClass} ${weightClass} ${className}`}
-      style={{ ...parsedSx, ...style }}
+      className={`${variantClasses[variant] || 'text-base'} ${alignClass} ${gutterClass} ${weightClass} ${className}`}
+      style={{ ...noWrapStyle, ...parsedSx, ...style }}
       {...props}
     >
       {children}

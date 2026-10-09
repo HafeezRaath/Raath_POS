@@ -19,7 +19,7 @@ import {
   Image as ImageIcon, Discount, AttachMoney, TrendingUp,
   ArrowBack, ArrowForward, RemoveCircle, VerifiedUser, Sync as SyncIcon,
   QrCode, Refresh as RefreshIcon, ToggleOn, ToggleOff,
-  ReceiptLong, Remove
+  ReceiptLong, Remove, DeleteOutline, Sliders, PointOfSale, Store
 } from '../components/ui/icons';
 import db from '../database/db';
 import useSyncListener from '../hooks/useSyncListener';
@@ -201,108 +201,136 @@ const ProductCategoryGrid = ({
         '&::-webkit-scrollbar-track': { bgcolor: '#f1f1f1', borderRadius: 2 }
       }}>
         <Button
-          variant={selectedCategory === '' ? 'contained' : 'outlined'}
+          variant="contained"
           size="small"
           onClick={() => setSelectedCategory('')}
           sx={{ 
-            borderRadius: 20, 
-            px: 1.5, 
-            py: 0.3, 
-            fontSize: '0.6rem',
+            borderRadius: 2.5, 
+            px: 2, 
+            py: 0.6, 
+            fontSize: '0.75rem',
+            fontWeight: 700,
             whiteSpace: 'nowrap',
-            bgcolor: selectedCategory === '' ? '#10b981' : 'transparent',
-            color: selectedCategory === '' ? 'white' : '#10b981',
-            borderColor: '#10b981',
-            minHeight: 28,
+            bgcolor: selectedCategory === '' ? '#1c2580' : '#ffffff',
+            color: selectedCategory === '' ? '#ffffff' : '#334155',
+            border: selectedCategory === '' ? '1px solid #1c2580' : '1px solid #e2e8f0',
+            boxShadow: selectedCategory === '' ? '0 2px 6px rgba(28,37,128,0.25)' : 'none',
+            textTransform: 'none',
+            minHeight: 32,
             '&:hover': {
-              bgcolor: selectedCategory === '' ? '#059669' : '#f0fdf4'
+              bgcolor: selectedCategory === '' ? '#151b60' : '#f8fafc',
+              borderColor: selectedCategory === '' ? '#151b60' : '#cbd5e1'
             }
           }}
         >
-          All
+          🏷️ All Products
         </Button>
-        {categories.map(cat => (
-          <Button
-            key={cat.id}
-            variant={String(selectedCategory) === String(cat.id) ? 'contained' : 'outlined'}
-            size="small"
-            onClick={() => setSelectedCategory(String(cat.id))}
-            sx={{ 
-              borderRadius: 20, 
-              px: 1.5, 
-              py: 0.3, 
-              fontSize: '0.6rem',
-              whiteSpace: 'nowrap',
-              bgcolor: Number(selectedCategory) === Number(cat.id) ? '#10b981' : 'transparent',
-              color: Number(selectedCategory) === Number(cat.id) ? 'white' : '#10b981',
-              borderColor: '#10b981',
-              minHeight: 28,
-              '&:hover': {
-              bgcolor: String(selectedCategory) === String(cat.id) ? '#10b981' : 'transparent',
-              }
-            }}
-          >
-            {cat.name}
-            <Chip 
-              size="small" 
-              label={products.filter(p => String(p.category_id) === String(cat.id)).length} 
+        {categories.map(cat => {
+          const count = products.filter(p => String(p.category_id) === String(cat.id)).length;
+          const isSelected = String(selectedCategory) === String(cat.id);
+          return (
+            <Button
+              key={cat.id}
+              size="small"
+              onClick={() => setSelectedCategory(String(cat.id))}
               sx={{ 
-                height: 16, 
-                fontSize: '0.4rem', 
-                ml: 0.5,
-                bgcolor: Number(selectedCategory) === Number(cat.id) ? 'rgba(255,255,255,0.25)' : '#e5e7eb',
-                               color: String(selectedCategory) === String(cat.id) ? 'white' : '#10b981',
-                minWidth: 18
-              }} 
-            />
-          </Button>
-        ))}
+                borderRadius: 2.5, 
+                px: 1.5, 
+                py: 0.6, 
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                bgcolor: isSelected ? '#1c2580' : '#ffffff',
+                color: isSelected ? '#ffffff' : '#334155',
+                border: isSelected ? '1px solid #1c2580' : '1px solid #e2e8f0',
+                boxShadow: isSelected ? '0 2px 6px rgba(28,37,128,0.25)' : 'none',
+                textTransform: 'none',
+                minHeight: 32,
+                gap: 0.75,
+                '&:hover': {
+                  bgcolor: isSelected ? '#151b60' : '#f8fafc',
+                  borderColor: isSelected ? '#151b60' : '#cbd5e1'
+                }
+              }}
+            >
+              <span>📁</span> {cat.name}
+              <Box 
+                component="span"
+                sx={{ 
+                  px: 0.8, 
+                  py: 0.1, 
+                  borderRadius: 2, 
+                  fontSize: '0.68rem', 
+                  fontWeight: 800,
+                  bgcolor: isSelected ? 'rgba(255,255,255,0.2)' : '#e8eaf6',
+                  color: isSelected ? '#ffffff' : '#1c2580'
+                }} 
+              >
+                {count}
+              </Box>
+            </Button>
+          );
+        })}
       </Box>
 
       {/* TOOLBAR */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
-        <Typography variant="subtitle2" fontWeight="bold" fontSize="0.75rem">
-          Products
+      <Box sx={{ display: 'flex', gap: 1, mb: 1.25, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
+        <Typography variant="subtitle2" fontWeight="800" sx={{ fontSize: '0.82rem', color: '#1c2580' }}>
+          Available Items
         </Typography>
         <Chip 
           size="small" 
           label={`${filteredProducts.length} items`} 
-          color="primary" 
-          variant="outlined" 
-          sx={{ height: 20, fontSize: '0.55rem' }}
+          sx={{ height: 22, fontSize: '0.68rem', fontWeight: 800, bgcolor: '#e8eaf6', color: '#1c2580', border: '1px solid #c5cae9' }}
         />
-        <ButtonGroup size="small" sx={{ ml: 'auto' }}>
-          <Tooltip title="Toggle Cost Price">
-            <Button 
-              variant={showCostPrice ? 'contained' : 'outlined'} 
-              onClick={() => {
-                setShowCostPrice(!showCostPrice);
-                if (showWholesalePrice) setShowWholesalePrice(false);
-              }}
-              sx={{ fontSize: '0.55rem', py: 0.3 }}
-            >
-              Cost
-            </Button>
-          </Tooltip>
-          <Tooltip title="Toggle Wholesale Price">
-            <Button 
-              variant={showWholesalePrice ? 'contained' : 'outlined'} 
-              onClick={() => {
-                setShowWholesalePrice(!showWholesalePrice);
-                if (showCostPrice) setShowCostPrice(false);
-              }}
-              sx={{ fontSize: '0.55rem', py: 0.3 }}
-            >
-              Whole
-            </Button>
-          </Tooltip>
-        </ButtonGroup>
+        <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
+          <Button 
+            size="small"
+            variant={showCostPrice ? 'contained' : 'outlined'}
+            onClick={() => setShowCostPrice(!showCostPrice)}
+            sx={{ 
+              borderRadius: 2,
+              fontSize: '0.72rem', 
+              py: 0.4,
+              px: 1.5,
+              bgcolor: showCostPrice ? '#d97706' : '#ffffff',
+              color: showCostPrice ? '#ffffff' : '#d97706',
+              borderColor: '#d97706',
+              fontWeight: 700,
+              textTransform: 'none',
+              boxShadow: 'none',
+              '&:hover': { bgcolor: showCostPrice ? '#b45309' : '#fffbeb', borderColor: '#d97706' }
+            }}
+          >
+            Cost Price {showCostPrice ? '✓' : ''}
+          </Button>
+          <Button 
+            size="small"
+            variant={showWholesalePrice ? 'contained' : 'outlined'}
+            onClick={() => setShowWholesalePrice(!showWholesalePrice)}
+            sx={{ 
+              borderRadius: 2,
+              fontSize: '0.72rem', 
+              py: 0.4,
+              px: 1.5,
+              bgcolor: showWholesalePrice ? '#1c2580' : '#ffffff',
+              color: showWholesalePrice ? '#ffffff' : '#1c2580',
+              borderColor: '#1c2580',
+              fontWeight: 700,
+              textTransform: 'none',
+              boxShadow: 'none',
+              '&:hover': { bgcolor: showWholesalePrice ? '#151b60' : '#e8eaf6', borderColor: '#1c2580' }
+            }}
+          >
+            Wholesale Price {showWholesalePrice ? '✓' : ''}
+          </Button>
+        </Box>
         {fbrEnabled && (
           <Chip 
             size="small" 
             label="FBR" 
             color="success" 
-            sx={{ fontSize: '0.45rem', height: 20 }}
+            sx={{ fontSize: '0.55rem', height: 22, fontWeight: 800 }}
           />
         )}
       </Box>
@@ -312,10 +340,11 @@ const ProductCategoryGrid = ({
         flex: 1, 
         overflow: 'auto', 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
-        gridAutoRows: 'minmax(200px, auto)',
-        gap: 1,
+        gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', 
+        gridAutoRows: '240px',
+        gap: 1.25,
         alignContent: 'start',
+        p: 0.5,
         '&::-webkit-scrollbar': { width: 4 },
         '&::-webkit-scrollbar-thumb': { bgcolor: '#10b981', borderRadius: 2 },
         '&::-webkit-scrollbar-track': { bgcolor: '#f1f1f1', borderRadius: 2 }
@@ -338,20 +367,24 @@ const ProductCategoryGrid = ({
               key={product.id} 
               sx={{ 
                 cursor: 'pointer', 
-                position: 'relative',
-                minHeight: 200,
+                position: 'relative', 
+                height: 240,
+                maxHeight: 240,
                 opacity: stock <= 0 ? 0.5 : 1,
-                border: inCart ? '2px solid #10b981' : '1px solid #e5e7eb',
+                border: inCart ? '2px solid #1c2580' : '1px solid #e2e8f0',
                 '&:hover': { 
-                  borderColor: '#10b981', 
-                  boxShadow: 2,
+                  borderColor: inCart ? '#1c2580' : '#3949ab', 
+                  boxShadow: '0 4px 14px rgba(28,37,128,0.12)',
                   transform: 'translateY(-1px)',
                   transition: 'all 0.15s ease'
                 },
                 transition: 'all 0.15s ease',
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                bgcolor: '#ffffff',
+                borderRadius: 2,
+                overflow: 'hidden'
               }}
               onClick={() => stock > 0 && !inCart && addToCart(product, 0)}
             >
@@ -375,113 +408,209 @@ const ProductCategoryGrid = ({
                   position: 'absolute', 
                   top: 0, 
                   left: 0, 
-                  bgcolor: '#10b981', 
+                  bgcolor: '#1c2580', 
                   color: 'white', 
-                  px: 0.8, 
-                  py: 0.2,
-                  fontSize: '0.55rem',
-                  fontWeight: 'bold',
-                  borderRadius: '4px 0 4px 0',
-                  zIndex: 1
+                  px: 0.9, 
+                  py: 0.25,
+                  fontSize: '0.62rem',
+                  fontWeight: 800,
+                  borderRadius: '4px 0 6px 0',
+                  zIndex: 1,
+                  letterSpacing: '0.01em'
                 }}>
-                  {cartQty}x
+                  ✓ {cartQty} IN CART
                 </Box>
               )}
-              <CardContent sx={{ p: 0.8, '&:last-child': { pb: 0.8 }, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                {/* PRODUCT IMAGE */}
-                {product.image_url ? (
-                  <Box sx={{ 
-                    width: '100%', 
-                    height: 70, 
-                    bgcolor: '#f3f4f6', 
-                    borderRadius: 1,
-                    mb: 0.5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden'
-                  }}>
-                    <img 
-                      src={product.image_url} 
-                      alt={product.product_name || product.variant_name} 
-                      style={{ 
-                        maxWidth: '100%', 
-                        maxHeight: '100%', 
-                        objectFit: 'contain' 
-                      }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
+              <CardContent sx={{ 
+                p: '8px 10px', 
+                '&:last-child': { pb: '8px' }, 
+                flex: 1, 
+                display: 'flex', 
+                flexDirection: 'column', 
+                justifyContent: 'space-between',
+                overflow: 'hidden'
+              }}>
+                {/* TOP SECTION: Photo / Box + Product Name + SKU */}
+                <Box>
+                  {/* PRODUCT IMAGE / 3D BOX */}
+                  {product.image_url ? (
+                    <Box sx={{ 
+                      width: '100%', 
+                      height: 56, 
+                      bgcolor: '#f8fafc', 
+                      borderRadius: 1,
+                      mb: 0.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden'
+                    }}>
+                      <img 
+                        src={product.image_url} 
+                        alt={product.product_name || product.variant_name} 
+                        style={{ 
+                          maxWidth: '100%', 
+                          maxHeight: '100%', 
+                          objectFit: 'contain' 
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </Box>
+                  ) : (
+                    <Box sx={{ 
+                      width: '100%', 
+                      height: 56, 
+                      bgcolor: '#f8fafc', 
+                      borderRadius: 1,
+                      mb: 0.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '28px'
+                    }}>
+                      📦
+                    </Box>
+                  )}
+                  
+                  {/* PRODUCT NAME (Compact & neat, strictly 28px height so all cards align identically) */}
+                  <Typography 
+                    variant="caption" 
+                    fontWeight="bold" 
+                    title={product.product_name || product.variant_name} 
+                    sx={{ 
+                      color: '#0f172a',
+                      fontSize: '0.72rem',
+                      lineHeight: 1.25,
+                      height: 28,
+                      minHeight: 28,
+                      maxHeight: 28,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      wordBreak: 'break-word',
+                      mb: 0.2
+                    }}
+                  >
+                    {product.product_name || product.variant_name}
+                  </Typography>
+
+                  {/* SKU (Clean truncate, strictly 14px height) */}
+                  <Typography 
+                    variant="caption" 
+                    color="text.secondary" 
+                    noWrap 
+                    sx={{ 
+                      fontSize: '0.62rem', 
+                      display: 'block',
+                      lineHeight: '14px',
+                      height: 14,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      mb: 0.4
+                    }}
+                  >
+                    SKU: {product.sku || 'N/A'}
+                  </Typography>
+                </Box>
+
+                {/* BOTTOM SECTION: Retail Price + Stock + Wholesale & Cost (Strictly aligned to bottom) */}
+                <Box sx={{ mt: 'auto' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 20, mb: 0.3 }}>
+                    <Typography variant="body2" fontWeight="800" sx={{ color: '#1c2580', fontSize: '0.88rem', lineHeight: 1 }}>
+                      Rs. {Number(price).toLocaleString('en-PK')}
+                    </Typography>
+                    <Chip 
+                      label={`Stock: ${stock}`} 
+                      size="small" 
+                      sx={{ 
+                        height: 18, 
+                        fontSize: '0.62rem', 
+                        fontWeight: 800, 
+                        px: 0.4,
+                        bgcolor: stock > 10 ? '#dcfce7' : stock > 0 ? '#fef3c7' : '#fee2e2',
+                        color: stock > 10 ? '#15803d' : stock > 0 ? '#b45309' : '#b91c1c'
+                      }} 
                     />
                   </Box>
-                ) : (
-                  <Box sx={{ 
-                    width: '100%', 
-                    height: 70, 
-                    bgcolor: '#f3f4f6', 
-                    borderRadius: 1,
-                    mb: 0.5,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '28px',
-                    opacity: 0.3
-                  }}>
-                    <ImageIcon sx={{ fontSize: 28, color: 'text.disabled', opacity: 0.5 }} />
-                  </Box>
-                )}
-                
-                <Typography variant="caption" fontWeight="bold" noWrap fontSize="0.65rem" title={product.product_name || product.variant_name}>
-                  {product.product_name || product.variant_name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block" noWrap fontSize="0.5rem">
-                  SKU: {product.sku || 'N/A'}
-                </Typography>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.3 }}>
-                  <Typography variant="body2" fontWeight="bold" color="#10b981" fontSize="0.7rem">
-                    Rs. {Number(price).toFixed(0)}
-                  </Typography>
-                  <Chip 
-                    label={stock} 
-                    size="small" 
-                    sx={{ height: 14, fontSize: '0.4rem' }} 
-                    color={stock > 10 ? 'success' : stock > 0 ? 'warning' : 'error'} 
-                  />
+
+                  {/* WHOLESALE & COST PRICE MATCHING DASHBOARD THEME */}
+                  {(showWholesalePrice || showCostPrice) && (
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      justifyContent: 'center',
+                      gap: 0.1, 
+                      pt: 0.3,
+                      borderTop: '1px dashed #e2e8f0',
+                      height: (showWholesalePrice && wholesalePrice > 0 && showCostPrice && costPrice > 0) ? 30 : 16
+                    }}>
+                      {showWholesalePrice && wholesalePrice > 0 && (
+                        <Typography sx={{ fontSize: '0.70rem', color: '#1c2580', fontWeight: 800, lineHeight: 1.1 }}>
+                          Whole: Rs. {Number(wholesalePrice).toLocaleString('en-PK')}
+                        </Typography>
+                      )}
+                      {showCostPrice && costPrice > 0 && (
+                        <Typography sx={{ fontSize: '0.70rem', color: '#d97706', fontWeight: 800, lineHeight: 1.1 }}>
+                          Cost: Rs. {Number(costPrice).toLocaleString('en-PK')}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
                 </Box>
-                {showCostPrice && (
-                  <Typography variant="caption" color="text.secondary" fontSize="0.45rem">
-                    Cost: Rs. {Number(costPrice).toFixed(0)}
-                  </Typography>
-                )}
-                {showWholesalePrice && (
-                  <Typography variant="caption" color="text.secondary" fontSize="0.45rem">
-                    Whole: Rs. {Number(wholesalePrice).toFixed(0)}
-                  </Typography>
-                )}
               </CardContent>
 
-              {/* CART CONTROLS FOR GRID CARDS */}
+              {/* CART CONTROLS FOR GRID CARDS - DASHBOARD THEME */}
               {inCart && (
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#f0fdf4', px: 1, py: 0.5, borderTop: '1px solid #bbf7d0', flexShrink: 0, minHeight: 32 }} onClick={(e) => e.stopPropagation()}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  bgcolor: '#e8eaf6', 
+                  px: 1, 
+                  py: 0.25, 
+                  borderTop: '1px solid #c5cae9', 
+                  flexShrink: 0, 
+                  height: 28,
+                  minHeight: 28 
+                }} onClick={(e) => e.stopPropagation()}>
                   <IconButton 
                     size="small" 
-                    color="error" 
                     onClick={() => updateCartQty(product.id, cartQty - 1)}
-                    sx={{ p: 0.2 }}
+                    sx={{ 
+                      width: 20, 
+                      height: 20, 
+                      bgcolor: '#fee2e2', 
+                      color: '#ef4444', 
+                      borderRadius: 1, 
+                      p: 0,
+                      '&:hover': { bgcolor: '#fca5a5' } 
+                    }}
                   >
-                    <Remove fontSize="small" />
+                    <Remove sx={{ fontSize: 13, fontWeight: 900 }} />
                   </IconButton>
-                  <Typography variant="caption" fontWeight="bold" color="#059669">
+                  <Typography variant="body2" fontWeight="800" color="#1c2580" sx={{ fontSize: '0.82rem' }}>
                     {cartQty}
                   </Typography>
                   <IconButton 
                     size="small" 
-                    color="success" 
                     onClick={() => updateCartQty(product.id, cartQty + 1)}
                     disabled={cartQty >= stock}
-                    sx={{ p: 0.2 }}
+                    sx={{ 
+                      width: 20, 
+                      height: 20, 
+                      bgcolor: '#c5cae9', 
+                      color: '#1c2580', 
+                      borderRadius: 1, 
+                      p: 0,
+                      '&:hover': { bgcolor: '#9fa8da' } 
+                    }}
                   >
-                    <Add fontSize="small" />
+                    <Add sx={{ fontSize: 13, fontWeight: 900 }} />
                   </IconButton>
                 </Box>
               )}
@@ -703,13 +832,13 @@ const PrinterSettingsDialog = ({ open, onClose, onPrinterSelect }) => {
               Tips:
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block">
-              • Press F12 to open this dialog anytime in Billing
+              ΓÇó Press F12 to open this dialog anytime in Billing
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block">
-              • Thermal printer settings sync across Billing, History, Services & Settings
+              ΓÇó Thermal printer settings sync across Billing, History, Services & Settings
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block">
-              • All 4 designs are optimized with crisp monochrome thermal contrast (no washed-out gray)
+              ΓÇó All 4 designs are optimized with crisp monochrome thermal contrast (no washed-out gray)
             </Typography>
           </Box>
         </Box>
@@ -794,6 +923,122 @@ const ShortcutsHelp = ({ open, onClose }) => {
   );
 };
 
+// ==================== SPLIT PAYMENT DIALOG ====================
+const SplitPaymentDialog = ({ 
+  open, 
+  onClose, 
+  splitPayments, 
+  handleSplitAmountChange, 
+  handleSplitAccountChange, 
+  handleResetSplit, 
+  handleFillRest, 
+  accounts, 
+  grandTotal 
+}) => {
+  const allocated = Object.values(splitPayments).reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0);
+  const remaining = Math.max(0, grandTotal - allocated);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ bgcolor: '#0c1427', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h6" fontWeight="bold">🔀 Split Payment Breakdown</Typography>
+        </Box>
+        <IconButton size="small" onClick={onClose} sx={{ color: 'white' }}>
+          <Close fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent sx={{ p: 2.5, bgcolor: '#f8fafc' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, p: 1.5, bgcolor: '#ffffff', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+          <Box>
+            <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600 }}>Grand Total Payable</Typography>
+            <Typography variant="h6" fontWeight="900" sx={{ color: '#10b981' }}>{formatPKR(grandTotal)}</Typography>
+          </Box>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600 }}>Allocated / Remaining</Typography>
+            <Typography variant="subtitle2" fontWeight="800" sx={{ color: remaining === 0 ? '#10b981' : '#dc2626' }}>
+              Allocated: {formatPKR(allocated)} • Remaining: {formatPKR(remaining)}
+            </Typography>
+          </Box>
+        </Box>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+          {[
+            { key: 'cash', label: 'Cash', icon: '💵', color: '#16a34a', bgBtn: '#ecfdf5', borderBtn: '#86efac' },
+            { key: 'jazzcash', label: 'JazzCash', icon: '📱', color: '#dc2626', bgBtn: '#fef2f2', borderBtn: '#fca5a5' },
+            { key: 'easypaisa', label: 'EasyPaisa', icon: '📱', color: '#0d9488', bgBtn: '#f0fdfa', borderBtn: '#99f6e4' },
+            { key: 'bank', label: 'Bank', icon: '🏦', color: '#2563eb', bgBtn: '#eff6ff', borderBtn: '#bfdbfe' },
+          ].map(({ key, label, icon, color, bgBtn, borderBtn }) => (
+            <Box key={key} sx={{ border: '1px solid #e2e8f0', borderRadius: 2, p: 1.25, bgcolor: '#ffffff' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+                <Typography fontWeight="bold" sx={{ color, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <span>{icon}</span> {label}
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => handleFillRest(key)}
+                  sx={{
+                    color,
+                    borderColor: borderBtn,
+                    bgcolor: bgBtn,
+                    fontSize: '0.68rem',
+                    py: 0.25,
+                    px: 1.2,
+                    textTransform: 'none',
+                    fontWeight: 'bold',
+                    borderRadius: 1.5,
+                    '&:hover': { borderColor: color, bgcolor: bgBtn }
+                  }}
+                >
+                  Fill Remaining
+                </Button>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  type="number"
+                  placeholder="0.00"
+                  value={splitPayments[key].amount}
+                  onChange={(e) => handleSplitAmountChange(key, e.target.value)}
+                  sx={{
+                    width: '45%',
+                    '& .MuiOutlinedInput-root': { height: 38, bgcolor: '#f8fafc', borderRadius: 1.5 },
+                    '& input': { fontSize: '0.9rem', fontWeight: 'bold' }
+                  }}
+                />
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select
+                    value={splitPayments[key].accountId || ''}
+                    onChange={(e) => handleSplitAccountChange(key, e.target.value)}
+                    displayEmpty
+                    sx={{ height: 38, fontSize: '0.78rem', bgcolor: '#f8fafc', borderRadius: 1.5 }}
+                  >
+                    <MenuItem value="" disabled><em>Select Account</em></MenuItem>
+                    {accounts.map(acc => (
+                      <MenuItem key={acc.id} value={acc.id} sx={{ fontSize: '0.78rem' }}>
+                        {acc.name} ({acc.type || 'account'})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ p: 2, bgcolor: '#f8fafc', borderTop: '1px solid #e2e8f0', justifyContent: 'space-between' }}>
+        <Button onClick={handleResetSplit} color="inherit" sx={{ fontWeight: 700, fontSize: '0.78rem' }}>
+          Reset All
+        </Button>
+        <Button onClick={onClose} variant="contained" sx={{ bgcolor: '#10b981', fontWeight: 800, px: 3, '&:hover': { bgcolor: '#059669' } }}>
+          Done & Apply
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 // ==================== MAIN COMPONENT ====================
 export default function BillingPage() {
   const navigate = useNavigate();
@@ -834,10 +1079,30 @@ export default function BillingPage() {
   const [offers, setOffers] = useState([]);
   const [showOffersDialog, setShowOffersDialog] = useState(false);
   const [mobileDrawer, setMobileDrawer] = useState(false);
+  const [showSplitModal, setShowSplitModal] = useState(false);
   const [scanMode, setScanMode] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [showCostPrice, setShowCostPrice] = useState(false);
   const [showWholesalePrice, setShowWholesalePrice] = useState(false);
+  const [revealedWholesaleIds, setRevealedWholesaleIds] = useState({});
+  const wholesaleTimersRef = useRef({});
+
+  const handleRevealWholesale = useCallback((id) => {
+    if (wholesaleTimersRef.current[id]) {
+      clearTimeout(wholesaleTimersRef.current[id]);
+    }
+    setRevealedWholesaleIds(prev => ({ ...prev, [id]: true }));
+    wholesaleTimersRef.current[id] = setTimeout(() => {
+      setRevealedWholesaleIds(prev => ({ ...prev, [id]: false }));
+      delete wholesaleTimersRef.current[id];
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      Object.values(wholesaleTimersRef.current).forEach(clearTimeout);
+    };
+  }, []);
   
   // ---- FBR State ----
   const [fbrEnabled, setFbrEnabled] = useState(false);
@@ -1915,6 +2180,7 @@ useEffect(() => {
         case 'F2': e.preventDefault(); setViewMode(prev => prev === 'grid' ? 'list' : 'grid'); break;
         case 'F3': e.preventDefault(); if (cart.length > 0) holdBill(); break;
         case 'F5': e.preventDefault(); setShowResumeDialog(true); break;
+        case 'F8': e.preventDefault(); if (cart.length > 0) saveSaleOnly(); break;
         case 'F9': e.preventDefault(); if (cart.length > 0) saveSaleWithPrint(); break;
         case 'F10': e.preventDefault(); if (cart.length > 0 && window.confirm('Clear cart?')) newBill(); else newBill(); break;
         case 'F12': e.preventDefault(); setShowPrinterSettings(true); break;
@@ -1924,139 +2190,309 @@ useEffect(() => {
 
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [cart, saveSaleWithPrint]);
+  }, [cart, saveSaleWithPrint, saveSaleOnly]);
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#f0f2f5', overflow: 'hidden', pb: isMobile ? 6 : 0 }}>
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#f1f5f9', overflow: 'hidden', pb: isMobile ? 6 : 0 }}>
       
-      {/* HEADER */}
-      <Paper sx={{ bgcolor: '#10b981', color: 'white', px: isMobile ? 1 : 2, py: isMobile ? 1 : 1.5, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 0, flexShrink: 0 }}>
+      {/* HEADER - DASHBOARD NAVY/INDIGO GRADIENT & BRAND */}
+      <Paper sx={{ 
+        background: 'linear-gradient(135deg, #1c2580 0%, #151b60 100%)', 
+        color: 'white', 
+        px: isMobile ? 1 : 2, 
+        py: isMobile ? 0.75 : 0.9, 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: 1.25, 
+        borderRadius: 0, 
+        flexShrink: 0,
+        borderBottom: '1px solid #283593',
+        boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.25)'
+      }}>
         <Tooltip title="Back to Dashboard">
           <IconButton
             size="small"
             onClick={() => navigate('/')}
-            sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.2)', mr: 0.5 }}
+            sx={{ 
+              color: 'white', 
+              bgcolor: 'rgba(255,255,255,0.1)', 
+              border: '1px solid rgba(255,255,255,0.2)', 
+              borderRadius: 2, 
+              p: 0.8,
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }, 
+              mr: 0.5 
+            }}
           >
-            <ArrowBack sx={{ fontSize: isMobile ? 18 : 22 }} />
+            <ArrowBack sx={{ fontSize: isMobile ? 18 : 20 }} />
           </IconButton>
         </Tooltip>
-        <Receipt sx={{ fontSize: isMobile ? 24 : 28 }} />
-        <Typography variant={isMobile ? 'subtitle1' : 'h6'} fontWeight="bold" sx={{ flex: 1, fontSize: isMobile ? '0.9rem' : '1.25rem' }}>
-          {isMobile ? 'POS' : 'Raath Terminal POS'}
-        </Typography>
-        
-        {fbrEnabled && (
-          <Tooltip title={fbrMode ? 'FBR Mode: ON' : 'FBR Mode: OFF (0% Tax)'}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={toggleFBRMode}
-              sx={{
-                color: 'white',
-                borderColor: fbrMode ? '#10b981' : '#6b7280',
-                bgcolor: fbrMode ? 'rgba(16,185,129,0.3)' : 'rgba(107,114,128,0.3)',
-                '&:hover': {
-                  bgcolor: fbrMode ? 'rgba(16,185,129,0.5)' : 'rgba(107,114,128,0.5)',
-                },
-                mr: 1
-              }}
-              startIcon={fbrMode ? <ToggleOn /> : <ToggleOff />}
-            >
-              {fbrMode ? 'FBR ON' : 'FBR OFF'}
-            </Button>
-          </Tooltip>
-        )}
-        
-        {fbrEnabled && fbrMode && (
-          <Tooltip title="FBR Integration Active">
-            <Chip 
-              icon={<VerifiedUser fontSize="small" />}
-              label="FBR"
-              size="small" 
-              sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', mr: 1, fontWeight: 'bold' }}
-            />
-          </Tooltip>
-        )}
-        
-        {fbrEnabled && !fbrMode && (
-          <Chip 
-            label="Demo"
-            size="small" 
-            sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#d1d5db', mr: 1, fontWeight: 'bold' }}
-          />
-        )}
-        
-        {defaultPrinter && !isMobile && (
-          <Chip icon={<PrintIcon />} label={defaultPrinter.length > 20 ? defaultPrinter.substring(0, 20) + '...' : defaultPrinter} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white', mr: 1 }} onClick={() => setShowPrinterSettings(true)} />
-        )}
-        
+
+        {/* RAATH POS BRAND BOX - MATCHING DASHBOARD EXACTLY */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mr: 1 }}>
+          <Box sx={{ 
+            width: 38, 
+            height: 38, 
+            borderRadius: 2, 
+            background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%)', 
+            border: '1px solid rgba(255,255,255,0.3)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.4)' 
+          }}>
+            <Store sx={{ fontSize: 22, color: '#ffffff' }} />
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" fontWeight="900" sx={{ lineHeight: 1.1, letterSpacing: '0.04em', color: '#ffffff', fontSize: '1.05rem', fontFamily: 'sans-serif' }}>
+              RAATH
+            </Typography>
+            <Typography sx={{ fontSize: '0.62rem', letterSpacing: '0.12em', color: '#34d399', fontWeight: 900, textTransform: 'uppercase' }}>
+              POS SYSTEM
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* RIGHT ACTION BUTTONS */}
         {!isMobile && (
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <ToggleButtonGroup
-              value={viewMode}
-              exclusive
-              onChange={(e, val) => val && setViewMode(val)}
-              size="small"
-              sx={{ bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 1 }}
-            >
-              <ToggleButton value="grid" sx={{ color: 'white', '&.Mui-selected': { bgcolor: 'rgba(255,255,255,0.3)', color: 'white' } }}>
-                <ViewModule fontSize="small" />
-              </ToggleButton>
-              <ToggleButton value="list" sx={{ color: 'white', '&.Mui-selected': { bgcolor: 'rgba(255,255,255,0.3)', color: 'white' } }}>
-                <ViewList fontSize="small" />
-              </ToggleButton>
-            </ToggleButtonGroup>
+          <Box sx={{ ml: 'auto', display: 'flex', gap: 1, alignItems: 'center' }}>
+            {/* VIEW MODE TOGGLE */}
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              bgcolor: 'rgba(255, 255, 255, 0.08)', 
+              border: '1px solid rgba(255, 255, 255, 0.2)', 
+              borderRadius: 2, 
+              p: '2px', 
+              gap: '2px' 
+            }}>
+              <Box 
+                onClick={() => setViewMode('grid')} 
+                sx={{ 
+                  cursor: 'pointer', 
+                  px: 1.1, 
+                  py: 0.4, 
+                  borderRadius: 1.5, 
+                  bgcolor: viewMode === 'grid' ? '#ffffff' : 'transparent', 
+                  color: viewMode === 'grid' ? '#1e293b' : '#ffffff', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  boxShadow: viewMode === 'grid' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                  transition: 'all 0.15s' 
+                }}
+              >
+                <ViewModule sx={{ fontSize: 18 }} />
+              </Box>
+              <Box 
+                onClick={() => setViewMode('list')} 
+                sx={{ 
+                  cursor: 'pointer', 
+                  px: 1.1, 
+                  py: 0.4, 
+                  borderRadius: 1.5, 
+                  bgcolor: viewMode === 'list' ? '#ffffff' : 'transparent', 
+                  color: viewMode === 'list' ? '#1e293b' : '#ffffff', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  boxShadow: viewMode === 'list' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                  transition: 'all 0.15s' 
+                }}
+              >
+                <MenuIcon sx={{ fontSize: 18 }} />
+              </Box>
+            </Box>
             
             <Button 
               size="small" 
-              startIcon={<QrCode />} 
+              startIcon={<QrCode sx={{ fontSize: 16, color: '#38bdf8' }} />} 
               onClick={() => setShowFBRScan(true)}
               sx={{ 
                 color: 'white', 
-                borderColor: 'white',
-                bgcolor: fbrEnabled && fbrMode ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.1)'
-              }} 
-              variant="outlined"
+                border: '1px solid rgba(255,255,255,0.2)', 
+                bgcolor: 'rgba(255,255,255,0.08)', 
+                fontSize: '0.75rem', 
+                fontWeight: 600, 
+                textTransform: 'none', 
+                borderRadius: 2, 
+                px: 1.4, 
+                py: 0.55, 
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' } 
+              }}
             >
-              {fbrMode ? 'FBR Scan' : 'Demo'}
+              Demo
             </Button>
             
-            <Button size="small" startIcon={<Receipt />} onClick={() => setShowResumeDialog(true)} sx={{ color: 'white', borderColor: 'white' }} variant="outlined">Held (F5)</Button>
-            <Button size="small" startIcon={<Pause />} onClick={() => setShowHoldDialog(true)} sx={{ color: 'white', borderColor: 'white' }} variant="outlined">Hold (F3)</Button>
-            <Button size="small" startIcon={<LocalOffer />} onClick={() => setShowOffersDialog(true)} sx={{ color: 'white', borderColor: 'white' }} variant="outlined">Offers</Button>
-            <Button size="small" startIcon={<PrintIcon />} onClick={() => setShowPrinterSettings(true)} sx={{ color: 'white', borderColor: 'white' }} variant="outlined">Printer</Button>
-            <Button size="small" startIcon={<KeyboardArrowDown />} onClick={() => setShowShortcuts(true)} sx={{ color: 'white', borderColor: 'white' }} variant="outlined">Shortcuts</Button>
+            <Button 
+              size="small" 
+              startIcon={<Receipt sx={{ fontSize: 16, color: '#e2e8f0' }} />} 
+              onClick={() => setShowResumeDialog(true)} 
+              sx={{ 
+                color: 'white', 
+                border: '1px solid rgba(255,255,255,0.2)', 
+                bgcolor: 'rgba(255,255,255,0.08)', 
+                fontSize: '0.75rem', 
+                fontWeight: 600, 
+                textTransform: 'none', 
+                borderRadius: 2, 
+                px: 1.4, 
+                py: 0.55, 
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' } 
+              }}
+            >
+              Held (F5)
+            </Button>
+
+            <Button 
+              size="small" 
+              startIcon={<Pause sx={{ fontSize: 16, color: '#e2e8f0' }} />} 
+              onClick={() => setShowHoldDialog(true)} 
+              sx={{ 
+                color: 'white', 
+                border: '1px solid rgba(255,255,255,0.2)', 
+                bgcolor: 'rgba(255,255,255,0.08)', 
+                fontSize: '0.75rem', 
+                fontWeight: 600, 
+                textTransform: 'none', 
+                borderRadius: 2, 
+                px: 1.4, 
+                py: 0.55, 
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' } 
+              }}
+            >
+              Hold (F3)
+            </Button>
+
+            <Button 
+              size="small" 
+              startIcon={<LocalOffer sx={{ fontSize: 16, color: '#e2e8f0' }} />} 
+              onClick={() => setShowOffersDialog(true)} 
+              sx={{ 
+                color: 'white', 
+                border: '1px solid rgba(255,255,255,0.2)', 
+                bgcolor: 'rgba(255,255,255,0.08)', 
+                fontSize: '0.75rem', 
+                fontWeight: 600, 
+                textTransform: 'none', 
+                borderRadius: 2, 
+                px: 1.4, 
+                py: 0.55, 
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' } 
+              }}
+            >
+              Offers
+            </Button>
+
+            <Button 
+              size="small" 
+              startIcon={<PrintIcon sx={{ fontSize: 16, color: '#e2e8f0' }} />} 
+              onClick={() => setShowPrinterSettings(true)} 
+              sx={{ 
+                color: 'white', 
+                border: '1px solid rgba(255,255,255,0.2)', 
+                bgcolor: 'rgba(255,255,255,0.08)', 
+                fontSize: '0.75rem', 
+                fontWeight: 600, 
+                textTransform: 'none', 
+                borderRadius: 2, 
+                px: 1.4, 
+                py: 0.55, 
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' } 
+              }}
+            >
+              Printer
+            </Button>
+
+            <Button 
+              size="small" 
+              startIcon={<KeyboardArrowDown sx={{ fontSize: 16, color: '#e2e8f0' }} />} 
+              onClick={() => setShowShortcuts(true)} 
+              sx={{ 
+                color: 'white', 
+                border: '1px solid rgba(255,255,255,0.2)', 
+                bgcolor: 'rgba(255,255,255,0.08)', 
+                fontSize: '0.75rem', 
+                fontWeight: 600, 
+                textTransform: 'none', 
+                borderRadius: 2, 
+                px: 1.4, 
+                py: 0.55, 
+                gap: 0.5,
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' } 
+              }}
+            >
+              ⌨️ Keys
+            </Button>
           </Box>
         )}
         
         {isMobile && (
-          <IconButton size="small" sx={{ color: 'white' }} onClick={() => setMobileDrawer(true)}><MenuIcon /></IconButton>
+          <IconButton size="small" sx={{ color: 'white', ml: 'auto' }} onClick={() => setMobileDrawer(true)}><MenuIcon /></IconButton>
         )}
       </Paper>
 
-      {/* SHORTCUTS BAR */}
+      {/* SHORTCUTS BAR - HIGH CONTRAST DARK STRIP (EXACT MATCH WITH USER IMAGE) */}
       {!isMobile && (
-        <Paper sx={{ px: 2, py: 0.5, display: 'flex', gap: 2, borderRadius: 0, bgcolor: '#f8fafc', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-            Shortcuts: <Chip label="F1" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3 }} /> Search
-            <Chip label="F2" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3, bgcolor: '#10b981', color: 'white' }} /> View
-            <Chip label="F3" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3 }} /> Hold
-            <Chip label="F5" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3 }} /> Held
-            <Chip label="F9" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3, bgcolor: '#10b981', color: 'white' }} /> Save+Print
-            <Chip label="F10" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3, bgcolor: '#ef4444', color: 'white' }} /> New
-            <Chip label="F12" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3 }} /> Printer
-            <Chip label="Tab" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3, bgcolor: '#3b82f6', color: 'white' }} /> Next
-            <Chip label="Shift+Tab" size="small" sx={{ height: 16, fontSize: '0.6rem', mx: 0.3, bgcolor: '#3b82f6', color: 'white' }} /> Back
-            {fbrEnabled && fbrMode && (
-              <Chip label="FBR Active" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: '#10b981', color: 'white', ml: 0.5 }} />
-            )}
-            {fbrEnabled && !fbrMode && (
-              <Chip label="Demo (0% Tax)" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: '#6b7280', color: 'white', ml: 0.5 }} />
-            )}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-            {viewMode === 'grid' ? 'Sale With Image' : 'Sale Without Image'}
-          </Typography>
+        <Paper sx={{ 
+          px: 2, 
+          py: 0.5, 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center', 
+          borderRadius: 0, 
+          bgcolor: '#151b60', 
+          borderBottom: '1px solid #283593', 
+          flexShrink: 0 
+        }}>
+          {/* LEFT: SHORTCUT CHIPS */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
+            <Typography variant="caption" sx={{ color: '#ffffff', fontWeight: 800, fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: 0.4, mr: 0.5 }}>
+              <span style={{ color: '#f43f5e' }}>📍</span> Shortcuts:
+            </Typography>
+
+            <Chip label="F1" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#1877f2', color: 'white', fontWeight: 800, borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, mr: 0.6 }}>Search</Typography>
+
+            <Chip label="F2" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#7c3aed', color: 'white', fontWeight: 800, borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, mr: 0.6 }}>View</Typography>
+
+            <Chip label="F3" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#ea580c', color: 'white', fontWeight: 800, borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, mr: 0.6 }}>Hold</Typography>
+
+            <Chip label="F5" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#0284c7', color: 'white', fontWeight: 800, borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, mr: 0.6 }}>Held</Typography>
+
+            <Chip label="F9" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#00c853', color: 'white', fontWeight: 800, borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, mr: 0.6 }}>Save+Print</Typography>
+
+            <Chip label="F10" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#ef4444', color: 'white', fontWeight: 800, borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, mr: 0.6 }}>New</Typography>
+
+            <Chip label="F12" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#6366f1', color: 'white', fontWeight: 800, borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, mr: 0.6 }}>Printer</Typography>
+
+            <Chip label="Tab" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#1e293b', color: 'white', fontWeight: 800, border: '1px solid rgba(255,255,255,0.2)', borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, mr: 0.6 }}>Next</Typography>
+
+            <Chip label="Shift+Tab" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#1e293b', color: 'white', fontWeight: 800, border: '1px solid rgba(255,255,255,0.2)', borderRadius: '10px', px: 0.2 }} />
+            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600 }}>Back</Typography>
+          </Box>
+
+          {/* RIGHT: STORE OPEN • DATE • ADMINISTRATOR */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, fontSize: '0.72rem', color: '#94a3b8' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, color: '#10b981', fontWeight: 700, fontSize: '0.72rem' }}>
+              <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#10b981', boxShadow: '0 0 8px #10b981' }} />
+              Store Open
+            </Box>
+            <Typography sx={{ fontSize: '0.72rem', color: '#475569' }}>•</Typography>
+            <Typography sx={{ fontSize: '0.72rem', color: '#cbd5e1', fontWeight: 600 }}>
+              {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+            </Typography>
+            <Typography sx={{ fontSize: '0.72rem', color: '#475569' }}>•</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#10b981', fontWeight: 700, fontSize: '0.72rem' }}>
+              <VerifiedUser sx={{ fontSize: 14, color: '#10b981' }} /> Administrator
+            </Box>
+          </Box>
         </Paper>
       )}
 
@@ -2104,7 +2540,7 @@ useEffect(() => {
       if (e.key === 'Escape') { setSearchQuery(''); setSearchResults([]); }
     }}
     onBlur={() => setTimeout(() => setSearchResults([]), 200)}
-    placeholder={isMobile ? "Search/Scan..." : "Search Name / SKU / Barcode — Enter to add (F1)"}
+    placeholder={isMobile ? "Search/Scan..." : "Search Name / SKU / Barcode ΓÇö Enter to add (F1)"}
     InputProps={{
       startAdornment: (
         <InputAdornment position="start">
@@ -2142,16 +2578,24 @@ useEffect(() => {
               <ListItemText
                 primary={
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" fontWeight={500} noWrap sx={{ maxWidth: '60%' }}>
+                    <Typography variant="body2" fontWeight={700} noWrap sx={{ maxWidth: '50%' }}>
                       {o.product_name || o.variant_name || o.name}
                       {isOut && <Chip label="OUT" size="small" color="error" sx={{ height: 16, fontSize: '0.5rem', ml: 0.5 }} />}
                     </Typography>
-                    <Typography variant="caption" color="primary" fontWeight="bold">
-                      Rs. {saleType === 'wholesale' ? (o.wholesale_price || o.retail_price) : (o.retail_price || o.purchase_price)}
-                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
+                      <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.75rem' }}>
+                        Retail: Rs. {Number(o.retail_price || o.sale_price || o.purchase_price || 0).toLocaleString('en-PK')}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#1e40af', fontWeight: 'bold', fontSize: '0.68rem', bgcolor: '#eff6ff', px: 0.6, py: 0.15, borderRadius: 0.8, border: '1px solid #bfdbfe' }}>
+                        Whole: Rs. {Number(o.wholesale_price || 0).toLocaleString('en-PK')}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#b45309', fontWeight: 'bold', fontSize: '0.68rem', bgcolor: '#fffbeb', px: 0.6, py: 0.15, borderRadius: 0.8, border: '1px solid #fde68a' }}>
+                        Cost: Rs. {Number(o.purchase_price || o.cost_price || 0).toLocaleString('en-PK')}
+                      </Typography>
+                    </Box>
                   </Box>
                 }
-                secondary={`SKU: ${o.sku || 'N/A'} • Stock: ${o.current_stock ?? 0}`}
+                secondary={`SKU: ${o.sku || 'N/A'} • Available Stock: ${o.current_stock ?? 0}`}
               />
             </ListItem>
           );
@@ -2304,7 +2748,7 @@ useEffect(() => {
               bgcolor: mobileActiveTab === 'cart' ? '#f0fdf4' : 'white',
             }}
           >
-            Cart ({cart.length}) • {formatPKR(calc.grandTotal)}
+            Cart ({cart.length}) ΓÇó {formatPKR(calc.grandTotal)}
           </Button>
         </Paper>
       )}
@@ -2345,49 +2789,77 @@ useEffect(() => {
         ) : (
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, height: '100%' }}>
             
-            <Box sx={{ display: 'flex', gap: 1, mb: 1, flexShrink: 0, flexWrap: 'wrap' }}>
-              <ToggleButtonGroup
-                value={showCostPrice ? 'cost' : ''}
-                exclusive
-                onChange={(e, val) => {
-                  if (val === 'cost') {
-                    setShowCostPrice(!showCostPrice);
-                    setShowWholesalePrice(false);
-                  } else {
-                    setShowCostPrice(false);
-                  }
-                }}
+            <Box sx={{ display: 'flex', gap: 1.5, mb: 1, flexShrink: 0, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button
+                variant="outlined"
+                onClick={() => setShowCostPrice(!showCostPrice)}
                 size="small"
+                sx={{ 
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  px: 2, 
+                  py: 0.5,
+                  minWidth: 90,
+                  bgcolor: showCostPrice ? '#fef3c7' : '#ffffff',
+                  color: '#b45309',
+                  borderColor: showCostPrice ? '#b45309' : '#fcd34d',
+                  borderWidth: showCostPrice ? 2 : 1,
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  borderRadius: 1.5,
+                  boxShadow: 'none',
+                  lineHeight: 1.2,
+                  '&:hover': { bgcolor: '#fffbeb', borderColor: '#b45309' }
+                }}
               >
-                <ToggleButton value="cost" sx={{ fontSize: '0.6rem', px: 1.5, py: 0.5 }}>
-                  <AttachMoney fontSize="small" sx={{ mr: 0.5 }} /> Cost Price
-                </ToggleButton>
-              </ToggleButtonGroup>
+                <Typography sx={{ fontSize: '1rem', fontWeight: 900, color: '#b45309', lineHeight: 1 }}>$</Typography>
+                <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#b45309' }}>Cost Price</Typography>
+              </Button>
 
-              <ToggleButtonGroup
-                value={showWholesalePrice ? 'wholesale' : ''}
-                exclusive
-                onChange={(e, val) => {
-                  if (val === 'wholesale') {
-                    setShowWholesalePrice(!showWholesalePrice);
-                    setShowCostPrice(false);
-                  } else {
-                    setShowWholesalePrice(false);
-                  }
-                }}
+              <Button
+                variant="outlined"
+                onClick={() => setShowWholesalePrice(!showWholesalePrice)}
                 size="small"
+                sx={{ 
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  px: 2, 
+                  py: 0.5,
+                  minWidth: 100,
+                  bgcolor: showWholesalePrice ? '#eff6ff' : '#ffffff',
+                  color: '#1d4ed8',
+                  borderColor: showWholesalePrice ? '#1d4ed8' : '#93c5fd',
+                  borderWidth: showWholesalePrice ? 2 : 1,
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  borderRadius: 1.5,
+                  boxShadow: 'none',
+                  lineHeight: 1.2,
+                  '&:hover': { bgcolor: '#eff6ff', borderColor: '#1d4ed8' }
+                }}
               >
-                <ToggleButton value="wholesale" sx={{ fontSize: '0.6rem', px: 1.5, py: 0.5 }}>
-                  <TrendingUp fontSize="small" sx={{ mr: 0.5 }} /> Wholesale Price
-                </ToggleButton>
-              </ToggleButtonGroup>
+                <TrendingUp sx={{ fontSize: 16, color: '#1d4ed8', mb: 0.2 }} />
+                <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#1d4ed8' }}>Wholesale Price</Typography>
+              </Button>
               
               <Chip 
-                size="small" 
-                label={saleType === 'retail' ? 'Retail' : 'Wholesale'} 
-                color="primary" 
-                variant="filled"
-                sx={{ height: 24, fontSize: '0.6rem' }}
+                icon={<LocalOffer sx={{ fontSize: '14px !important', color: '#0284c7 !important' }} />}
+                label={saleType === 'retail' ? 'Retail Pricing' : 'Wholesale Pricing'} 
+                variant="outlined"
+                sx={{ 
+                  height: 32, 
+                  fontSize: '0.72rem', 
+                  fontWeight: 700, 
+                  bgcolor: '#f0f9ff', 
+                  color: '#0369a1',
+                  borderColor: '#bae6fd',
+                  borderRadius: 2,
+                  px: 0.5
+                }}
               />
               
               {fbrEnabled && fbrMode && (
@@ -2414,45 +2886,88 @@ useEffect(() => {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', py: 1 }}>#</TableCell>
-                    <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', py: 1 }}>SKU</TableCell>
-                    <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', py: 1 }}>Item</TableCell>
-                    <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', py: 1 }} align="center">Qty</TableCell>
-                    <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', py: 1 }} align="right">Price</TableCell>
-                    <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', py: 1 }} align="center" colSpan={2}>
-                      Discount
+                    <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 800, fontSize: '0.72rem', py: 1.2 }}>#</TableCell>
+                    <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 800, fontSize: '0.72rem', py: 1.2 }}>SKU</TableCell>
+                    <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 800, fontSize: '0.72rem', py: 1.2 }}>ITEM DESCRIPTION</TableCell>
+                    <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 800, fontSize: '0.72rem', py: 1.2 }} align="center">QTY</TableCell>
+                    <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 800, fontSize: '0.72rem', py: 1.2 }} align="right">PRICE (RS)</TableCell>
+                    <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 800, fontSize: '0.72rem', py: 1.2 }} align="center" colSpan={2}>
+                      ITEM DISCOUNT
                     </TableCell>
-                    <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', py: 1 }} align="right">Total</TableCell>
-                    <TableCell sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', py: 1 }} align="center">Action</TableCell>
+                    <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 800, fontSize: '0.72rem', py: 1.2 }} align="right">TOTAL (RS)</TableCell>
+                    <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 800, fontSize: '0.72rem', py: 1.2 }} align="center">ACTION</TableCell>
                   </TableRow>
-                
                 </TableHead>
                 <TableBody>
                   {cart.map((item, idx) => (
-                    <TableRow key={item.id} hover>
-                      <TableCell>{idx + 1}</TableCell>
-                      <TableCell>{item.sku}</TableCell>
+                    <TableRow key={item.id} hover sx={{ '&:hover': { bgcolor: '#f8fafc' } }}>
+                      <TableCell sx={{ fontWeight: 700, color: '#64748b' }}>{idx + 1}</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: '#334155' }}>{item.sku || 'N/A'}</TableCell>
                       <TableCell>
-                        {item.name}
-                        {item.isOfferItem && <Chip label="OFFER" size="small" color="warning" sx={{ height: 16, fontSize: '0.5rem', ml: 0.5 }} />}
-                        {item.discount > 0 && <Chip label={`${item.discount.toFixed(1)}% OFF`} size="small" color="warning" sx={{ height: 16, fontSize: '0.5rem', ml: 0.5 }} />}
-                        
-                        <Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
-                          {showCostPrice && (
-                            <Chip 
-                              label={`Cost: ${formatPKR(item.costPrice || item.originalPrice || item.price)}`} 
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                          <Typography 
+                            fontWeight="800" 
+                            fontSize="0.88rem" 
+                            color="#0f172a"
+                            sx={{ 
+                              cursor: item.wholesalePrice > 0 ? 'pointer' : 'default',
+                              '&:hover': item.wholesalePrice > 0 ? { color: '#1c2580', textDecoration: 'underline' } : {}
+                            }}
+                            title={item.wholesalePrice > 0 ? "Click to view Wholesale Price (auto-hides in 3s)" : ""}
+                            onClick={() => item.wholesalePrice > 0 && handleRevealWholesale(item.id)}
+                          >
+                            {item.name}
+                          </Typography>
+                          {item.isOfferItem && <Chip label="OFFER" size="small" color="warning" sx={{ height: 16, fontSize: '0.55rem', ml: 0.5 }} />}
+                          {item.discount > 0 && <Chip label={`${item.discount.toFixed(1)}% OFF`} size="small" color="error" sx={{ height: 16, fontSize: '0.55rem', ml: 0.5 }} />}
+                          
+                          {item.wholesalePrice > 0 && !revealedWholesaleIds[item.id] && (
+                            <IconButton 
                               size="small" 
-                              sx={{ height: 16, fontSize: '0.45rem', bgcolor: '#fef3c7', color: '#92400e' }} 
-                            />
-                          )}
-                          {showWholesalePrice && (
-                            <Chip 
-                              label={`Wholesale: ${formatPKR(item.wholesalePrice || item.originalPrice || item.price)}`} 
-                              size="small" 
-                              sx={{ height: 16, fontSize: '0.45rem', bgcolor: '#dbeafe', color: '#1e40af' }} 
-                            />
+                              onClick={() => handleRevealWholesale(item.id)}
+                              title="Show Wholesale Price for 3s"
+                              sx={{ p: 0.2, color: '#94a3b8', '&:hover': { color: '#1c2580', bgcolor: '#e0e7ff' } }}
+                            >
+                              <span style={{ fontSize: '0.72rem' }}>👁️</span>
+                            </IconButton>
                           )}
                         </Box>
+                        
+                        {/* ONLY REVEALED ON CLICK: AUTO-HIDES IN 3 SECONDS */}
+                        {revealedWholesaleIds[item.id] && (
+                          <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                            {item.wholesalePrice > 0 && (
+                              <Chip 
+                                label={`Wholesale: ${formatPKR(item.wholesalePrice)}`} 
+                                size="small" 
+                                sx={{ 
+                                  height: 22, 
+                                  fontSize: '0.72rem', 
+                                  fontWeight: 800, 
+                                  bgcolor: '#e0e7ff', 
+                                  color: '#1d4ed8', 
+                                  border: '1px solid #bfdbfe',
+                                  borderRadius: 1 
+                                }} 
+                              />
+                            )}
+                            {item.costPrice > 0 && (
+                              <Chip 
+                                label={`Cost: ${formatPKR(item.costPrice)}`} 
+                                size="small" 
+                                sx={{ 
+                                  height: 22, 
+                                  fontSize: '0.72rem', 
+                                  fontWeight: 800, 
+                                  bgcolor: '#fef3c7', 
+                                  color: '#b45309', 
+                                  border: '1px solid #fde68a',
+                                  borderRadius: 1 
+                                }} 
+                              />
+                            )}
+                          </Box>
+                        )}
                       </TableCell>
                       <TableCell align="center">
                         <TextField
@@ -2540,7 +3055,7 @@ sx={{ width: 85 }}
                     <TableRow>
                       <TableCell colSpan={9} align="center" sx={{ py: 10 }}>
                         <Search sx={{ fontSize: 40, color: '#d1d5db' }} />
-                        <Typography color="text.secondary">Cart Empty — Press F1 to search</Typography>
+                        <Typography color="text.secondary">Cart Empty ΓÇö Press F1 to search</Typography>
                       </TableCell>
                     </TableRow>
                   )}
@@ -2548,264 +3063,211 @@ sx={{ width: 85 }}
               </Table>
             </TableContainer>
           </Box>
-        )
-      )}
+        ))}
 
-        {/* PAYMENT PANEL */}
+        {/* PAYMENT SUMMARY (RIGHT VERTICAL PANEL - EXACTLY MATCHING USER SCREENSHOTS) */}
         {(!isMobile || mobileActiveTab === 'cart') && (
           <Paper sx={{ 
-            width: isMobile ? '100%' : 350, 
-            p: isMobile ? 1.5 : 2, 
+            width: isMobile ? '100%' : 360, 
+            p: 2, 
             display: 'flex', 
             flexDirection: 'column', 
-            gap: 1, 
-            overflow: 'auto', 
+            gap: 1.25, 
+            overflowY: 'auto', 
             flexShrink: 0, 
             height: '100%',
-            borderLeft: isMobile ? 'none' : '2px solid #e5e7eb'
+            bgcolor: '#ffffff',
+            borderRadius: 2,
+            border: '1px solid #e2e8f0',
+            borderTop: '4px solid #1c2580',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+            '&::-webkit-scrollbar': { width: 5 },
+            '&::-webkit-scrollbar-thumb': { bgcolor: '#cbd5e1', borderRadius: 2 }
           }}>
+            {/* Heading */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+              <Box sx={{ 
+                width: 34, 
+                height: 34, 
+                borderRadius: 1.5, 
+                bgcolor: '#e8eaf6', 
+                color: '#1c2580', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                <PointOfSale sx={{ fontSize: 20, color: '#1c2580' }} />
+              </Box>
+              <Typography variant="subtitle1" fontWeight="800" sx={{ color: '#1c2580', fontSize: '1rem' }}>
+                Payment Summary
+              </Typography>
+            </Box>
+
+            {/* Total Items */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 0.5 }}>
+              <Typography fontWeight="500" sx={{ color: '#64748b', fontSize: '0.85rem' }}>
+                Total Items
+              </Typography>
+              <Typography fontWeight="800" sx={{ color: '#1c2580', fontSize: '0.88rem' }}>
+                {cart.length} items ({calc.totalQty.toFixed(0)} pcs)
+              </Typography>
+            </Box>
+
+            {/* Sub Total */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant={isMobile ? 'subtitle2' : 'subtitle1'} fontWeight="bold" color="#10b981">
-                {isMobile ? 'Payment' : 'Payment Summary'}
+              <Typography fontWeight="500" sx={{ color: '#64748b', fontSize: '0.85rem' }}>
+                Sub Total
               </Typography>
-              {fbrEnabled && (
-                <Tooltip title={fbrMode ? 'FBR Mode: ON - Real Tax & QR' : 'FBR Mode: OFF - 0% Tax (Demo)'}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={toggleFBRMode}
-                    sx={{
-                      borderColor: fbrMode ? '#10b981' : '#6b7280',
-                      color: fbrMode ? '#10b981' : '#6b7280',
-                      fontSize: '0.6rem',
-                      py: 0.5,
-                      px: 1,
-                      minWidth: 'auto'
-                    }}
-                    startIcon={fbrMode ? <ToggleOn fontSize="small" /> : <ToggleOff fontSize="small" />}
-                  >
-                    {fbrMode ? 'FBR ON' : 'FBR OFF'}
-                  </Button>
-                </Tooltip>
-              )}
-            </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography fontWeight="bold" color="text.secondary">Items</Typography>
-              <Typography fontWeight="bold">{cart.length} ({calc.totalQty.toFixed(0)} qty)</Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography fontWeight="bold" color="text.secondary">Sub Total</Typography>
-              <Typography fontWeight="bold">{formatPKR(calc.subtotal)}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography fontWeight="bold" color="text.secondary">Item Discount</Typography>
-              <Typography fontWeight="bold" color="error">-{formatPKR(calc.itemDiscount)}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Typography fontWeight="bold" color="text.secondary">Bill Discount</Typography>
-              <Typography fontWeight="bold" color="error">-{formatPKR(calc.billDiscount)}</Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e5e7eb', pt: 0.5 }}>
-              <Typography fontWeight="bold" color={fbrMode ? '#10b981' : '#6b7280'}>
-                {fbrMode ? 'FBR Tax' : 'Demo Tax (0%)'} ({calc.taxRate}%)
-              </Typography>
-              <Typography fontWeight="bold" color={fbrMode ? '#10b981' : '#6b7280'}>
-                {formatPKR(calc.tax)}
-                {fbrMode ? ' (Active)' : ' (Demo)'}
+              <Typography fontWeight="800" sx={{ color: '#1c2580', fontSize: '0.92rem' }}>
+                {formatPKR(calc.subtotal)}
               </Typography>
             </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #10b981', pt: 0.5 }}>
-              <Typography fontWeight="bold" fontSize="1.1rem">Grand Total</Typography>
-              <Typography variant={isMobile ? 'h6' : 'h5'} fontWeight="bold" color="#10b981">{formatPKR(calc.grandTotal)}</Typography>
+
+            {/* Tax */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography fontWeight="500" sx={{ color: '#64748b', fontSize: '0.85rem' }}>
+                {fbrMode ? `FBR Tax (${calc.taxRate}%)` : 'Demo Tax (0%) (0%)'}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Typography fontWeight="800" sx={{ color: '#1c2580', fontSize: '0.88rem' }}>
+                  {formatPKR(calc.tax)}
+                </Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#94a3b8' }}>⏳</Typography>
+              </Box>
             </Box>
 
-            <Divider />
-
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <Typography sx={{ width: isMobile ? 55 : 65, fontSize: '0.7rem', fontWeight: 500 }}>Discount</Typography>
-              <TextField
-  id="discount-input"
-  size="small" type="number" value={billDiscount} onChange={(e) => setBillDiscount(e.target.value)}
-  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('paid-input')?.focus(); } }}
-  placeholder="0"
-  sx={{
-    flex: 1, minWidth: 110,
-    '& .MuiOutlinedInput-root': { height: 42, bgcolor: '#fff7f7' },
-    '& input': { textAlign: 'right', fontSize: '1.05rem', fontWeight: 'bold', color: '#dc2626', pr: 1 }
-  }}
-/>
-              <Select size="small" value={billDiscountType} onChange={(e) => setBillDiscountType(e.target.value)} sx={{ width: 64, height: 42, fontWeight: 'bold', fontSize: '0.8rem' }}>
-                <MenuItem value="amount">Rs</MenuItem>
-                <MenuItem value="percent">%</MenuItem>
-              </Select>
+            {/* TOTAL PAYABLE HERO CARD - DASHBOARD INDIGO & EMERALD */}
+            <Box sx={{ 
+              background: 'linear-gradient(135deg, #1c2580 0%, #151b60 100%)', 
+              color: '#ffffff', 
+              borderRadius: 2, 
+              p: 1.75, 
+              my: 0.5,
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 4px 15px rgba(28, 37, 128, 0.35)',
+              border: '1px solid #283593'
+            }}>
+              <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#a5b4fc' }}>
+                TOTAL PAYABLE
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mt: 0.25 }}>
+                <Typography sx={{ fontSize: '1.15rem', fontWeight: 900, color: '#ffffff' }}>
+                  Grand Total
+                </Typography>
+                <Typography sx={{ fontSize: '1.65rem', fontWeight: 900, letterSpacing: '-0.02em', whiteSpace: 'nowrap', color: '#34d399' }}>
+                  {formatPKR(calc.grandTotal)}
+                </Typography>
+              </Box>
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <Typography sx={{ width: isMobile ? 55 : 65, fontSize: '0.7rem', fontWeight: 500 }}>Payment</Typography>
-              <Select size="small" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} fullWidth>
-                <MenuItem value="cash">Cash</MenuItem>
-                <MenuItem value="bank">Bank</MenuItem>
-                <MenuItem value="easypaisa">EasyPaisa</MenuItem>
-                <MenuItem value="jazzcash">JazzCash</MenuItem>
+            {/* Discount Row */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Typography sx={{ width: 70, fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>
+                Discount
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flex: 1 }}>
+                <TextField
+                  id="discount-input"
+                  size="small"
+                  type="number"
+                  value={billDiscount}
+                  onChange={(e) => setBillDiscount(e.target.value)}
+                  placeholder="0"
+                  sx={{
+                    flex: 1,
+                    '& .MuiOutlinedInput-root': { height: 38, borderRadius: 1.5 },
+                    '& input': { textAlign: 'right', fontSize: '0.9rem', fontWeight: 'bold', p: '6px 10px' }
+                  }}
+                />
+                <Select 
+                  size="small" 
+                  value={billDiscountType} 
+                  onChange={(e) => setBillDiscountType(e.target.value)} 
+                  sx={{ width: 65, height: 38, fontWeight: 'bold', fontSize: '0.82rem', borderRadius: 1.5 }}
+                >
+                  <MenuItem value="amount">Rs</MenuItem>
+                  <MenuItem value="percent">%</MenuItem>
+                </Select>
+              </Box>
+            </Box>
+
+            {/* Payment Mode Row */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Typography sx={{ width: 70, fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>
+                Payment
+              </Typography>
+              <Select 
+                size="small" 
+                value={paymentMode} 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setPaymentMode(val);
+                  if (val === 'split') setShowSplitModal(true);
+                }} 
+                fullWidth
+                sx={{ height: 38, fontSize: '0.82rem', fontWeight: 600, borderRadius: 1.5 }}
+              >
+                <MenuItem value="cash">💵 Cash</MenuItem>
+                <MenuItem value="bank">🏦 Bank</MenuItem>
+                <MenuItem value="easypaisa">📱 EasyPaisa</MenuItem>
+                <MenuItem value="jazzcash">📱 JazzCash</MenuItem>
                 <MenuItem value="split" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
                   🔀 Split Payment (Multi-Method)
                 </MenuItem>
-                <MenuItem value="credit">Credit</MenuItem>
+                <MenuItem value="credit">📋 Credit</MenuItem>
                 <MenuItem value="other">Other</MenuItem>
               </Select>
             </Box>
 
-            {/* Split Pay Toggle Bar */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
-              <Typography sx={{ fontSize: '0.75rem', color: paymentMode === 'split' ? '#4f46e5' : 'text.secondary', fontWeight: paymentMode === 'split' ? 600 : 400 }}>
-                {paymentMode === 'split' ? 'Multi-payment active' : 'Single payment mode'}
+            {/* Mixed payment Row */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 0.25 }}>
+              <Typography sx={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>
+                Mixed payment?
               </Typography>
               <Button
                 size="small"
-                variant={paymentMode === 'split' ? 'contained' : 'outlined'}
-                onClick={() => setPaymentMode(paymentMode === 'split' ? 'cash' : 'split')}
+                variant="outlined"
+                onClick={() => {
+                  setPaymentMode('split');
+                  setShowSplitModal(true);
+                }}
                 sx={{
-                  bgcolor: paymentMode === 'split' ? '#4f46e5' : 'transparent',
-                  color: paymentMode === 'split' ? '#fff' : '#4f46e5',
-                  borderColor: '#4f46e5',
-                  fontSize: '0.7rem',
-                  py: 0.3,
-                  px: 1.2,
+                  color: '#1c2580',
+                  borderColor: '#c5cae9',
+                  bgcolor: '#e8eaf6',
+                  fontSize: '0.75rem',
+                  py: 0.4,
+                  px: 1.5,
                   borderRadius: 1.5,
                   textTransform: 'none',
-                  fontWeight: 'bold',
-                  '&:hover': { bgcolor: paymentMode === 'split' ? '#4338ca' : '#f5f3ff' }
+                  fontWeight: 700,
+                  '&:hover': { bgcolor: '#c5cae9', borderColor: '#9fa8da' }
                 }}
+                startIcon={<Sliders sx={{ fontSize: 14 }} />}
               >
-                {paymentMode === 'split' ? '✓ Split Pay ON' : 'Split Pay OFF'}
+                Split Pay (Multi)
               </Button>
             </Box>
 
-            {/* SPLIT PAYMENT BREAKDOWN CARD */}
-            {paymentMode === 'split' && (
-              <Box sx={{ 
-                border: '1.5px solid #c7d2fe', 
-                borderRadius: 2, 
-                p: 1.5, 
-                bgcolor: '#f8faff', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: 1.2 
-              }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
-                    <Typography sx={{ fontSize: '1.05rem' }}>🔀</Typography>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#312e81', fontSize: '0.85rem' }}>
-                      Split Payment Breakdown
-                    </Typography>
-                  </Box>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    onClick={handleResetSplit}
-                    sx={{
-                      bgcolor: '#1e1b4b',
-                      color: '#fff',
-                      fontSize: '0.65rem',
-                      py: 0.25,
-                      px: 1.2,
-                      minWidth: 'auto',
-                      borderRadius: 1,
-                      textTransform: 'none',
-                      fontWeight: 'bold',
-                      '&:hover': { bgcolor: '#0f172a' }
-                    }}
-                  >
-                    Reset
-                  </Button>
-                </Box>
-
-                {/* 4 Methods: Cash, JazzCash, EasyPaisa, Bank */}
-                {[
-                  { key: 'cash', label: 'Cash', icon: '💵', color: '#16a34a', bgBtn: '#ecfdf5', borderBtn: '#86efac' },
-                  { key: 'jazzcash', label: 'JazzCash', icon: '📱', color: '#dc2626', bgBtn: '#fef2f2', borderBtn: '#fca5a5' },
-                  { key: 'easypaisa', label: 'EasyPaisa', icon: '📱', color: '#0d9488', bgBtn: '#f0fdfa', borderBtn: '#99f6e4' },
-                  { key: 'bank', label: 'Bank', icon: '🏦', color: '#2563eb', bgBtn: '#eff6ff', borderBtn: '#bfdbfe' },
-                ].map(({ key, label, icon, color, bgBtn, borderBtn }) => (
-                  <Box key={key} sx={{ border: '1px solid #e2e8f0', borderRadius: 1.5, p: 1, bgcolor: '#ffffff' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.8 }}>
-                      <Typography fontWeight="bold" sx={{ color, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <span>{icon}</span> {label}
-                      </Typography>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => handleFillRest(key)}
-                        sx={{
-                          color,
-                          borderColor: borderBtn,
-                          bgcolor: bgBtn,
-                          fontSize: '0.65rem',
-                          py: 0.2,
-                          px: 1,
-                          textTransform: 'none',
-                          fontWeight: 'bold',
-                          minWidth: 'auto',
-                          borderRadius: 1,
-                          '&:hover': { borderColor: color, bgcolor: bgBtn }
-                        }}
-                      >
-                        Fill Rest
-                      </Button>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                      <TextField
-                        size="small"
-                        type="number"
-                        placeholder="0.00"
-                        value={splitPayments[key].amount}
-                        onChange={(e) => handleSplitAmountChange(key, e.target.value)}
-                        sx={{
-                          width: '42%',
-                          '& .MuiOutlinedInput-root': { height: 36, bgcolor: '#ffffff' },
-                          '& input': { fontSize: '0.85rem', fontWeight: 'bold' }
-                        }}
-                      />
-                      <FormControl size="small" sx={{ flex: 1 }}>
-                        <Select
-                          value={splitPayments[key].accountId || ''}
-                          onChange={(e) => handleSplitAccountChange(key, e.target.value)}
-                          displayEmpty
-                          sx={{ height: 36, fontSize: '0.75rem', bgcolor: '#ffffff' }}
-                        >
-                          <MenuItem value="" disabled><em>Select Account</em></MenuItem>
-                          {accounts.map(acc => (
-                            <MenuItem key={acc.id} value={acc.id} sx={{ fontSize: '0.75rem' }}>
-                              {acc.name} ({acc.type || 'account'})
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </Box>
-                  </Box>
-                ))}
-              </Box>
-            )}
-
+            {/* To Account Row */}
             {paymentMode !== 'credit' && paymentMode !== 'split' && (
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Typography sx={{ width: isMobile ? 55 : 65, fontSize: '0.7rem', fontWeight: 500 }}>To Acc</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                <Typography sx={{ width: 70, fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>
+                  To Account
+                </Typography>
                 <FormControl fullWidth size="small">
                   <Select
                     value={paymentAccount?.id || ''}
                     onChange={(e) => handlePaymentAccountChange(e.target.value)}
                     displayEmpty
-                    sx={{ fontSize: '0.75rem' }}
+                    sx={{ height: 38, fontSize: '0.8rem', borderRadius: 1.5 }}
                   >
-                    <MenuItem value="" disabled><em>Select {paymentMode} account</em></MenuItem>
+                    <MenuItem value="" disabled><em>Select cash account</em></MenuItem>
                     {accounts
                       .filter(a => a.type === paymentMode && a.status === 'active')
                       .map(a => (
-                        <MenuItem key={a.id} value={a.id} sx={{ fontSize: '0.75rem' }}>
+                        <MenuItem key={a.id} value={a.id} sx={{ fontSize: '0.8rem' }}>
                           {a.name} • Bal: {formatPKR(a.current_balance)}
                         </MenuItem>
                       ))}
@@ -2814,105 +3276,97 @@ sx={{ width: 85 }}
               </Box>
             )}
 
-            {paymentMode !== 'credit' && paymentMode !== 'split' && paymentAccount && (
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', bgcolor: '#f0fdf4', p: 0.5, borderRadius: 1, border: '1px solid #bbf7d0' }}>
-                <Typography fontWeight="bold" color="text.secondary" fontSize="0.7rem">Receiving</Typography>
-                <Typography fontWeight="bold" color="#059669" fontSize="0.7rem">
-                  {paymentAccount.name}
+            {/* Account warning if empty */}
+            {paymentMode !== 'credit' && paymentMode !== 'split' && accounts.filter(a => a.type === paymentMode && a.status === 'active').length === 0 && (
+              <Box sx={{ bgcolor: '#fffbeb', p: 0.8, borderRadius: 1.5, border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <Typography sx={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600 }}>
+                  ⚠️ No {paymentMode} account found! Add in Accounts page.
                 </Typography>
               </Box>
             )}
 
-            {paymentMode !== 'credit' && paymentMode !== 'split' && accounts.filter(a => a.type === paymentMode && a.status === 'active').length === 0 && (
-              <Alert severity="warning" sx={{ py: 0.3, fontSize: '0.65rem' }}>
-                No {paymentMode} account found! Add in Accounts page.
-              </Alert>
-            )}
-
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <Typography sx={{ width: isMobile ? 55 : 65, fontSize: '0.7rem', fontWeight: 700 }}>Paid</Typography>
+            {/* Amount Paid Row */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+              <Typography sx={{ width: 70, fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                Amount Paid
+              </Typography>
               <TextField
                 id="paid-input"
-                size="small" 
-                type="number" 
-                value={paymentMode === 'split' ? (calc.actualPaid > 0 ? calc.actualPaid : '') : paidAmount} 
+                size="small"
+                type="number"
+                value={paymentMode === 'split' ? (calc.actualPaid > 0 ? calc.actualPaid : '') : paidAmount}
                 onChange={(e) => {
-                  if (paymentMode !== 'split') {
-                    setPaidAmount(e.target.value);
-                  }
+                  if (paymentMode !== 'split') setPaidAmount(e.target.value);
                 }}
                 disabled={paymentMode === 'split'}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveSaleWithPrint(); } }}
-                fullWidth 
-                placeholder={calc.grandTotal > 0 ? (paymentMode === 'credit' ? '0.00' : `${calc.grandTotal}`) : '0.00'}
-                helperText={paymentMode === 'split' ? 'Auto-sum from split channels above' : undefined}
+                fullWidth
+                placeholder={calc.grandTotal > 0 ? (paymentMode === 'credit' ? '0.00' : `${calc.grandTotal}`) : 'Rs 0.00'}
+                sx={{
+                  '& .MuiOutlinedInput-root': { height: 38, borderRadius: 1.5 },
+                  '& input': { textAlign: 'right', fontSize: '0.9rem', fontWeight: 'bold', p: '6px 10px' }
+                }}
               />
             </Box>
 
+            {/* Due & Change chips */}
             {calc.due > 0 && (
-              <Box sx={{ bgcolor: '#fef2f2', p: 1, borderRadius: 1, border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between' }}>
-                <Typography color="error" fontWeight="bold" fontSize="0.8rem">Due</Typography>
-                <Typography color="error" fontWeight="bold">{formatPKR(calc.due)}</Typography>
+              <Box sx={{ bgcolor: '#fef2f2', p: 1, borderRadius: 1.5, border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography color="error" fontWeight="bold" fontSize="0.82rem">Due Amount</Typography>
+                <Typography color="error" fontWeight="900" fontSize="0.95rem">{formatPKR(calc.due)}</Typography>
               </Box>
             )}
             {calc.change > 0 && (
-              <Box sx={{ bgcolor: '#f0fdf4', p: 1, borderRadius: 1, border: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between' }}>
-                <Typography color="success" fontWeight="bold" fontSize="0.8rem">Change</Typography>
-                <Typography color="success" fontWeight="bold">{formatPKR(calc.change)}</Typography>
+              <Box sx={{ bgcolor: '#f0fdf4', p: 1, borderRadius: 1.5, border: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography color="success" fontWeight="bold" fontSize="0.82rem">Change Return</Typography>
+                <Typography color="success" fontWeight="900" fontSize="0.95rem">{formatPKR(calc.change)}</Typography>
               </Box>
             )}
 
-            <TaxSummary 
-              totalTax={totalTaxCollected} 
-              taxRate={calc.taxRate} 
-              fbrMode={fbrMode} 
-              fbrEnabled={fbrEnabled} 
-            />
-
-            {/* TWO BUTTONS - Sale & Sale+Print */}
-            <Box sx={{ display: 'flex', gap: 1, flexDirection: isMobile ? 'column' : 'row' }}>
+            {/* Action Buttons: Sale & Sale + Print */}
+            <Box sx={{ display: 'flex', gap: 1, mt: 'auto', pt: 1 }}>
               <Button 
                 fullWidth 
                 variant="contained" 
                 onClick={saveSaleOnly} 
+                disabled={cart.length === 0 || isSaving}
                 sx={{ 
-                  bgcolor: isSaving ? '#9ca3af' : '#3b82f6', 
-                  py: isMobile ? 1.5 : 1.2, 
-                  fontWeight: 'bold', 
-                  fontSize: isMobile ? '0.9rem' : '1rem',
-                  '&:hover': { bgcolor: isSaving ? '#9ca3af' : '#2563eb' },
+                  bgcolor: isSaving ? '#9ca3af' : '#2563eb', 
+                  py: 1.25, 
+                  fontWeight: 800, 
+                  fontSize: '0.9rem',
+                  borderRadius: 1.5,
+                  textTransform: 'none',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                  '&:hover': { bgcolor: isSaving ? '#9ca3af' : '#1d4ed8' },
                   flex: 1
                 }} 
-                disabled={cart.length === 0 || isSaving}
                 startIcon={<Save />}
               >
-                {isSaving ? 'Saving...' : 'Sale'}
+                {isSaving ? 'Saving...' : 'Sale (F8)'}
               </Button>
+
               <Button 
                 fullWidth 
                 variant="contained" 
                 onClick={saveSaleWithPrint} 
-                sx={{ 
-                  bgcolor: isSaving ? '#9ca3af' : '#10b981', 
-                  py: isMobile ? 1.5 : 1.2, 
-                  fontWeight: 'bold', 
-                  fontSize: isMobile ? '0.9rem' : '1rem',
-                  '&:hover': { bgcolor: isSaving ? '#9ca3af' : '#059669' },
-                  flex: 1
-                }} 
                 disabled={cart.length === 0 || isSaving}
+                sx={{ 
+                  bgcolor: isSaving ? '#9ca3af' : '#059669', 
+                  py: 1.25, 
+                  fontWeight: 900, 
+                  fontSize: '0.92rem',
+                  borderRadius: 1.5,
+                  textTransform: 'none',
+                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.35)',
+                  '&:hover': { bgcolor: isSaving ? '#9ca3af' : '#047857' },
+                  flex: 1.2
+                }} 
                 startIcon={<PrintIcon />}
               >
                 {isSaving ? 'Saving...' : 'Sale + Print'}
               </Button>
             </Box>
-
-            {/* Mobile: Clear button */}
-            {isMobile && (
-              <Button fullWidth variant="outlined" color="error" startIcon={<Close />} onClick={newBill} size="small">
-                Clear Cart
-              </Button>
-            )}
           </Paper>
         )}
       </Box>
@@ -2995,7 +3449,7 @@ sx={{ width: 85 }}
                     </Box>
                   }>
                     <ListItemIcon><Receipt /></ListItemIcon>
-                    <ListItemText primary={bill.party?.name || 'Walk-in'} secondary={`${formatPKR(bill.total)} • ${new Date(bill.date).toLocaleString()}`} />
+                    <ListItemText primary={bill.party?.name || 'Walk-in'} secondary={`${formatPKR(bill.total)} ΓÇó ${new Date(bill.date).toLocaleString()}`} />
                   </ListItem>
                 </Paper>
               ))}
@@ -3059,6 +3513,19 @@ sx={{ width: 85 }}
       {/* SHORTCUTS HELP */}
       <ShortcutsHelp open={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
+      {/* SPLIT PAYMENT DIALOG */}
+      <SplitPaymentDialog
+        open={showSplitModal}
+        onClose={() => setShowSplitModal(false)}
+        splitPayments={splitPayments}
+        handleSplitAmountChange={handleSplitAmountChange}
+        handleSplitAccountChange={handleSplitAccountChange}
+        handleResetSplit={handleResetSplit}
+        handleFillRest={handleFillRest}
+        accounts={accounts}
+        grandTotal={calc.grandTotal}
+      />
+
       {/* MOBILE DRAWER */}
       <Drawer anchor="right" open={mobileDrawer} onClose={() => setMobileDrawer(false)}>
         <Box sx={{ width: 280, p: 2 }}>
@@ -3105,9 +3572,35 @@ sx={{ width: 85 }}
       </Drawer>
 
       {/* SNACKBAR */}
-      <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }} sx={{ mb: isMobile ? 7 : 0 }}>
-        <Alert severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={2500} 
+        onClose={() => setSnackbar(p => ({ ...p, open: false }))} 
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} 
+        sx={{ mb: 2, mr: 2, zIndex: 9999 }}
+      >
+        <Paper
+          elevation={2}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            py: 0.8,
+            px: 1.5,
+            borderRadius: 1.5,
+            bgcolor: '#f0fdf4',
+            border: '1px solid #86efac',
+            color: '#15803d',
+            fontWeight: 700,
+            fontSize: '0.82rem',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)'
+          }}
+        >
+          <CheckCircle sx={{ fontSize: 18, color: '#16a34a' }} />
+          <span>{snackbar.message}</span>
+        </Paper>
       </Snackbar>
     </Box>
   );
 }
+

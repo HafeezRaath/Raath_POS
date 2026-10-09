@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,22 +7,31 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
-    font-size: 15.5px;
+    font-size: 17px;
     max-width: 100vw;
     overflow-x: hidden;
+    font-family: 'Carlito', sans-serif !important;
   }
   body {
     @apply bg-slate-100 text-slate-900 antialiased min-h-screen;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    font-size: 1rem;
+    font-family: 'Carlito', sans-serif !important;
+    font-size: 1.05rem;
     line-height: 1.55;
     max-width: 100vw;
     overflow-x: hidden;
   }
 
+  *, *::before, *::after {
+    font-family: 'Carlito', sans-serif;
+  }
+
   input, select, textarea, button {
-    font-family: inherit;
-    font-size: 1rem;
+    font-family: 'Carlito', sans-serif !important;
+    font-size: 1.02rem;
+  }
+
+  table {
+    font-size: 1.02rem;
   }
 
   ::selection {

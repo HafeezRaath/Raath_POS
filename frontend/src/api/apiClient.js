@@ -50,6 +50,9 @@ class ApiClient {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        if (response.status === 401 && (data.error?.includes('token') || data.error?.includes('expired') || data.error?.includes('Authorization'))) {
+          localStorage.removeItem('raath_token');
+        }
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
       }
 
