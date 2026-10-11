@@ -149,6 +149,7 @@ exports.createSale = async (req, res, next) => {
         const prodId = item.product_id || item.productId || item.id;
         const variantId = item.product_variant_id || item.variant_id || item.variantId || null;
         const qty = parseFloat(item.quantity !== undefined ? item.quantity : (item.qty || 1)) || 1;
+        const deductQty = parseFloat(item.deduct_quantity !== undefined ? item.deduct_quantity : (item.deductQty !== undefined ? item.deductQty : qty)) || qty;
         const price = parseFloat(item.price !== undefined ? item.price : (item.unit_price || item.sale_price || 0)) || 0;
         const pCost = parseFloat(item.purchase_price !== undefined ? item.purchase_price : (item.cost_price || item.costPrice || 0)) || 0;
         const disc = parseFloat(item.discount || 0);
@@ -165,7 +166,7 @@ exports.createSale = async (req, res, next) => {
         if (variantId) {
           await conn.query(
             'UPDATE product_variants SET stock = stock - ? WHERE tenant_id = ? AND id = ?',
-            [qty, tenantId, variantId]
+            [deductQty, tenantId, variantId]
           );
         }
 
@@ -173,7 +174,7 @@ exports.createSale = async (req, res, next) => {
         if (prodId) {
           await conn.query(
             'UPDATE products SET stock = stock - ? WHERE tenant_id = ? AND id = ?',
-            [qty, tenantId, prodId]
+            [deductQty, tenantId, prodId]
           );
         }
       }
@@ -235,6 +236,19 @@ exports.createSale = async (req, res, next) => {
     const [finalSale] = await query('SELECT * FROM sales WHERE tenant_id = ? AND id = ?', [tenantId, createdSaleId]);
     const finalItems = await query('SELECT * FROM sale_items WHERE tenant_id = ? AND sale_id = ?', [tenantId, createdSaleId]);
     finalSale.items = finalItems;
+
+    // Audit log if discount was given
+    const totalItemDiscounts = rawItems.reduce((acc, it) => acc + (parseFloat(it.discount || it.item_discount || 0)), 0);
+    if (discount > 0 || totalItemDiscounts > 0) {
+      const uName = req.user?.username || req.user?.name || payload.cashier_name || 'Cashier';
+      const uRole = req.user?.role || 'cashier';
+      const discNote = discount > 0 ? `Bill discount: Rs. ${discount}` : `Item discounts: Rs. ${totalItemDiscounts}`;
+      await query(
+        `INSERT INTO audit_logs (tenant_id, user_id, user_name, user_role, action, table_name, record_id, details)
+         VALUES (?, ?, ?, ?, 'DISCOUNT_GIVEN', 'sales', ?, ?)`,
+        [tenantId, req.user?.id || null, uName, uRole, createdSaleId, `${discNote} given on invoice #${invNum} by ${uName}`]
+      ).catch(() => {});
+    }
 
     res.status(201).json({
       success: true,
@@ -324,6 +338,15 @@ exports.deleteSale = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
     await query('UPDATE sales SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+
+    const uName = req.user?.username || req.user?.name || 'Cashier';
+    const uRole = req.user?.role || 'cashier';
+    await query(
+      `INSERT INTO audit_logs (tenant_id, user_id, user_name, user_role, action, table_name, record_id, details)
+       VALUES (?, ?, ?, ?, 'SALE_DELETED', 'sales', ?, ?)`,
+      [tenantId, req.user?.id || null, uName, uRole, id, `Sale record #${id} was deleted by ${uName} (${uRole})`]
+    ).catch(() => {});
+
     res.json({ success: true, message: 'Sale deleted successfully' });
   } catch (error) {
     next(error);

@@ -127,6 +127,8 @@ export default function Dashboard() {
     pendingEMI: 0,
     todayReturns: 0,
     todayExpenses: 0,
+    expiredCount: 0,
+    expiringSoonCount: 0,
   });
 
   const [recentSales, setRecentSales] = useState([]);
@@ -507,6 +509,32 @@ export default function Dashboard() {
       const parsedExpenses = Number(expensesData?.[0]?.total || 0);
       const parsedEMI = Number(emiData?.[0]?.count || 0);
 
+      // Expiry stats calculation (Feature 4)
+      const now = new Date();
+      const in30Days = new Date();
+      in30Days.setDate(in30Days.getDate() + 30);
+      let calculatedExpiredCount = 0;
+      let calculatedExpiringSoonCount = 0;
+
+      if (Array.isArray(productsData)) {
+        productsData.forEach((p) => {
+          let expStr = p.expiry_date;
+          if (!expStr && p.metadata) {
+            try {
+              const meta = typeof p.metadata === 'string' ? JSON.parse(p.metadata) : p.metadata;
+              expStr = meta.expiry_date;
+            } catch (e) {}
+          }
+          if (expStr) {
+            const expD = new Date(expStr);
+            if (!isNaN(expD.getTime())) {
+              if (expD < now) calculatedExpiredCount++;
+              else if (expD <= in30Days) calculatedExpiringSoonCount++;
+            }
+          }
+        });
+      }
+
       setStats({
         todaySales: parsedSales,
         todayCount: parsedCount,
@@ -520,6 +548,8 @@ export default function Dashboard() {
         pendingEMI: parsedEMI,
         todayReturns: Number(returnsData?.[0]?.total || 0),
         todayExpenses: parsedExpenses,
+        expiredCount: calculatedExpiredCount,
+        expiringSoonCount: calculatedExpiringSoonCount,
       });
 
       setRecentSales(Array.isArray(recentSalesData) ? recentSalesData : []);
@@ -641,8 +671,49 @@ export default function Dashboard() {
         </Alert>
       )}
 
+      {/* Feature 4: High-Priority Expiry Alert Banner */}
+      {(stats.expiredCount > 0 || stats.expiringSoonCount > 0) && (
+        <div 
+          onClick={() => navigate('/reports?tab=expiry')}
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-red-500/15 via-amber-500/10 to-orange-500/5 border border-red-200/90 cursor-pointer hover:shadow-md transition-all"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center font-bold text-xl shadow-xs">
+              ⚠️
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-extrabold text-red-900 tracking-tight">
+                  Expiry Alert Attention Required!
+                </h4>
+                {stats.expiredCount > 0 && (
+                  <Badge variant="danger" size="xs">
+                    {stats.expiredCount} Expired
+                  </Badge>
+                )}
+                {stats.expiringSoonCount > 0 && (
+                  <Badge variant="warning" size="xs">
+                    {stats.expiringSoonCount} Expiring within 30d
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-red-700/90 font-medium mt-0.5">
+                Remove expired stock from shelves and review batches nearing shelf-life end to claim supplier returns.
+              </p>
+            </div>
+          </div>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            className="text-red-700 border-red-300 bg-white hover:bg-red-50 font-bold shrink-0 self-stretch sm:self-auto text-xs"
+          >
+            Open Expiry Report →
+          </Button>
+        </div>
+      )}
+
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Card 1: Revenue */}
         <Card className="hover:shadow-md transition-shadow relative overflow-hidden bg-white border border-[#e2e8f0]">
           <div className="absolute top-0 left-0 right-0 h-1 bg-[#1c2580]" />
@@ -704,7 +775,37 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Card 3: Expenses */}
+        {/* Card 3: Expiry Alerts (Feature 4) */}
+        <Card
+          className="hover:shadow-md transition-shadow relative overflow-hidden cursor-pointer bg-white border border-[#e2e8f0]"
+          onClick={() => navigate('/reports?tab=expiry')}
+        >
+          <div className={`absolute top-0 left-0 right-0 h-1 ${stats.expiredCount > 0 ? 'bg-red-500' : stats.expiringSoonCount > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Expiry Alerts
+                </span>
+                <h3 className={`text-2xl font-extrabold mt-1 ${stats.expiredCount > 0 ? 'text-red-600' : 'text-[#1c2580]'}`}>
+                  {stats.expiredCount} <span className="text-xs font-normal text-slate-500">Expired</span>
+                </h3>
+                <p className="text-xs text-amber-700 font-semibold mt-0.5">
+                  {stats.expiringSoonCount} expiring within 30d
+                </p>
+              </div>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stats.expiredCount > 0 ? 'bg-red-50 text-red-600' : 'bg-[#e8eaf6] text-[#1c2580]'}`}>
+                <Clock size={24} />
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="text-slate-500 font-medium">Shelf Life Audit</span>
+              <span className="text-[#1c2580] font-bold">View Report →</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card 4: Expenses */}
         <Card className="hover:shadow-md transition-shadow relative overflow-hidden bg-white border border-[#e2e8f0]">
           <div className="absolute top-0 left-0 right-0 h-1 bg-[#1c2580]" />
           <CardContent className="p-5">
@@ -733,7 +834,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Card 4: Operations Overview */}
+        {/* Card 5: Operations Overview */}
         <Card className="hover:shadow-md transition-shadow relative overflow-hidden bg-white border border-[#e2e8f0]">
           <div className="absolute top-0 left-0 right-0 h-1 bg-[#1c2580]" />
           <CardContent className="p-5">

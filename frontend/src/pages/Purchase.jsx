@@ -391,19 +391,48 @@ export default function PurchasePage() {
   const [deleteId, setDeleteId] = useState(null);
   const [savingPurchase, setSavingPurchase] = useState(false);  // FIX: Prevent double submit
 
+  // Purchase Orders (PO) States
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [poDialog, setPoDialog] = useState(false);
+  const [poForm, setPoForm] = useState({
+    supplier_id: '',
+    supplier_name: '',
+    po_no: `PO-${Date.now()}`,
+    expected_delivery_date: '',
+    notes: '',
+    status: 'draft'
+  });
+  const [poItems, setPoItems] = useState([]);
+  const [poCurrentItem, setPoCurrentItem] = useState({
+    product_id: '',
+    product_variant_id: '',
+    product_name: '',
+    quantity: '1',
+    unit_cost: ''
+  });
+  const [poConvertDialog, setPoConvertDialog] = useState(false);
+  const [poToConvert, setPoToConvert] = useState(null);
+  const [poConvertPaidAmount, setPoConvertPaidAmount] = useState('0');
+  const [poConvertPaymentMethod, setPoConvertPaymentMethod] = useState('cash');
+  const [poConverting, setPoConverting] = useState(false);
+  const [poPage, setPoPage] = useState(1);
+  const [poRowsPerPage, setPoRowsPerPage] = useState(25);
+  const [savingPo, setSavingPo] = useState(false);
+
   // ==================== LOAD DATA ====================
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [purchs, supps, prods, returns, cats] = await Promise.all([
+      const [purchs, supps, prods, returns, cats, pos] = await Promise.all([
         db.getPurchases ? db.getPurchases() : Promise.resolve([]),
         db.getSuppliers ? db.getSuppliers() : Promise.resolve([]),
         db.getAllVariants ? db.getAllVariants() : Promise.resolve([]),
         db.getPurchaseReturns ? db.getPurchaseReturns() : Promise.resolve([]),
-        db.getCategories ? db.getCategories() : Promise.resolve([])
+        db.getCategories ? db.getCategories() : Promise.resolve([]),
+        db.getPurchaseOrders ? db.getPurchaseOrders() : Promise.resolve([])
       ]);
       
-          const purchasesWithCount = await Promise.all((purchs || []).map(async (p) => {
+      const purchasesWithCount = await Promise.all((purchs || []).map(async (p) => {
         const items = await db.getPurchaseItems(p.id);
         const supplier = (supps || []).find(s => String(s.id) === String(p.supplier_id));
         return { 
@@ -427,6 +456,7 @@ export default function PurchasePage() {
       setProducts(prods || []);
       setCategories(cats || []);
       setPurchaseReturns(returns?.success ? returns.data : (returns || []));
+      setPurchaseOrders(pos?.data || (Array.isArray(pos) ? pos : []));
       setFilteredProducts(prods || []);
     } catch (err) {
       console.error('Load error:', err);
@@ -484,6 +514,153 @@ export default function PurchasePage() {
     const start = (supplierPage - 1) * supplierRowsPerPage;
     return filteredSuppliers.slice(start, start + supplierRowsPerPage);
   }, [filteredSuppliers, supplierPage, supplierRowsPerPage]);
+
+  const filteredPurchaseOrders = useMemo(() => {
+    return purchaseOrders.filter(po => {
+      const matchSearch = !searchPurchase || 
+        (po.po_no || '').toLowerCase().includes(searchPurchase.toLowerCase()) ||
+        (po.supplier_name || '').toLowerCase().includes(searchPurchase.toLowerCase());
+      const matchSupplier = !filterSupplier || String(po.supplier_id) === String(filterSupplier);
+      return matchSearch && matchSupplier;
+    });
+  }, [purchaseOrders, searchPurchase, filterSupplier]);
+
+  const paginatedPurchaseOrders = useMemo(() => {
+    const start = (poPage - 1) * poRowsPerPage;
+    return filteredPurchaseOrders.slice(start, start + poRowsPerPage);
+  }, [filteredPurchaseOrders, poPage, poRowsPerPage]);
+
+  // ==================== PURCHASE ORDER (PO) FUNCTIONS ====================
+  const handleOpenPo = () => {
+    setPoForm({
+      supplier_id: '',
+      supplier_name: '',
+      po_no: `PO-${Date.now()}`,
+      expected_delivery_date: '',
+      notes: '',
+      status: 'draft'
+    });
+    setPoItems([]);
+    setPoCurrentItem({
+      product_id: '',
+      product_variant_id: '',
+      product_name: '',
+      quantity: '1',
+      unit_cost: ''
+    });
+    setPoDialog(true);
+  };
+
+  const handleAddPoItem = () => {
+    if (!poCurrentItem.product_name) {
+      setSnackbar({ open: true, message: 'Please select a product!', severity: 'warning' });
+      return;
+    }
+    const qty = parseFloat(poCurrentItem.quantity) || 0;
+    const cost = parseFloat(poCurrentItem.unit_cost) || 0;
+    if (qty <= 0 || cost < 0) {
+      setSnackbar({ open: true, message: 'Quantity and unit cost must be valid!', severity: 'warning' });
+      return;
+    }
+    setPoItems(prev => [
+      ...prev,
+      {
+        ...poCurrentItem,
+        quantity: qty,
+        unit_cost: cost,
+        total: qty * cost
+      }
+    ]);
+    setPoCurrentItem({
+      product_id: '',
+      product_variant_id: '',
+      product_name: '',
+      quantity: '1',
+      unit_cost: ''
+    });
+  };
+
+  const handleRemovePoItem = (idx) => {
+    setPoItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSavePo = async () => {
+    if (!poForm.supplier_id) {
+      setSnackbar({ open: true, message: 'Please select a supplier!', severity: 'warning' });
+      return;
+    }
+    if (poItems.length === 0) {
+      setSnackbar({ open: true, message: 'Please add at least one item!', severity: 'warning' });
+      return;
+    }
+    setSavingPo(true);
+    try {
+      const subtotal = poItems.reduce((acc, it) => acc + (it.total || 0), 0);
+      const res = await db.createPurchaseOrder({
+        po_no: poForm.po_no,
+        supplier_id: poForm.supplier_id,
+        supplier_name: poForm.supplier_name,
+        expected_delivery_date: poForm.expected_delivery_date || null,
+        notes: poForm.notes,
+        status: poForm.status || 'draft',
+        subtotal,
+        total_amount: subtotal,
+        items: poItems
+      });
+      if (res && res.success !== false) {
+        setSnackbar({ open: true, message: 'Purchase Order created successfully!', severity: 'success' });
+        setPoDialog(false);
+        loadData();
+      } else {
+        throw new Error(res?.error || 'Failed to create Purchase Order');
+      }
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
+    } finally {
+      setSavingPo(false);
+    }
+  };
+
+  const handleOpenConvertPo = (po) => {
+    setPoToConvert(po);
+    setPoConvertPaidAmount('0');
+    setPoConvertPaymentMethod('cash');
+    setPoConvertDialog(true);
+  };
+
+  const handleConfirmConvertPo = async () => {
+    if (!poToConvert) return;
+    setPoConverting(true);
+    try {
+      const res = await db.convertPOToPurchase(poToConvert.id, {
+        paid_amount: parseFloat(poConvertPaidAmount) || 0,
+        payment_method: poConvertPaymentMethod
+      });
+      if (res && res.success !== false) {
+        setSnackbar({ open: true, message: 'PO converted to Purchase & stock updated!', severity: 'success' });
+        setPoConvertDialog(false);
+        setPoToConvert(null);
+        loadData();
+      } else {
+        throw new Error(res?.error || 'Conversion failed');
+      }
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
+    } finally {
+      setPoConverting(false);
+    }
+  };
+
+  const handleDeletePo = async (poId) => {
+    if (!window.confirm('Are you sure you want to delete this Purchase Order?')) return;
+    try {
+      await db.deletePurchaseOrder(poId);
+      setSnackbar({ open: true, message: 'Purchase Order deleted', severity: 'info' });
+      loadData();
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Delete failed: ' + err.message, severity: 'error' });
+    }
+  };
 
   // ==================== PURCHASE FUNCTIONS ====================
   const handleOpenPurchase = (purchase = null) => {
@@ -1732,6 +1909,15 @@ const handleProcessReturn = async () => {
           <Button variant="contained" size="small" color="secondary" startIcon={<Add />} onClick={() => handleOpenPurchase()} sx={{ fontSize: isMobile ? '0.6rem' : '0.75rem', py: isMobile ? 0.5 : 1 }}>
             {isMobile ? 'New' : 'Add Purchase'}
           </Button>
+          <Button 
+            variant="contained" 
+            size="small" 
+            startIcon={<Receipt />} 
+            onClick={handleOpenPo} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.75rem', py: isMobile ? 0.5 : 1, bgcolor: '#1c2580', color: 'white', '&:hover': { bgcolor: '#161d66' } }}
+          >
+            {isMobile ? 'New PO' : 'New Purchase Order'}
+          </Button>
           <Button variant="outlined" size="small" onClick={() => navigate('/inventory')} startIcon={<Inventory />} sx={{ fontSize: isMobile ? '0.6rem' : '0.75rem', py: isMobile ? 0.5 : 1 }}>
             {isMobile ? 'Products' : 'Products'}
           </Button>
@@ -1881,6 +2067,11 @@ const handleProcessReturn = async () => {
           <Tab 
             icon={<Person fontSize="small" />} 
             label={isMobile ? 'Suppliers' : 'Suppliers'} 
+            sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', minWidth: isMobile ? 'auto' : undefined }} 
+          />
+          <Tab 
+            icon={<Receipt fontSize="small" />} 
+            label={isMobile ? `PO (${purchaseOrders.length})` : `Purchase Orders (${purchaseOrders.length})`} 
             sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', minWidth: isMobile ? 'auto' : undefined }} 
           />
         </Tabs>
@@ -2371,6 +2562,128 @@ const handleProcessReturn = async () => {
         </Fade>
       )}
 
+      {/* TAB 4: PURCHASE ORDERS (PO) */}
+      {activeTab === 4 && (
+        <Fade in>
+          <Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+              <Typography variant="h6" fontWeight="bold" color="primary">
+                Purchase Orders ({purchaseOrders.length})
+              </Typography>
+              <Button 
+                variant="contained" 
+                startIcon={<Add />} 
+                onClick={handleOpenPo} 
+                size={isMobile ? 'small' : 'medium'}
+                sx={{ bgcolor: '#1c2580', color: 'white', '&:hover': { bgcolor: '#161d66' } }}
+              >
+                Create Purchase Order
+              </Button>
+            </Box>
+
+            <TableContainer component={Paper} sx={{ borderRadius: 1, overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#1c2580' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }}>PO #</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }}>Supplier</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }}>Created Date</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }}>Expected Date</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }}>Total Amount</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }} align="center">Status</TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }} align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredPurchaseOrders.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                        <Receipt sx={{ fontSize: 48, color: '#cbd5e1', mb: 1 }} />
+                        <Typography color="text.secondary">No Purchase Orders found</Typography>
+                        <Button 
+                          variant="outlined" 
+                          size="small" 
+                          startIcon={<Add />} 
+                          onClick={handleOpenPo} 
+                          sx={{ mt: 1.5 }}
+                        >
+                          Create First PO
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {paginatedPurchaseOrders.map((po) => {
+                    const isReceived = po.status === 'received';
+                    return (
+                      <TableRow key={po.id} hover>
+                        <TableCell>
+                          <Typography fontWeight="bold" color="primary">{po.po_no}</Typography>
+                          {po.notes && (
+                            <Typography variant="caption" color="text.secondary" display="block">{po.notes}</Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography fontWeight={500}>{po.supplier_name || 'Unknown Supplier'}</Typography>
+                        </TableCell>
+                        <TableCell>{formatDate(po.created_at || po.date)}</TableCell>
+                        <TableCell>{po.expected_delivery_date ? formatDate(po.expected_delivery_date) : '-'}</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                          {formatCurrency(po.total_amount || po.grand_total || 0)}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip 
+                            size="small" 
+                            color={isReceived ? 'success' : po.status === 'ordered' ? 'info' : po.status === 'sent' ? 'primary' : 'warning'} 
+                            label={(po.status || 'draft').toUpperCase()} 
+                            sx={{ height: 22, fontSize: '0.65rem', fontWeight: 'bold' }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
+                            {!isReceived ? (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                startIcon={<CheckCircle />}
+                                onClick={() => handleOpenConvertPo(po)}
+                                sx={{ fontSize: '0.7rem', py: 0.5, px: 1.5, textTransform: 'none' }}
+                              >
+                                Receive & Bill
+                              </Button>
+                            ) : (
+                              <Chip size="small" icon={<CheckCircle />} label="Stock Received" color="success" variant="outlined" sx={{ height: 24, fontSize: '0.65rem' }} />
+                            )}
+                            {!isReceived && (
+                              <Tooltip title="Delete PO">
+                                <IconButton size="small" color="error" onClick={() => handleDeletePo(po.id)}>
+                                  <Delete fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <UnifiedPagination
+              count={filteredPurchaseOrders.length}
+              page={poPage}
+              rowsPerPage={poRowsPerPage}
+              onPageChange={setPoPage}
+              onRowsPerPageChange={(newR) => {
+                setPoRowsPerPage(newR);
+                setPoPage(1);
+              }}
+              rowsPerPageOptions={[10, 25, 50, 100]}
+            />
+          </Box>
+        </Fade>
+      )}
+
       {/* ==================== PURCHASE DIALOG ==================== */}
       <Dialog open={purchaseDialog} onClose={() => setPurchaseDialog(false)} maxWidth="lg" fullWidth fullScreen={isMobile}>
         <DialogTitle sx={{ bgcolor: 'secondary.main', color: 'white', py: isMobile ? 1.5 : 2 }}>
@@ -2634,6 +2947,28 @@ const handleProcessReturn = async () => {
                 }}
               />
             </Box>
+            <Box sx={{ flex: '0 0 125px', minWidth: '115px' }}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="date" 
+                label="Expiry Date" 
+                value={currentItem.expiry_date || ''} 
+                onChange={(e) => setCurrentItem(prev => ({ ...prev, expiry_date: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ 
+                  '& .MuiInputBase-root': { 
+                    fontSize: '0.7rem',
+                    padding: '2px 4px',
+                    height: '36px'
+                  },
+                  '& .MuiInputLabel-root': {
+                    fontSize: '0.65rem'
+                  }
+                }}
+              />
+            </Box>
             <Box sx={{ flex: '0 0 80px', minWidth: '70px' }}>
               <Button 
                 variant="contained" 
@@ -2681,6 +3016,7 @@ const handleProcessReturn = async () => {
                   <TableCell sx={{ fontWeight: 'bold' }}>Product</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }}>SKU</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }} align="right">Qty</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Expiry</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }} align="right">Price</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }} align="right">Subtotal</TableCell>
                   <TableCell sx={{ fontWeight: 'bold' }} align="right">Action</TableCell>
@@ -2689,7 +3025,7 @@ const handleProcessReturn = async () => {
               <TableBody>
                 {items.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                    <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                       <Typography color="text.secondary">No items added</Typography>
                     </TableCell>
                   </TableRow>
@@ -2702,6 +3038,13 @@ const handleProcessReturn = async () => {
                     </TableCell>
                     <TableCell>{item.sku}</TableCell>
                     <TableCell align="right">{item.quantity}</TableCell>
+                    <TableCell>
+                      {item.expiry_date ? (
+                        <Chip size="small" label={item.expiry_date} color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">-</Typography>
+                      )}
+                    </TableCell>
                     <TableCell align="right">{formatCurrency(item.purchase_price)}</TableCell>
                     <TableCell align="right">{formatCurrency(item.sub_total || (item.quantity * item.purchase_price))}</TableCell>
                     <TableCell align="right">
@@ -3705,6 +4048,264 @@ const handleProcessReturn = async () => {
           <Button onClick={() => setDeleteDialog(false)} sx={{ fontSize: isMobile ? '0.75rem' : '0.875rem' }}>Cancel</Button>
           <Button variant="contained" color="error" startIcon={<Delete />} onClick={confirmDelete} sx={{ fontSize: isMobile ? '0.75rem' : '0.875rem' }}>
             Delete Permanently
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ==================== CREATE PURCHASE ORDER DIALOG ==================== */}
+      <Dialog open={poDialog} onClose={() => setPoDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>
+        <DialogTitle sx={{ bgcolor: '#1c2580', color: 'white', py: 1.5 }}>
+          <Receipt sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Create Purchase Order (PO)
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2, px: isMobile ? 1.5 : 3 }}>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                label="PO Number" 
+                value={poForm.po_no} 
+                onChange={(e) => setPoForm(prev => ({ ...prev, po_no: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Autocomplete
+                size="small"
+                options={suppliers}
+                getOptionLabel={(option) => option.name || ''}
+                value={suppliers.find(s => String(s.id) === String(poForm.supplier_id)) || null}
+                onChange={(e, newVal) => {
+                  setPoForm(prev => ({
+                    ...prev,
+                    supplier_id: newVal?.id || '',
+                    supplier_name: newVal?.name || ''
+                  }));
+                }}
+                renderInput={(params) => <TextField {...params} label="Supplier" required />}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="date" 
+                label="Expected Delivery Date" 
+                value={poForm.expected_delivery_date} 
+                onChange={(e) => setPoForm(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={poForm.status}
+                  label="Status"
+                  onChange={(e) => setPoForm(prev => ({ ...prev, status: e.target.value }))}
+                >
+                  <MenuItem value="draft">Draft</MenuItem>
+                  <MenuItem value="sent">Sent to Supplier</MenuItem>
+                  <MenuItem value="ordered">Ordered</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                label="Notes / Instructions for Supplier" 
+                multiline 
+                rows={2}
+                value={poForm.notes} 
+                onChange={(e) => setPoForm(prev => ({ ...prev, notes: e.target.value }))}
+              />
+            </Grid>
+          </Grid>
+
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1 }}>
+            Add Items to Order
+          </Typography>
+
+          {/* PO Item Input Row */}
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 2 }}>
+            <Box sx={{ flex: '1 1 200px', minWidth: '180px' }}>
+              <Autocomplete
+                size="small"
+                options={products}
+                getOptionLabel={(option) => {
+                  const name = option.product_name || option.name || '';
+                  const sku = option.sku ? ` (${option.sku})` : '';
+                  return `${name}${sku}`;
+                }}
+                value={products.find(p => String(p.id) === String(poCurrentItem.product_id)) || null}
+                onChange={(e, newVal) => {
+                  setPoCurrentItem(prev => ({
+                    ...prev,
+                    product_id: newVal?.id || '',
+                    product_variant_id: newVal?.variant_id || newVal?.id || '',
+                    product_name: newVal?.product_name || newVal?.name || '',
+                    unit_cost: newVal?.purchase_price || newVal?.cost_price || ''
+                  }));
+                }}
+                renderInput={(params) => <TextField {...params} label="Select Product" />}
+              />
+            </Box>
+            <Box sx={{ flex: '0 0 90px', minWidth: '80px' }}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="number" 
+                label="Quantity" 
+                value={poCurrentItem.quantity} 
+                onChange={(e) => setPoCurrentItem(prev => ({ ...prev, quantity: e.target.value }))}
+              />
+            </Box>
+            <Box sx={{ flex: '0 0 110px', minWidth: '100px' }}>
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="number" 
+                label="Unit Cost" 
+                value={poCurrentItem.unit_cost} 
+                onChange={(e) => setPoCurrentItem(prev => ({ ...prev, unit_cost: e.target.value }))}
+                slotProps={{ input: { startAdornment: <InputAdornment position="start" sx={{ fontSize: '0.65rem' }}>Rs.</InputAdornment> } }}
+              />
+            </Box>
+            <Box sx={{ flex: '0 0 90px' }}>
+              <Button 
+                variant="contained" 
+                color="primary" 
+                startIcon={<Add />} 
+                onClick={handleAddPoItem}
+                fullWidth
+                sx={{ height: 40, bgcolor: '#1c2580', '&:hover': { bgcolor: '#161d66' } }}
+              >
+                Add
+              </Button>
+            </Box>
+          </Box>
+
+          {/* PO Items Table */}
+          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+            <Table size="small">
+              <TableHead sx={{ bgcolor: '#f1f5f9' }}>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold' }}>Product</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }} align="right">Qty</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }} align="right">Unit Cost</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }} align="right">Total</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold' }} align="center">Action</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {poItems.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                      No items added to this purchase order yet.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {poItems.map((item, idx) => (
+                  <TableRow key={idx} hover>
+                    <TableCell fontWeight={500}>{item.product_name}</TableCell>
+                    <TableCell align="right">{item.quantity}</TableCell>
+                    <TableCell align="right">{formatCurrency(item.unit_cost)}</TableCell>
+                    <TableCell align="right" fontWeight="bold">{formatCurrency(item.total)}</TableCell>
+                    <TableCell align="center">
+                      <IconButton size="small" color="error" onClick={() => handleRemovePoItem(idx)}>
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+            <Typography variant="h6" fontWeight="bold" color="primary">
+              Estimated Total: {formatCurrency(poItems.reduce((acc, it) => acc + (it.total || 0), 0))}
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPoDialog(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            startIcon={savingPo ? <CircularProgress size={18} color="inherit" /> : <Save />} 
+            onClick={handleSavePo} 
+            disabled={savingPo}
+            sx={{ bgcolor: '#1c2580', color: 'white', '&:hover': { bgcolor: '#161d66' } }}
+          >
+            Save Purchase Order
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ==================== CONVERT PO TO PURCHASE DIALOG ==================== */}
+      <Dialog open={poConvertDialog} onClose={() => setPoConvertDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ bgcolor: '#10b981', color: 'white', py: 1.5 }}>
+          <LocalShipping sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Receive Inventory & Convert to Purchase
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2, px: isMobile ? 1.5 : 3 }}>
+          {poToConvert && (
+            <>
+              <Alert severity="info" sx={{ mb: 2, borderRadius: 1 }}>
+                Receiving <strong>{poToConvert.po_no}</strong> from <strong>{poToConvert.supplier_name}</strong>.
+                This will automatically increase product stock in your inventory and record a purchase invoice.
+              </Alert>
+
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary">Total PO Amount</Typography>
+                  <Typography variant="h6" fontWeight="bold" color="primary.main">
+                    {formatCurrency(poToConvert.total_amount || 0)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField 
+                    fullWidth 
+                    size="small" 
+                    type="number" 
+                    label="Paid Amount (Now)" 
+                    value={poConvertPaidAmount} 
+                    onChange={(e) => setPoConvertPaidAmount(e.target.value)}
+                    slotProps={{ input: { startAdornment: <InputAdornment position="start">Rs.</InputAdornment> } }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Payment Mode</InputLabel>
+                    <Select
+                      value={poConvertPaymentMethod}
+                      label="Payment Mode"
+                      onChange={(e) => setPoConvertPaymentMethod(e.target.value)}
+                    >
+                      <MenuItem value="cash">Cash</MenuItem>
+                      <MenuItem value="bank">Bank Transfer</MenuItem>
+                      <MenuItem value="cheque">Cheque</MenuItem>
+                      <MenuItem value="credit">On Credit (Due)</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPoConvertDialog(false)}>Cancel</Button>
+          <Button 
+            variant="contained" 
+            color="success" 
+            startIcon={poConverting ? <CircularProgress size={18} color="inherit" /> : <CheckCircle />} 
+            onClick={handleConfirmConvertPo} 
+            disabled={poConverting}
+          >
+            Confirm & Receive Stock
           </Button>
         </DialogActions>
       </Dialog>

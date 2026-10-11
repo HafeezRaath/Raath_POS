@@ -25,6 +25,8 @@ import db from '../database/db';
 import useSyncListener from '../hooks/useSyncListener';
 import ThermalReceipt from '../components/receipt/ThermalReceipt';
 import { printReceiptDirect, getEffectiveReceiptSettings, getEffectiveShopProfile } from '../utils/receiptGenerator';
+import WeightCalculatorDialog from '../components/common/WeightCalculatorDialog';
+import RollCalculatorDialog from '../components/common/RollCalculatorDialog';
 
 // ==================== HELPERS ====================
 // ==================== HELPERS ====================
@@ -1085,6 +1087,9 @@ export default function BillingPage() {
   const [showCostPrice, setShowCostPrice] = useState(false);
   const [showWholesalePrice, setShowWholesalePrice] = useState(false);
   const [revealedWholesaleIds, setRevealedWholesaleIds] = useState({});
+  const [weightDialog, setWeightDialog] = useState({ open: false, item: null, index: null });
+  const [rollDialog, setRollDialog] = useState({ open: false, item: null, index: null });
+  const [showCartMiniList, setShowCartMiniList] = useState(true);
   const wholesaleTimersRef = useRef({});
 
   const handleRevealWholesale = useCallback((id) => {
@@ -1379,7 +1384,7 @@ useEffect(() => {
   setSearchResults([...starts, ...contains].slice(0, 15));
   setActiveSearchIndex(0);
 }, [searchQuery, products, selectedCategory]);
-  // ---- ADD TO CART ----
+  // ---- ADD TO CART (WITH CARTON/BOX/PIECE & WEIGHT/ROLL AWARENESS) ----
   const addToCart = useCallback((product, perDiscount = 0) => {
     const availableStock = Number(product.current_stock || 0);
     if (availableStock <= 0) {
@@ -1400,6 +1405,25 @@ useEffect(() => {
 
     const discountPercent = Math.min(100, Math.max(0, parseFloat(perDiscount) || 0));
     const finalPrice = basePrice - (basePrice * (discountPercent / 100));
+
+    // Packaging metadata (Carton > Box > Piece)
+    const unit = String(product.unit || 'piece').toLowerCase().trim();
+    let meta = {};
+    try {
+      meta = typeof product.metadata === 'string' ? JSON.parse(product.metadata) : (product.metadata || {});
+    } catch (e) {}
+
+    const boxesPerCarton = Number(product.boxes_per_carton || meta.packaging?.boxes_per_carton || 1);
+    const piecesPerBox = Number(product.pieces_per_box || meta.packaging?.pieces_per_box || 1);
+    const cartonPrice = Number(product.carton_price || meta.packaging?.carton_price || 0);
+    const boxPrice = Number(product.box_price || meta.packaging?.box_price || 0);
+    const hasPackaging = (boxesPerCarton > 1 || piecesPerBox > 1 || cartonPrice > 0 || boxPrice > 0);
+
+    const isWeightItem = ['kg', 'gram', 'grams', 'g', 'loose'].includes(unit) ||
+      (product.product_name && /kg|gram|g\b|loose/i.test(product.product_name));
+
+    const isLengthItem = ['meter', 'm', 'yard', 'ghaz', 'feet', 'ft', 'inch', 'in'].includes(unit) ||
+      (product.product_name && /meter|yard|ghaz|roll|sheet|fabric/i.test(product.product_name));
 
     const existingIndex = cart.findIndex(c => c.variantId === product.id);
     
@@ -1422,6 +1446,7 @@ useEffect(() => {
         productId: product.product_id,
         name: product.product_name || product.variant_name || 'Item',
         sku: product.sku || '',
+        unit: product.unit || 'piece',
         qty: 1,
         price: finalPrice,
         total: finalPrice,
@@ -1433,7 +1458,17 @@ useEffect(() => {
         image: product.image_url || null,
         originalPrice: basePrice,
         costPrice: product.purchase_price || product.cost_price || 0,
-        wholesalePrice: product.wholesale_price || 0
+        wholesalePrice: product.wholesale_price || 0,
+        // Packaging & Tier Units
+        boxesPerCarton,
+        piecesPerBox,
+        cartonPrice,
+        boxPrice,
+        hasPackaging,
+        selectedSellUnit: 'piece',
+        // Loose Weight & Roll
+        isWeightItem,
+        isLengthItem
       }]);
     }
     
@@ -1443,6 +1478,116 @@ useEffect(() => {
     setTimeout(() => searchRef.current?.focus(), 100);
     showSnackbar(`Added ${product.product_name}`, 'success');
   }, [cart, saleType, showCostPrice, showWholesalePrice, showSnackbar]);
+
+  // ---- 3-TIER PACKAGING & CONVERSION HANDLERS ----
+  const handleSwitchSellUnit = useCallback((index, unitType) => {
+    setCart(prev => {
+      const next = [...prev];
+      const item = next[index];
+      if (!item) return prev;
+
+      const bpc = Number(item.boxesPerCarton || 1);
+      const ppb = Number(item.piecesPerBox || 1);
+      let unitPrice = item.originalPrice;
+
+      if (unitType === 'carton') {
+        unitPrice = item.cartonPrice > 0 
+          ? item.cartonPrice 
+          : (item.boxPrice > 0 ? item.boxPrice * bpc : item.originalPrice * ppb * bpc);
+      } else if (unitType === 'box') {
+        unitPrice = item.boxPrice > 0 
+          ? item.boxPrice 
+          : item.originalPrice * ppb;
+      } else {
+        unitPrice = item.originalPrice;
+      }
+
+      const discountMultiplier = item.discountType === 'percent' ? (1 - (item.discount || 0) / 100) : 1;
+      const finalPrice = unitPrice * discountMultiplier;
+
+      next[index] = {
+        ...item,
+        selectedSellUnit: unitType,
+        price: finalPrice,
+        total: item.qty * finalPrice
+      };
+      return next;
+    });
+  }, []);
+
+  const handleQuickWeight = useCallback((index, kgQty) => {
+    setCart(prev => {
+      const next = [...prev];
+      const item = next[index];
+      if (!item) return prev;
+      const qty = parseFloat(kgQty) || 0.2;
+      next[index] = {
+        ...item,
+        qty,
+        total: qty * item.price
+      };
+      return next;
+    });
+  }, []);
+
+  const handleQuickLength = useCallback((index, lengthQty) => {
+    setCart(prev => {
+      const next = [...prev];
+      const item = next[index];
+      if (!item) return prev;
+      const qty = parseFloat(lengthQty) || 1;
+      next[index] = {
+        ...item,
+        qty,
+        total: qty * item.price
+      };
+      return next;
+    });
+  }, []);
+
+  const handleOpenWeightDialog = useCallback((item, index) => {
+    setWeightDialog({ open: true, item, index });
+  }, []);
+
+  const handleApplyWeightDialog = useCallback(({ computedQty, computedTotal }) => {
+    if (weightDialog.index !== null) {
+      setCart(prev => {
+        const next = [...prev];
+        const idx = weightDialog.index;
+        if (!next[idx]) return prev;
+        const qty = parseFloat(computedQty) || next[idx].qty;
+        next[idx] = {
+          ...next[idx],
+          qty,
+          total: qty * next[idx].price
+        };
+        return next;
+      });
+      showSnackbar(`Applied weight: ${computedQty} KG`, 'success');
+    }
+  }, [weightDialog.index, showSnackbar]);
+
+  const handleOpenRollDialog = useCallback((item, index) => {
+    setRollDialog({ open: true, item, index });
+  }, []);
+
+  const handleApplyRollDialog = useCallback(({ computedQty, computedTotal, selectedUnit }) => {
+    if (rollDialog.index !== null) {
+      setCart(prev => {
+        const next = [...prev];
+        const idx = rollDialog.index;
+        if (!next[idx]) return prev;
+        const qty = parseFloat(computedQty) || next[idx].qty;
+        next[idx] = {
+          ...next[idx],
+          qty,
+          total: qty * next[idx].price
+        };
+        return next;
+      });
+      showSnackbar(`Applied roll length: ${computedQty} ${selectedUnit}`, 'success');
+    }
+  }, [rollDialog.index, showSnackbar]);
 
   // ---- UPDATE CART QTY BY VARIANT ID ----
   const updateCartQtyByVariant = useCallback((variantId, newQty) => {
@@ -1722,22 +1867,38 @@ useEffect(() => {
         split_payments: splitList
       };
 
-      const itemsData = cart.map(item => ({
-        product_variant_id: item.variantId,
-        variant_id: item.variantId,
-        product_id: item.productId,
-        name: item.name || item.product_name || 'Item',
-        product_name: item.product_name || item.name || 'Item',
-        variant_name: item.variant_name || '',
-        sku: item.sku || '',
-        quantity: item.qty,
-        qty: item.qty,
-        price: item.price,
-        unit_price: item.price,
-        purchase_price: item.costPrice || 0,
-        discount: item.discount || 0,
-        total: item.total
-      }));
+      const itemsData = cart.map(item => {
+        const bpc = Number(item.boxesPerCarton || 1);
+        const ppb = Number(item.piecesPerBox || 1);
+        let multiplier = 1;
+        if (item.selectedSellUnit === 'carton') {
+          multiplier = bpc * ppb;
+        } else if (item.selectedSellUnit === 'box') {
+          multiplier = ppb;
+        }
+        const deductQty = item.qty * multiplier;
+
+        return {
+          product_variant_id: item.variantId,
+          variant_id: item.variantId,
+          product_id: item.productId,
+          name: item.name || item.product_name || 'Item',
+          product_name: item.product_name || item.name || 'Item',
+          variant_name: item.variant_name || '',
+          sku: item.sku || '',
+          quantity: item.qty,
+          qty: item.qty,
+          deduct_quantity: deductQty,
+          deductQty: deductQty,
+          sell_unit: item.selectedSellUnit || item.unit || 'piece',
+          unit_multiplier: multiplier,
+          price: item.price,
+          unit_price: item.price,
+          purchase_price: item.costPrice || 0,
+          discount: item.discount || 0,
+          total: item.total
+        };
+      });
 
       // ==================== CREATE SALE (Stock handled internally) ====================
       let result;
@@ -1754,6 +1915,22 @@ useEffect(() => {
       }
 
       const saleId = result.id || result.lastInsertRowid;
+
+      // Feature 9: Dedicated Audit Log for Discount
+      if (calc.billDiscount > 0 || calc.itemDiscount > 0) {
+        try {
+          const userStr = localStorage.getItem('user');
+          const userObj = userStr ? JSON.parse(userStr) : {};
+          const uName = userObj.name || userObj.username || 'Cashier';
+          const uRole = userObj.role || 'cashier';
+          const discDetails = `Discount on Invoice #${saleData.invoice_no}: Bill Rs. ${calc.billDiscount || 0}, Items Rs. ${calc.itemDiscount || 0} by ${uName} (${uRole})`;
+          if (db.logAudit) {
+            await db.logAudit('DISCOUNT_GIVEN', 'sales', saleId, discDetails);
+          }
+        } catch (auditErr) {
+          console.error('[Audit] Failed to log discount audit:', auditErr);
+        }
+      }
 
       // ==================== AUTO PAYMENT TO ACCOUNT LEDGER ====================
       if (calc.actualPaid > 0 && paymentAccount) {
@@ -1929,22 +2106,38 @@ useEffect(() => {
         split_payments: splitList
       };
 
-      const itemsData = cart.map(item => ({
-        product_variant_id: item.variantId,
-        variant_id: item.variantId,
-        product_id: item.productId,
-        name: item.name || item.product_name || 'Item',
-        product_name: item.product_name || item.name || 'Item',
-        variant_name: item.variant_name || '',
-        sku: item.sku || '',
-        quantity: item.qty,
-        qty: item.qty,
-        price: item.price,
-        unit_price: item.price,
-        purchase_price: item.costPrice || 0,
-        discount: item.discount || 0,
-        total: item.total
-      }));
+      const itemsData = cart.map(item => {
+        const bpc = Number(item.boxesPerCarton || 1);
+        const ppb = Number(item.piecesPerBox || 1);
+        let multiplier = 1;
+        if (item.selectedSellUnit === 'carton') {
+          multiplier = bpc * ppb;
+        } else if (item.selectedSellUnit === 'box') {
+          multiplier = ppb;
+        }
+        const deductQty = item.qty * multiplier;
+
+        return {
+          product_variant_id: item.variantId,
+          variant_id: item.variantId,
+          product_id: item.productId,
+          name: item.name || item.product_name || 'Item',
+          product_name: item.product_name || item.name || 'Item',
+          variant_name: item.variant_name || '',
+          sku: item.sku || '',
+          quantity: item.qty,
+          qty: item.qty,
+          deduct_quantity: deductQty,
+          deductQty: deductQty,
+          sell_unit: item.selectedSellUnit || item.unit || 'piece',
+          unit_multiplier: multiplier,
+          price: item.price,
+          unit_price: item.price,
+          purchase_price: item.costPrice || 0,
+          discount: item.discount || 0,
+          total: item.total
+        };
+      });
 
       // ==================== CREATE SALE (Stock handled internally) ====================
       let result;
@@ -1961,6 +2154,22 @@ useEffect(() => {
       }
 
       const saleId = result.id || result.lastInsertRowid;
+
+      // Feature 9: Dedicated Audit Log for Discount
+      if (calc.billDiscount > 0 || calc.itemDiscount > 0) {
+        try {
+          const userStr = localStorage.getItem('user');
+          const userObj = userStr ? JSON.parse(userStr) : {};
+          const uName = userObj.name || userObj.username || 'Cashier';
+          const uRole = userObj.role || 'cashier';
+          const discDetails = `Discount on Invoice #${saleData.invoice_no}: Bill Rs. ${calc.billDiscount || 0}, Items Rs. ${calc.itemDiscount || 0} by ${uName} (${uRole})`;
+          if (db.logAudit) {
+            await db.logAudit('DISCOUNT_GIVEN', 'sales', saleId, discDetails);
+          }
+        } catch (auditErr) {
+          console.error('[Audit] Failed to log discount audit:', auditErr);
+        }
+      }
 
       // ==================== AUTO PAYMENT TO ACCOUNT LEDGER ====================
       if (calc.actualPaid > 0 && paymentAccount) {
@@ -2968,6 +3177,167 @@ useEffect(() => {
                             )}
                           </Box>
                         )}
+
+                        {/* Feature 1: Packaging Auto-Break Controls (Carton > Box > Piece) */}
+                        {item.hasPackaging && (
+                          <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, color: '#475569' }}>
+                              📦 Unit:
+                            </Typography>
+                            <ButtonGroup size="small" variant="outlined" sx={{ height: 22 }}>
+                              <Button
+                                onClick={() => handleSwitchSellUnit(idx, 'piece')}
+                                sx={{
+                                  fontSize: '0.62rem',
+                                  px: 0.8,
+                                  py: 0,
+                                  fontWeight: 800,
+                                  bgcolor: (!item.selectedSellUnit || item.selectedSellUnit === 'piece') ? '#1c2580' : 'white',
+                                  color: (!item.selectedSellUnit || item.selectedSellUnit === 'piece') ? 'white' : '#1c2580',
+                                  borderColor: '#1c2580',
+                                  '&:hover': { bgcolor: (!item.selectedSellUnit || item.selectedSellUnit === 'piece') ? '#151b60' : '#e8eaf6' }
+                                }}
+                              >
+                                Piece (Rs. {Number(item.originalPrice).toLocaleString()})
+                              </Button>
+                              <Button
+                                onClick={() => handleSwitchSellUnit(idx, 'box')}
+                                sx={{
+                                  fontSize: '0.62rem',
+                                  px: 0.8,
+                                  py: 0,
+                                  fontWeight: 800,
+                                  bgcolor: item.selectedSellUnit === 'box' ? '#059669' : 'white',
+                                  color: item.selectedSellUnit === 'box' ? 'white' : '#059669',
+                                  borderColor: '#059669',
+                                  '&:hover': { bgcolor: item.selectedSellUnit === 'box' ? '#047857' : '#ecfdf5' }
+                                }}
+                              >
+                                Box ({item.piecesPerBox} pcs)
+                              </Button>
+                              <Button
+                                onClick={() => handleSwitchSellUnit(idx, 'carton')}
+                                sx={{
+                                  fontSize: '0.62rem',
+                                  px: 0.8,
+                                  py: 0,
+                                  fontWeight: 800,
+                                  bgcolor: item.selectedSellUnit === 'carton' ? '#7c3aed' : 'white',
+                                  color: item.selectedSellUnit === 'carton' ? 'white' : '#7c3aed',
+                                  borderColor: '#7c3aed',
+                                  '&:hover': { bgcolor: item.selectedSellUnit === 'carton' ? '#6d28d9' : '#f5f3ff' }
+                                }}
+                              >
+                                Carton ({item.boxesPerCarton * item.piecesPerBox} pcs)
+                              </Button>
+                            </ButtonGroup>
+                            {item.selectedSellUnit && item.selectedSellUnit !== 'piece' && (
+                              <Chip
+                                size="small"
+                                label={`⚡ Breaks to ${(item.qty * (item.selectedSellUnit === 'carton' ? item.boxesPerCarton * item.piecesPerBox : item.piecesPerBox)).toFixed(0)} pcs`}
+                                sx={{ height: 18, fontSize: '0.58rem', fontWeight: 800, bgcolor: '#fef3c7', color: '#b45309' }}
+                              />
+                            )}
+                          </Box>
+                        )}
+
+                        {/* Feature 2: Loose Weight Presets & Dedicated Weight Calculator */}
+                        {(item.isWeightItem || String(item.unit || '').toLowerCase().includes('kg')) && (
+                          <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.4, flexWrap: 'wrap' }}>
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, color: '#047857' }}>
+                              ⚖️ Weight:
+                            </Typography>
+                            {[
+                              { label: '200g', val: 0.2 },
+                              { label: '400g', val: 0.4 },
+                              { label: '500g', val: 0.5 },
+                              { label: '1 KG', val: 1.0 }
+                            ].map(p => (
+                              <Chip
+                                key={p.label}
+                                size="small"
+                                label={p.label}
+                                onClick={() => handleQuickWeight(idx, p.val)}
+                                sx={{
+                                  height: 20,
+                                  fontSize: '0.62rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                  bgcolor: Math.abs(item.qty - p.val) < 0.001 ? '#10b981' : '#f0fdf4',
+                                  color: Math.abs(item.qty - p.val) < 0.001 ? 'white' : '#047857',
+                                  border: '1px solid #a7f3d0'
+                                }}
+                              />
+                            ))}
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => handleOpenWeightDialog(item, idx)}
+                              sx={{
+                                height: 20,
+                                fontSize: '0.62rem',
+                                fontWeight: 800,
+                                textTransform: 'none',
+                                px: 1,
+                                py: 0,
+                                bgcolor: '#059669',
+                                color: 'white',
+                                '&:hover': { bgcolor: '#047857' }
+                              }}
+                            >
+                              ⚖️ Gram/Rs Scale
+                            </Button>
+                          </Box>
+                        )}
+
+                        {/* Feature 3: Roll & Fabric Length Presets & Calculator */}
+                        {(item.isLengthItem || ['meter', 'm', 'yard', 'ghaz', 'inch', 'feet'].includes(String(item.unit || '').toLowerCase())) && (
+                          <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.4, flexWrap: 'wrap' }}>
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, color: '#2563eb' }}>
+                              📏 Roll:
+                            </Typography>
+                            {[
+                              { label: '0.5m', val: 0.5 },
+                              { label: '1m', val: 1.0 },
+                              { label: '2.5m (Suit)', val: 2.5 },
+                              { label: '4m', val: 4.0 }
+                            ].map(p => (
+                              <Chip
+                                key={p.label}
+                                size="small"
+                                label={p.label}
+                                onClick={() => handleQuickLength(idx, p.val)}
+                                sx={{
+                                  height: 20,
+                                  fontSize: '0.62rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                  bgcolor: Math.abs(item.qty - p.val) < 0.001 ? '#2563eb' : '#eff6ff',
+                                  color: Math.abs(item.qty - p.val) < 0.001 ? 'white' : '#1e40af',
+                                  border: '1px solid #bfdbfe'
+                                }}
+                              />
+                            ))}
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => handleOpenRollDialog(item, idx)}
+                              sx={{
+                                height: 20,
+                                fontSize: '0.62rem',
+                                fontWeight: 800,
+                                textTransform: 'none',
+                                px: 1,
+                                py: 0,
+                                bgcolor: '#2563eb',
+                                color: 'white',
+                                '&:hover': { bgcolor: '#1d4ed8' }
+                              }}
+                            >
+                              📏 Roll Calc
+                            </Button>
+                          </Box>
+                        )}
                       </TableCell>
                       <TableCell align="center">
                         <TextField
@@ -3600,6 +3970,22 @@ sx={{ width: 85 }}
           <span>{snackbar.message}</span>
         </Paper>
       </Snackbar>
+
+      {/* Weight Calculator Dialog (Feature 2: Loose items sold by weight) */}
+      <WeightCalculatorDialog
+        open={weightDialog.open}
+        onClose={() => setWeightDialog({ open: false, item: null, index: null })}
+        product={weightDialog.item}
+        onApply={handleApplyWeightDialog}
+      />
+
+      {/* Roll & Sheet Calculator Dialog (Feature 3: Sold by meter/yard/inches) */}
+      <RollCalculatorDialog
+        open={rollDialog.open}
+        onClose={() => setRollDialog({ open: false, item: null, index: null })}
+        product={rollDialog.item}
+        onApply={handleApplyRollDialog}
+      />
     </Box>
   );
 }

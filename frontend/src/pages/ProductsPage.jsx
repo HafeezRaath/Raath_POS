@@ -300,10 +300,15 @@ const [copies, setCopies] = useState(1);
   const [newBrandName, setNewBrandName] = useState('');
   const [newUnitName, setNewUnitName] = useState('');
 
-  // ==================== NEW: BOX/BULK ENTRY STATE ====================
+  // ==================== NEW: CARTON > BOX > PIECE PACKAGING STATE ====================
   const [isBoxEntry, setIsBoxEntry] = useState(false);
+  const [boxesPerCarton, setBoxesPerCarton] = useState('');
   const [unitsPerBox, setUnitsPerBox] = useState('');
+  const [cartonQuantity, setCartonQuantity] = useState('');
   const [boxQuantity, setBoxQuantity] = useState('');
+  const [loosePieces, setLoosePieces] = useState('');
+  const [cartonPrice, setCartonPrice] = useState('');
+  const [boxPrice, setBoxPrice] = useState('');
 
   const [variantDialog, setVariantDialog] = useState(false);
   const [variantParent, setVariantParent] = useState(null);
@@ -1399,20 +1404,38 @@ const [copies, setCopies] = useState(1);
         image_url: imageUrl,
         image_file: null,
         is_box_product: isBox,
-        units_per_box: meta.units_per_box || '',
+        units_per_box: meta.units_per_box || meta.pieces_per_box || product.pieces_per_box || '',
         box_quantity: meta.box_quantity || '',
       });
       
       if (isBox) {
-        setUnitsPerBox(meta.units_per_box || '');
+        setBoxesPerCarton(meta.boxes_per_carton || product.boxes_per_carton || '');
+        setUnitsPerBox(meta.units_per_box || meta.pieces_per_box || product.pieces_per_box || '');
+        setCartonQuantity(meta.carton_quantity || product.carton_qty || '');
         setBoxQuantity(meta.box_quantity || '');
+        setLoosePieces(meta.loose_pieces || '');
+        setCartonPrice(meta.carton_price || product.carton_price || '');
+        setBoxPrice(meta.box_price || product.box_price || '');
+      } else {
+        setBoxesPerCarton('');
+        setUnitsPerBox('');
+        setCartonQuantity('');
+        setBoxQuantity('');
+        setLoosePieces('');
+        setCartonPrice('');
+        setBoxPrice('');
       }
     } else { 
       resetProductForm(); 
       setImagePreview(null);
       setIsBoxEntry(false);
+      setBoxesPerCarton('');
       setUnitsPerBox('');
+      setCartonQuantity('');
       setBoxQuantity('');
+      setLoosePieces('');
+      setCartonPrice('');
+      setBoxPrice('');
     }
     setProductDialog(true);
   }, [resetProductForm]);
@@ -1430,7 +1453,25 @@ const [copies, setCopies] = useState(1);
     if (name === 'type') setDialogProductType(value);
   };
 
-  // ==================== BOX ENTRY HANDLERS ====================
+  // ==================== CARTON > BOX > PIECE PACKAGING HANDLERS ====================
+  const recalculatePackagingStock = (cQty, bpc, ppb, bQty, pQty) => {
+    const c = Number(cQty) || 0;
+    const bpC = Number(bpc) || 0;
+    const ppB = Number(ppb) || 0;
+    const b = Number(bQty) || 0;
+    const p = Number(pQty) || 0;
+
+    let total = 0;
+    if (bpC > 0 && ppB > 0) {
+      total = (c * bpC * ppB) + (b * ppB) + p;
+    } else if (ppB > 0) {
+      total = (b * ppB) + p;
+    } else {
+      total = p;
+    }
+    setProductForm(prev => ({ ...prev, stock: total.toString() }));
+  };
+
   const handleBoxEntryToggle = (e) => {
     const checked = e.target.checked;
     setIsBoxEntry(checked);
@@ -1439,54 +1480,51 @@ const [copies, setCopies] = useState(1);
       is_box_product: checked
     }));
     if (!checked) {
+      setBoxesPerCarton('');
       setUnitsPerBox('');
+      setCartonQuantity('');
       setBoxQuantity('');
-      setProductForm(prev => ({
-        ...prev,
-        units_per_box: '',
-        box_quantity: '',
-        stock: ''
-      }));
+      setLoosePieces('');
+      setCartonPrice('');
+      setBoxPrice('');
     }
+  };
+
+  const handleBoxesPerCartonChange = (e) => {
+    const val = e.target.value;
+    setBoxesPerCarton(val);
+    recalculatePackagingStock(cartonQuantity, val, unitsPerBox, boxQuantity, loosePieces);
   };
 
   const handleUnitsPerBoxChange = (e) => {
     const val = e.target.value;
     setUnitsPerBox(val);
     setProductForm(prev => ({ ...prev, units_per_box: val }));
-    
-    // Auto-calculate stock
-    if (val && boxQuantity) {
-      const totalStock = Number(val) * Number(boxQuantity);
-      setProductForm(prev => ({ ...prev, stock: totalStock.toString() }));
-    }
+    recalculatePackagingStock(cartonQuantity, boxesPerCarton, val, boxQuantity, loosePieces);
+  };
+
+  const handleCartonQuantityChange = (e) => {
+    const val = e.target.value;
+    setCartonQuantity(val);
+    recalculatePackagingStock(val, boxesPerCarton, unitsPerBox, boxQuantity, loosePieces);
   };
 
   const handleBoxQuantityChange = (e) => {
     const val = e.target.value;
     setBoxQuantity(val);
     setProductForm(prev => ({ ...prev, box_quantity: val }));
-    
-    // Auto-calculate stock
-    if (val && unitsPerBox) {
-      const totalStock = Number(val) * Number(unitsPerBox);
-      setProductForm(prev => ({ ...prev, stock: totalStock.toString() }));
-    }
+    recalculatePackagingStock(cartonQuantity, boxesPerCarton, unitsPerBox, val, loosePieces);
+  };
+
+  const handleLoosePiecesChange = (e) => {
+    const val = e.target.value;
+    setLoosePieces(val);
+    recalculatePackagingStock(cartonQuantity, boxesPerCarton, unitsPerBox, boxQuantity, val);
   };
 
   const handleRetailPriceChange = (e) => {
     const val = e.target.value;
     setProductForm(prev => ({ ...prev, retailPrice: val }));
-    
-    // Auto-calculate unit price for box products
-    if (isBoxEntry && unitsPerBox && val) {
-      const unitPrice = Number(val) / Number(unitsPerBox);
-      // Show in description or just store
-      setProductForm(prev => ({ 
-        ...prev, 
-        description: `${boxQuantity || '?'} boxes × ${unitsPerBox} units/box = ${Number(boxQuantity || 0) * Number(unitsPerBox || 0)} units | Unit Price: Rs. ${Math.round(unitPrice)}` 
-      }));
-    }
   };
 
   const handleSaveProduct = async (e) => {
@@ -1525,27 +1563,38 @@ const [copies, setCopies] = useState(1);
 
     const meta = {};
     
-    // ====== BOX ENTRY HANDLING ======
-    if (isBoxEntry && productForm.units_per_box && productForm.box_quantity) {
+    // ====== CARTON > BOX > PIECE ENTRY HANDLING ======
+    if (isBoxEntry) {
+      const c = Number(cartonQuantity) || 0;
+      const bpC = Number(boxesPerCarton) || 0;
+      const ppB = Number(unitsPerBox) || 0;
+      const b = Number(boxQuantity) || 0;
+      const p = Number(loosePieces) || 0;
+
       meta.is_box_product = true;
-      meta.units_per_box = Number(productForm.units_per_box);
-      meta.box_quantity = Number(productForm.box_quantity);
-      meta.original_box_cost = Number(productForm.costPrice) || 0;
-      meta.original_box_retail = Number(productForm.retailPrice) || 0;
-      meta.original_box_wholesale = Number(productForm.wholesalePrice) || 0;
+      meta.is_carton_product = c > 0 || bpC > 0;
+      meta.boxes_per_carton = bpC;
+      meta.units_per_box = ppB;
+      meta.pieces_per_box = ppB;
+      meta.carton_quantity = c;
+      meta.box_quantity = b;
+      meta.loose_pieces = p;
+      meta.carton_price = Number(cartonPrice) || (ppB > 0 && bpC > 0 ? (retail * ppB * bpC) : 0);
+      meta.box_price = Number(boxPrice) || (ppB > 0 ? (retail * ppB) : 0);
+      meta.piece_price = retail;
 
-      // UNIT prices = Box price / units per box
-      if (meta.units_per_box > 0) {
-        meta.unit_cost_price = meta.original_box_cost / meta.units_per_box;
-        meta.unit_retail_price = meta.original_box_retail / meta.units_per_box;
-        meta.unit_wholesale_price = meta.original_box_wholesale / meta.units_per_box;
+      let calcTotalStock = 0;
+      if (bpC > 0 && ppB > 0) {
+        calcTotalStock = (c * bpC * ppB) + (b * ppB) + p;
+      } else if (ppB > 0) {
+        calcTotalStock = (b * ppB) + p;
+      } else {
+        calcTotalStock = p || Number(productForm.stock) || 0;
       }
-
-      // Stock = boxes × units per box
-      const totalUnits = meta.box_quantity * meta.units_per_box;
-      productForm.stock = totalUnits.toString();
+      productForm.stock = calcTotalStock.toString();
     } else {
       meta.is_box_product = false;
+      meta.is_carton_product = false;
     }
     
     // Rest of meta handling...
@@ -1660,6 +1709,12 @@ const [copies, setCopies] = useState(1);
       description: JSON.stringify(meta),
       status: productForm.status,
       image_url: productForm.image_url || null,
+      carton_qty: Number(cartonQuantity) || 0,
+      boxes_per_carton: Number(boxesPerCarton) || 0,
+      pieces_per_box: Number(unitsPerBox) || 0,
+      carton_price: Number(cartonPrice) || 0,
+      box_price: Number(boxPrice) || 0,
+      expiry_date: productForm.expiryDate || null,
     };
 
     const variantData = {
@@ -2946,10 +3001,10 @@ const [copies, setCopies] = useState(1);
                     </Box>
                     <Box>
                       <Typography variant="subtitle2" fontWeight="bold" color={isBoxEntry ? '#065f46' : 'text.primary'}>
-                        Packaging / Box Entry Mode
+                        Carton &gt; Box &gt; Piece Packaging Hierarchy
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Carton ya box ke hisaab se inventory aur unit prices auto-calculate karein
+                        Carton, Box aur Piece stock entry &amp; piece-selling auto-break mode
                       </Typography>
                     </Box>
                   </Box>
@@ -2963,7 +3018,7 @@ const [copies, setCopies] = useState(1);
                     }
                     label={
                       <Typography variant="caption" fontWeight="bold" sx={{ color: isBoxEntry ? '#059669' : '#64748b', ml: 0.5 }}>
-                        {isBoxEntry ? 'BOX MODE ON' : 'NORMAL ENTRY'}
+                        {isBoxEntry ? 'PACKAGING HIERARCHY ON' : 'SINGLE PIECE MODE'}
                       </Typography>
                     }
                   />
@@ -2972,16 +3027,16 @@ const [copies, setCopies] = useState(1);
                 {isBoxEntry && (
                   <Box sx={{ mt: 2.5, pt: 2, borderTop: '1px dashed #a7f3d0' }}>
                     <Grid container spacing={2}>
+                      {/* Tier 1: Multipliers */}
                       <Grid item xs={12} sm={6}>
                         <TextField
                           fullWidth
                           size="small"
-                          label="Units per Box *"
+                          label="Boxes per Carton (Ctn → Box)"
                           type="number"
-                          value={unitsPerBox}
-                          onChange={handleUnitsPerBoxChange}
-                          helperText="Ek box / dabbe mein kitne pieces hain (e.g., 10)"
-                          required={isBoxEntry}
+                          value={boxesPerCarton}
+                          onChange={handleBoxesPerCartonChange}
+                          helperText="Ek Carton mein kitne Boxes hain (e.g., 10)"
                           placeholder="10"
                         />
                       </Grid>
@@ -2989,49 +3044,124 @@ const [copies, setCopies] = useState(1);
                         <TextField
                           fullWidth
                           size="small"
-                          label="Box Quantity *"
+                          label="Pieces per Box (Box → Pcs) *"
                           type="number"
-                          value={boxQuantity}
-                          onChange={handleBoxQuantityChange}
-                          helperText="Total kitne boxes hain (e.g., 5)"
+                          value={unitsPerBox}
+                          onChange={handleUnitsPerBoxChange}
+                          helperText="Ek Box mein kitne Pieces hain (e.g., 12)"
                           required={isBoxEntry}
+                          placeholder="12"
+                        />
+                      </Grid>
+
+                      {/* Tier 2: Current Inventory Breakdown */}
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Cartons Stock"
+                          type="number"
+                          value={cartonQuantity}
+                          onChange={handleCartonQuantityChange}
+                          helperText="Dukaan/Godam mein kitne Cartons hain"
                           placeholder="5"
                         />
                       </Grid>
-                      {unitsPerBox && boxQuantity && (
-                        <Grid item xs={12}>
-                          <Box sx={{ 
-                            p: 2, 
-                            borderRadius: 2.5, 
-                            bgcolor: '#ecfdf5', 
-                            border: '1px solid #a7f3d0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: 1.5
-                          }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <CheckCircle sx={{ color: '#10b981', fontSize: 22 }} />
-                              <Box>
-                                <Typography variant="body2" fontWeight="bold" color="#065f46">
-                                  Total Calculated Units: {Number(unitsPerBox) * Number(boxQuantity)} {productForm.unit || 'units'}
-                                </Typography>
-                                <Typography variant="caption" color="#047857">
-                                  Formula: {unitsPerBox} units/box × {boxQuantity} boxes
-                                </Typography>
-                              </Box>
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Loose Boxes Stock"
+                          type="number"
+                          value={boxQuantity}
+                          onChange={handleBoxQuantityChange}
+                          helperText="Khulay boxes kitne hain"
+                          placeholder="2"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Loose Pieces Stock"
+                          type="number"
+                          value={loosePieces}
+                          onChange={handleLoosePiecesChange}
+                          helperText="Khulay azaad pieces kitne hain"
+                          placeholder="6"
+                        />
+                      </Grid>
+
+                      {/* Tier 3: Prices for Box & Carton */}
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Box Selling Price (Rs.)"
+                          type="number"
+                          value={boxPrice}
+                          onChange={(e) => setBoxPrice(e.target.value)}
+                          helperText={unitsPerBox && productForm.retailPrice ? `Standard: Rs. ${Number(productForm.retailPrice) * Number(unitsPerBox)}` : '1 Box ki retail qeemat'}
+                          placeholder={unitsPerBox && productForm.retailPrice ? String(Number(productForm.retailPrice) * Number(unitsPerBox)) : '1200'}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Carton Selling Price (Rs.)"
+                          type="number"
+                          value={cartonPrice}
+                          onChange={(e) => setCartonPrice(e.target.value)}
+                          helperText={boxesPerCarton && unitsPerBox && productForm.retailPrice ? `Standard: Rs. ${Number(productForm.retailPrice) * Number(unitsPerBox) * Number(boxesPerCarton)}` : '1 Carton ki wholesale/retail qeemat'}
+                          placeholder={boxesPerCarton && unitsPerBox && productForm.retailPrice ? String(Number(productForm.retailPrice) * Number(unitsPerBox) * Number(boxesPerCarton)) : '12000'}
+                        />
+                      </Grid>
+
+                      {/* Formula & Summary Live Calculation Card */}
+                      <Grid item xs={12}>
+                        <Box sx={{ 
+                          p: 2, 
+                          borderRadius: 2.5, 
+                          bgcolor: '#ecfdf5', 
+                          border: '1px solid #a7f3d0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 1.5
+                        }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CheckCircle sx={{ color: '#10b981', fontSize: 24 }} />
+                            <Box>
+                              <Typography variant="body2" fontWeight="bold" color="#065f46">
+                                Total Converted Stock: {Number(productForm.stock) || 0} Pieces
+                              </Typography>
+                              <Typography variant="caption" color="#047857" sx={{ display: 'block' }}>
+                                Calculation: {Number(cartonQuantity) || 0} Ctn (×{Number(boxesPerCarton) || 0} box ×{Number(unitsPerBox) || 0} pcs) + {Number(boxQuantity) || 0} Box (×{Number(unitsPerBox) || 0} pcs) + {Number(loosePieces) || 0} Loose = {Number(productForm.stock) || 0} Pieces
+                              </Typography>
                             </Box>
-                            {productForm.retailPrice && (
+                          </Box>
+                          <Stack direction="row" spacing={1} flexWrap="wrap">
+                            {Number(boxesPerCarton) > 0 && Number(unitsPerBox) > 0 && (
                               <Chip 
                                 size="small" 
-                                label={`Per Unit Price: Rs. ${Math.round(Number(productForm.retailPrice) / Number(unitsPerBox))}`}
-                                sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold' }}
+                                color="success"
+                                label={`1 Ctn = ${Number(boxesPerCarton) * Number(unitsPerBox)} Pcs`}
+                                sx={{ fontWeight: 'bold' }}
                               />
                             )}
-                          </Box>
-                        </Grid>
-                      )}
+                            {Number(unitsPerBox) > 0 && (
+                              <Chip 
+                                size="small" 
+                                color="primary"
+                                label={`1 Box = ${unitsPerBox} Pcs`}
+                                sx={{ fontWeight: 'bold' }}
+                              />
+                            )}
+                          </Stack>
+                        </Box>
+                      </Grid>
                     </Grid>
                   </Box>
                 )}

@@ -32,6 +32,7 @@ const warehouseRoutes = require('./warehouseRoutes');
 const fbrRoutes = require('./fbrRoutes');
 const userRoutes = require('./userRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
+const auditRoutes = require('./auditRoutes');
 
 // API Health Check
 router.get('/health', (req, res) => {
@@ -89,5 +90,6 @@ router.use('/warehouses', warehouseRoutes);
 router.use('/fbr', fbrRoutes);
 router.use('/users', userRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/audit-logs', auditRoutes);
 
 module.exports = router;

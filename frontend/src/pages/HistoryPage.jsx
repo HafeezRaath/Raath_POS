@@ -415,6 +415,7 @@ const HISTORY_TABS = [
   { id: 'payments', label: 'Payments', icon: <Payment />, color: 'primary' },
   { id: 'returns', label: 'Returns', icon: <Restore />, color: 'warning' },
   { id: 'expenses', label: 'Expenses', icon: <MoneyOff />, color: 'error' },
+  { id: 'audit', label: 'Audit Trail', icon: <HistoryIcon />, color: 'secondary' },
 ];
 
 // ==================== PERMISSIONS HOOK ====================
@@ -441,6 +442,43 @@ const usePermissions = () => {
 const MobileHistoryCard = ({ record, type, onView, onDelete, canDelete }) => {
   const [expanded, setExpanded] = useState(false);
 
+  if (type === 'audit') {
+    let detailsStr = record.details || '-';
+    if (typeof detailsStr === 'object') {
+      try { detailsStr = JSON.stringify(detailsStr); } catch (_) {}
+    }
+    return (
+      <Card sx={{ mb: 1.5, borderLeft: '4px solid #64748b', borderRadius: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+        <CardContent sx={{ p: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Box>
+              <Typography variant="subtitle2" fontWeight="bold">
+                {record.user_name || `User #${record.user_id || 'System'}`}
+              </Typography>
+              <Chip size="small" label={(record.user_role || 'Staff').toUpperCase()} sx={{ height: 18, fontSize: '0.6rem', mt: 0.3 }} />
+            </Box>
+            <Chip 
+              size="small" 
+              label={record.action || 'ACTIVITY'} 
+              color={
+                record.action?.includes('DELETE') ? 'error' :
+                record.action?.includes('DISCOUNT') ? 'warning' :
+                record.action?.includes('RETURN') ? 'info' : 'primary'
+              }
+              sx={{ fontWeight: 'bold', fontSize: '0.65rem' }}
+            />
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.8 }}>
+            {formatDate(record.created_at)}
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 0.8, fontSize: '0.75rem', bgcolor: '#f8fafc', p: 1, borderRadius: 1, wordBreak: 'break-word' }}>
+            {detailsStr}
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const getIcon = () => {
     const icons = {
       sales: <PointOfSale color="primary" />,
@@ -448,6 +486,7 @@ const MobileHistoryCard = ({ record, type, onView, onDelete, canDelete }) => {
       payments: <Payment color="success" />,
       returns: <Restore color="warning" />,
       expenses: <MoneyOff color="error" />,
+      audit: <HistoryIcon color="secondary" />,
     };
     return icons[type] || <Receipt />;
   };
@@ -649,6 +688,7 @@ const getLocalDateStr = (d = new Date()) => {
   const [paymentData, setPaymentData] = useState([]);
   const [returnData, setReturnData] = useState([]);
   const [expenseData, setExpenseData] = useState([]);
+  const [auditData, setAuditData] = useState([]);
 
   // ==================== SUMMARY STATS ====================
   const [summaryStats, setSummaryStats] = useState({
@@ -662,6 +702,7 @@ const getLocalDateStr = (d = new Date()) => {
   const [allPayments, setAllPayments] = useState([]);
   const [allReturns, setAllReturns] = useState([]);
   const [allExpenses, setAllExpenses] = useState([]);
+  const [allAudit, setAllAudit] = useState([]);
 
   // ==================== CRUD OPERATIONS ====================
 
@@ -680,12 +721,13 @@ const getLocalDateStr = (d = new Date()) => {
       console.log('[History] Date range:', dateFrom, 'to', dateTo);
 
       // ===== SAB DATA EK SAATH LOAD KARO =====
-      const [salesRaw, purchasesRaw, paymentsRaw, returnsRaw, expensesRaw] = await Promise.all([
+      const [salesRaw, purchasesRaw, paymentsRaw, returnsRaw, expensesRaw, auditRaw] = await Promise.all([
         db.getSalesHistory().catch(() => []),
         db.getPurchases().catch(() => []),
         db.getPayments().catch(() => []),
         db.getSaleReturns().catch(() => []),
-        db.getExpenses().catch(() => [])
+        db.getExpenses().catch(() => []),
+        db.getAuditLogs ? db.getAuditLogs({ limit: 300 }).then(r => r?.data || (Array.isArray(r) ? r : [])).catch(() => []) : Promise.resolve([])
       ]);
 
       // Store all data for filtering
@@ -694,17 +736,19 @@ const getLocalDateStr = (d = new Date()) => {
       setAllPayments(paymentsRaw);
       setAllReturns(returnsRaw);
       setAllExpenses(expensesRaw);
+      setAllAudit(auditRaw);
 
       console.log('[History] Raw data:', {
         sales: salesRaw.length,
         purchases: purchasesRaw.length,
         payments: paymentsRaw.length,
         returns: returnsRaw.length,
-        expenses: expensesRaw.length
+        expenses: expensesRaw.length,
+        audit: auditRaw.length
       });
 
       // Apply all filters
-      applyAllFilters(salesRaw, purchasesRaw, paymentsRaw, returnsRaw, expensesRaw);
+      applyAllFilters(salesRaw, purchasesRaw, paymentsRaw, returnsRaw, expensesRaw, auditRaw);
 
     } catch (err) {
       console.error('[History] Load error:', err);
@@ -715,7 +759,7 @@ const getLocalDateStr = (d = new Date()) => {
   };
 
   // ==================== APPLY ALL FILTERS ====================
-  const applyAllFilters = (salesRaw, purchasesRaw, paymentsRaw, returnsRaw, expensesRaw) => {
+  const applyAllFilters = (salesRaw, purchasesRaw, paymentsRaw, returnsRaw, expensesRaw, auditRaw = allAudit) => {
     // Date filter function (LOCAL timezone)
     const getLocalDate = (dateStr) => {
       if (!dateStr) return '';
@@ -784,12 +828,16 @@ const getLocalDateStr = (d = new Date()) => {
     filteredExpenses = filterByDay(filteredExpenses, 'date');
     filteredExpenses = filterByPayment(filteredExpenses);
 
+    let filteredAudit = filterByDate(auditRaw || [], 'created_at');
+    filteredAudit = filterByDay(filteredAudit, 'created_at');
+
     console.log('[History] Filtered data:', {
       sales: filteredSales.length,
       purchases: filteredPurchases.length,
       payments: filteredPayments.length,
       returns: filteredReturns.length,
-      expenses: filteredExpenses.length
+      expenses: filteredExpenses.length,
+      audit: filteredAudit.length
     });
 
     // Set data for current tab
@@ -800,6 +848,7 @@ const getLocalDateStr = (d = new Date()) => {
       case 'payments': setPaymentData(filteredPayments); break;
       case 'returns': setReturnData(filteredReturns); break;
       case 'expenses': setExpenseData(filteredExpenses); break;
+      case 'audit': setAuditData(filteredAudit); break;
       default: break;
     }
 
@@ -819,18 +868,12 @@ const getLocalDateStr = (d = new Date()) => {
       netCash: totalSales - totalPurchases - totalExpenses,
       totalBills: filteredSales.length + filteredPurchases.length
     });
-
-    console.log('[History] Summary:', {
-      totalSales: formatCurrency(totalSales),
-      totalPurchases: formatCurrency(totalPurchases),
-      netCash: formatCurrency(totalSales - totalPurchases - totalExpenses)
-    });
   };
 
   // ==================== RE-APPLY FILTERS WHEN FILTERS CHANGE ====================
   useEffect(() => {
-    if (allSales.length > 0 || allPurchases.length > 0) {
-      applyAllFilters(allSales, allPurchases, allPayments, allReturns, allExpenses);
+    if (allSales.length > 0 || allPurchases.length > 0 || allAudit.length > 0) {
+      applyAllFilters(allSales, allPurchases, allPayments, allReturns, allExpenses, allAudit);
     }
   }, [dateFrom, dateTo, dayFilter, statusFilter, paymentFilter, activeTab]);
 
@@ -865,6 +908,7 @@ const getLocalDateStr = (d = new Date()) => {
       case 'payments': return paymentData;
       case 'returns': return returnData;
       case 'expenses': return expenseData;
+      case 'audit': return auditData;
       default: return [];
     }
   };
@@ -1742,6 +1786,7 @@ const handlePrintReceipt = async () => {
               payments: paymentData.length,
               returns: returnData.length,
               expenses: expenseData.length,
+              audit: auditData.length,
             };
             return (
               <Tab 
@@ -1807,20 +1852,83 @@ const handlePrintReceipt = async () => {
             <TableContainer sx={{ maxHeight: 'calc(100vh - 420px)' }}>
               <Table size="small" stickyHeader>
                 <TableHead>
-                  <TableRow sx={{ bgcolor: '#1c2580' }}>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>#</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Invoice/Ref</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Date</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Day</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Party</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">Amount</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="center">Status</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="center">Actions</TableCell>
-                  </TableRow>
+                  {getCurrentTabType() === 'audit' ? (
+                    <TableRow sx={{ bgcolor: '#334155' }}>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>#</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Date & Time</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>User / Staff</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="center">Action</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Target Entity</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Audit Details</TableCell>
+                    </TableRow>
+                  ) : (
+                    <TableRow sx={{ bgcolor: '#1c2580' }}>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>#</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Invoice/Ref</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Date</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Day</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Party</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">Amount</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="center">Status</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="center">Actions</TableCell>
+                    </TableRow>
+                  )}
                 </TableHead>
                 <TableBody>
                   {paginatedData.map((record, idx) => {
                     const type = getCurrentTabType();
+
+                    if (type === 'audit') {
+                      let detailsStr = record.details || '-';
+                      if (typeof detailsStr === 'object') {
+                        try { detailsStr = JSON.stringify(detailsStr); } catch (_) {}
+                      }
+                      return (
+                        <TableRow key={record.id || idx} hover>
+                          <TableCell>{idx + 1}</TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(record.created_at)}</TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Avatar sx={{ width: 24, height: 24, fontSize: '0.7rem', bgcolor: '#3b82f6' }}>
+                                {(record.user_name || 'U').charAt(0).toUpperCase()}
+                              </Avatar>
+                              <Box>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {record.user_name || `User #${record.user_id || 'System'}`}
+                                </Typography>
+                                <Chip 
+                                  size="small" 
+                                  label={(record.user_role || 'Staff').toUpperCase()} 
+                                  sx={{ height: 16, fontSize: '0.55rem', mt: 0.2 }} 
+                                />
+                              </Box>
+                            </Box>
+                          </TableCell>
+                          <TableCell align="center">
+                            <Chip 
+                              size="small" 
+                              label={record.action || 'ACTIVITY'} 
+                              color={
+                                record.action?.includes('DELETE') ? 'error' :
+                                record.action?.includes('DISCOUNT') ? 'warning' :
+                                record.action?.includes('RETURN') ? 'info' : 'primary'
+                              }
+                              sx={{ fontWeight: 'bold', fontSize: '0.65rem' }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                              {record.entity_type || record.table_name || '-'} {record.entity_id ? `#${record.entity_id}` : ''}
+                            </Typography>
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 350 }}>
+                            <Typography variant="body2" sx={{ fontSize: '0.75rem', wordBreak: 'break-word' }}>
+                              {detailsStr}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
                     
                     const getInvoice = () => {
                       switch(type) {

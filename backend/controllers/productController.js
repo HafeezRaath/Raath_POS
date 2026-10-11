@@ -178,6 +178,16 @@ exports.updateProduct = async (req, res, next) => {
     ]);
 
     const updated = await query('SELECT * FROM products WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+
+    // Audit log
+    const uName = req.user?.username || req.user?.name || 'Admin';
+    const uRole = req.user?.role || 'admin';
+    await query(
+      `INSERT INTO audit_logs (tenant_id, user_id, user_name, user_role, action, table_name, record_id, details)
+       VALUES (?, ?, ?, ?, 'PRODUCT_EDITED', 'products', ?, ?)`,
+      [tenantId, req.user?.id || null, uName, uRole, id, `Product #${id} (${name || updated[0]?.name || ''}) was modified by ${uName}`]
+    ).catch(() => {});
+
     res.json({ success: true, data: updated[0] });
   } catch (error) {
     next(error);
@@ -189,6 +199,16 @@ exports.deleteProduct = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
     await query('UPDATE products SET is_deleted = 1, deleted_at = NOW() WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+
+    // Audit log
+    const uName = req.user?.username || req.user?.name || 'Admin';
+    const uRole = req.user?.role || 'admin';
+    await query(
+      `INSERT INTO audit_logs (tenant_id, user_id, user_name, user_role, action, table_name, record_id, details)
+       VALUES (?, ?, ?, ?, 'PRODUCT_DELETED', 'products', ?, ?)`,
+      [tenantId, req.user?.id || null, uName, uRole, id, `Product #${id} was deleted by ${uName} (${uRole})`]
+    ).catch(() => {});
+
     res.json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
     next(error);

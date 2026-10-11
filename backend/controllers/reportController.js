@@ -48,6 +48,16 @@ exports.getDashboardStats = async (req, res, next) => {
       [tenantId, today]
     );
 
+    const [expiryStats] = await query(
+      `SELECT 
+         COUNT(DISTINCT CASE WHEN (p.expiry_date < CURDATE() OR pi.expiry_date < CURDATE()) THEN p.id END) AS expired_count,
+         COUNT(DISTINCT CASE WHEN (DATEDIFF(COALESCE(pi.expiry_date, p.expiry_date), CURDATE()) BETWEEN 0 AND 30) THEN p.id END) AS expiring_soon_count
+       FROM products p
+       LEFT JOIN purchase_items pi ON pi.product_id = p.id AND pi.tenant_id = p.tenant_id AND pi.expiry_date IS NOT NULL
+       WHERE p.tenant_id = ? AND p.is_deleted = 0 AND (p.expiry_date IS NOT NULL OR pi.expiry_date IS NOT NULL)`,
+      [tenantId]
+    ).catch(() => [{ expired_count: 0, expiring_soon_count: 0 }]);
+
     res.json({
       success: true,
       data: {
@@ -62,7 +72,9 @@ exports.getDashboardStats = async (req, res, next) => {
         customerDues: custStats?.total_customer_dues || 0,
         totalSuppliers: supStats?.total_suppliers || 0,
         supplierDues: supStats?.total_supplier_dues || 0,
-        todayExpenses: expStats?.total_expenses_today || 0
+        todayExpenses: expStats?.total_expenses_today || 0,
+        expiredCount: expiryStats?.expired_count || 0,
+        expiringSoonCount: expiryStats?.expiring_soon_count || 0
       }
     });
   } catch (error) {
@@ -230,3 +242,78 @@ exports.getSupplierDues = async (req, res, next) => {
     next(error);
   }
 };
+
+// --- Expiry and Shelf-Life Report ---
+exports.getExpiryReport = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { filter = 'all' } = req.query; // all, expired, 30days, 60days, 90days
+
+    let sql = `
+      SELECT 
+        COALESCE(pi.id, p.id) AS unique_row_id,
+        p.id AS product_id,
+        p.name AS product_name,
+        p.sku,
+        p.barcode,
+        p.stock AS current_stock,
+        p.purchase_price,
+        p.retail_price,
+        c.name AS category_name,
+        COALESCE(pi.expiry_date, p.expiry_date) AS expiry_date,
+        DATEDIFF(COALESCE(pi.expiry_date, p.expiry_date), CURDATE()) AS days_left,
+        pur.purchase_number,
+        pur.supplier_name,
+        CASE
+          WHEN COALESCE(pi.expiry_date, p.expiry_date) < CURDATE() THEN 'EXPIRED'
+          WHEN DATEDIFF(COALESCE(pi.expiry_date, p.expiry_date), CURDATE()) <= 30 THEN 'CRITICAL'
+          WHEN DATEDIFF(COALESCE(pi.expiry_date, p.expiry_date), CURDATE()) <= 60 THEN 'WARNING'
+          ELSE 'GOOD'
+        END AS expiry_status
+      FROM products p
+      LEFT JOIN purchase_items pi ON pi.product_id = p.id AND pi.tenant_id = p.tenant_id AND pi.expiry_date IS NOT NULL
+      LEFT JOIN purchases pur ON pi.purchase_id = pur.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.tenant_id = ? 
+        AND p.is_deleted = 0 
+        AND (pi.expiry_date IS NOT NULL OR p.expiry_date IS NOT NULL)
+    `;
+    const params = [tenantId];
+
+    if (filter === 'expired') {
+      sql += ` AND COALESCE(pi.expiry_date, p.expiry_date) < CURDATE()`;
+    } else if (filter === '30days') {
+      sql += ` AND DATEDIFF(COALESCE(pi.expiry_date, p.expiry_date), CURDATE()) BETWEEN 0 AND 30`;
+    } else if (filter === '60days') {
+      sql += ` AND DATEDIFF(COALESCE(pi.expiry_date, p.expiry_date), CURDATE()) BETWEEN 0 AND 60`;
+    } else if (filter === '90days') {
+      sql += ` AND DATEDIFF(COALESCE(pi.expiry_date, p.expiry_date), CURDATE()) BETWEEN 0 AND 90`;
+    }
+
+    sql += ` ORDER BY expiry_date ASC`;
+
+    const rows = await query(sql, params).catch(() => []);
+
+    const expiredCount = rows.filter(r => r.expiry_status === 'EXPIRED').length;
+    const criticalCount = rows.filter(r => r.expiry_status === 'CRITICAL').length;
+    const atRiskValue = rows
+      .filter(r => r.expiry_status === 'EXPIRED' || r.expiry_status === 'CRITICAL')
+      .reduce((sum, r) => sum + (parseFloat(r.current_stock || 0) * parseFloat(r.purchase_price || 0)), 0);
+
+    res.json({
+      success: true,
+      data: {
+        records: rows,
+        summary: {
+          totalTracked: rows.length,
+          expiredCount,
+          criticalCount,
+          atRiskValue
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

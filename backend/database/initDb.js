@@ -31,7 +31,8 @@ const TENANT_TABLES = [
   'emi_records', 'emi_reschedule_log', 'emi_schedule', 'emi_visit_log',
   'emis', 'expense_categories', 'expenses', 'fbr_invoices', 'general_ledger',
   'offer_items', 'offers', 'payments', 'product_serialized_items',
-  'product_variants', 'products', 'purchase_items', 'purchase_return_items',
+  'product_variants', 'products', 'purchase_items', 'purchase_order_items',
+  'purchase_orders', 'purchase_return_items',
   'purchase_returns', 'purchases', 'sale_items', 'sale_return_items',
   'sale_returns', 'sales', 'salesman_advances', 'salesman_commission_payouts',
   'salesman_ledger', 'salesman_salary_payments', 'salesman_sale_items',
@@ -162,7 +163,65 @@ async function initializeDatabase() {
       // Ignore if table was empty
     }
 
-    // 6. Ensure tenant_id on all 63 tables
+    // Safe migrations for Audit Logs, Packaging, Expiry & Purchase Orders
+    await addColumnIfMissing(connection, 'audit_logs', '`user_name` VARCHAR(150)');
+    await addColumnIfMissing(connection, 'audit_logs', '`user_role` VARCHAR(50)');
+    await addColumnIfMissing(connection, 'audit_logs', '`details` TEXT');
+    await addColumnIfMissing(connection, 'audit_logs', '`ip_address` VARCHAR(50)');
+
+    await addColumnIfMissing(connection, 'products', '`expiry_date` DATE NULL');
+    await addColumnIfMissing(connection, 'products', '`carton_qty` INT DEFAULT 0');
+    await addColumnIfMissing(connection, 'products', '`boxes_per_carton` INT DEFAULT 0');
+    await addColumnIfMissing(connection, 'products', '`pieces_per_box` INT DEFAULT 0');
+    await addColumnIfMissing(connection, 'products', '`carton_price` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'products', '`box_price` DECIMAL(15,2) DEFAULT 0');
+
+    await addColumnIfMissing(connection, 'product_variants', '`expiry_date` DATE NULL');
+    await addColumnIfMissing(connection, 'purchase_items', '`expiry_date` DATE NULL');
+
+    // Create Purchase Orders tables if not exist
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`purchase_orders\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`tenant_id\` VARCHAR(50) NOT NULL DEFAULT 'tenant_default',
+        \`po_no\` VARCHAR(100) UNIQUE NOT NULL,
+        \`supplier_id\` INT NULL,
+        \`supplier_name\` VARCHAR(150),
+        \`order_date\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        \`expected_delivery_date\` DATE NULL,
+        \`status\` VARCHAR(50) DEFAULT 'draft',
+        \`subtotal\` DECIMAL(15,2) DEFAULT 0,
+        \`tax\` DECIMAL(15,2) DEFAULT 0,
+        \`shipping_cost\` DECIMAL(15,2) DEFAULT 0,
+        \`total_amount\` DECIMAL(15,2) DEFAULT 0,
+        \`notes\` TEXT,
+        \`created_by\` INT NULL,
+        \`is_deleted\` TINYINT(1) DEFAULT 0,
+        \`deleted_at\` DATETIME NULL,
+        \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_po_sup (\`supplier_id\`),
+        INDEX idx_po_status (\`status\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`purchase_order_items\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`tenant_id\` VARCHAR(50) NOT NULL DEFAULT 'tenant_default',
+        \`po_id\` INT NOT NULL,
+        \`product_id\` INT NULL,
+        \`product_variant_id\` INT NULL,
+        \`product_name\` VARCHAR(200),
+        \`quantity\` DECIMAL(15,2) NOT NULL DEFAULT 1,
+        \`received_qty\` DECIMAL(15,2) DEFAULT 0,
+        \`unit_cost\` DECIMAL(15,2) DEFAULT 0,
+        \`total\` DECIMAL(15,2) DEFAULT 0,
+        \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_poi_po (\`po_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // 6. Ensure tenant_id on all 65 tables
     for (const tbl of TENANT_TABLES) {
       await addColumnIfMissing(connection, tbl, '`tenant_id` VARCHAR(50) NOT NULL DEFAULT "tenant_default"');
     }

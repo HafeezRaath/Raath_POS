@@ -219,6 +219,62 @@ class DatabaseClient {
     return res.success;
   }
 
+  // ==================== PURCHASE ORDERS (PO) ====================
+  async getPurchaseOrders(filters = {}) {
+    const res = await api.get('/purchases/orders', filters).catch(() => ({ data: [] }));
+    return res.data || [];
+  }
+
+  async getPurchaseOrderById(id) {
+    const res = await api.get(`/purchases/orders/${id}`).catch(() => ({ data: null }));
+    return res.data;
+  }
+
+  async createPurchaseOrder(data) {
+    const res = await api.post('/purchases/orders', data);
+    return res.data;
+  }
+
+  async addPurchaseOrder(data) {
+    return this.createPurchaseOrder(data);
+  }
+
+  async updatePurchaseOrder(id, data) {
+    const res = await api.put(`/purchases/orders/${id}`, data);
+    return res.data;
+  }
+
+  async deletePurchaseOrder(id) {
+    const res = await api.delete(`/purchases/orders/${id}`);
+    return res.success;
+  }
+
+  async convertPOToPurchase(id, data = {}) {
+    const res = await api.post(`/purchases/orders/${id}/convert`, data);
+    return res.data;
+  }
+
+  // ==================== AUDIT LOGS ====================
+  async getAuditLogs(params = {}) {
+    const res = await api.get('/audit-logs', params).catch(() => ({ data: [] }));
+    return res.data || [];
+  }
+
+  async createAuditLog(data) {
+    const res = await api.post('/audit-logs', data).catch(() => ({ success: false }));
+    return res.data || res;
+  }
+
+  async logAudit(data) {
+    return this.createAuditLog(data);
+  }
+
+  // ==================== EXPIRY REPORTS ====================
+  async getExpiryReport(params = {}) {
+    const res = await api.get('/reports/expiry', params).catch(() => ({ data: { records: [], summary: {} } }));
+    return res.data || { records: [], summary: {} };
+  }
+
   // ==================== CUSTOMERS ====================
   async getCustomers(filters = {}) {
     const res = await api.get('/customers', filters);

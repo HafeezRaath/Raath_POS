@@ -15,5 +15,6 @@ router.get('/profit-loss', reportController.getProfitLoss);
 router.get('/stock', reportController.getStockReport);
 router.get('/customer-dues', reportController.getCustomerDues);
 router.get('/supplier-dues', reportController.getSupplierDues);
+router.get('/expiry', reportController.getExpiryReport);
 
 module.exports = router;

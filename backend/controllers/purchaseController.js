@@ -117,17 +117,18 @@ exports.createPurchase = async (req, res, next) => {
         const qty = parseFloat(it.quantity) || 1;
         const unitCost = parseFloat(it.unit_cost || it.purchase_price) || 0;
         const total = parseFloat(it.total) || (qty * unitCost);
+        const itemExpiry = it.expiry_date || null;
 
         await conn.query(
-          `INSERT INTO purchase_items (tenant_id, purchase_id, product_id, product_name, quantity, unit_cost, total)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [tenantId, purchaseId, prodId, it.product_name || it.name || '', qty, unitCost, total]
+          `INSERT INTO purchase_items (tenant_id, purchase_id, product_id, product_name, quantity, unit_cost, total, expiry_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, purchaseId, prodId, it.product_name || it.name || '', qty, unitCost, total, itemExpiry]
         );
 
-        // Increase product stock & update purchase price
+        // Increase product stock & update purchase price & expiry date
         await conn.query(
-          'UPDATE products SET stock = stock + ?, purchase_price = ? WHERE tenant_id = ? AND id = ?',
-          [qty, unitCost, tenantId, prodId]
+          'UPDATE products SET stock = stock + ?, purchase_price = ?, expiry_date = COALESCE(?, expiry_date) WHERE tenant_id = ? AND id = ?',
+          [qty, unitCost, itemExpiry, tenantId, prodId]
         );
       }
 
@@ -216,6 +217,234 @@ exports.updatePurchase = async (req, res, next) => {
       [notes, status, payment_status, tenantId, id]
     );
     res.json({ success: true, message: 'Purchase updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ==================== PURCHASE ORDERS (PO) ====================
+function generatePOOrderNumber() {
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000);
+  return `PO-ORD-${dateStr}-${randomNum}`;
+}
+
+exports.getPurchaseOrders = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { supplierId, status, limit = 100 } = req.query;
+    let sql = `
+      SELECT po.*, s.name AS supplier_name, s.phone AS supplier_phone,
+             (SELECT COUNT(id) FROM purchase_order_items WHERE po_id = po.id) AS items_count
+      FROM purchase_orders po
+      LEFT JOIN suppliers s ON po.supplier_id = s.id
+      WHERE po.tenant_id = ? AND po.is_deleted = 0
+    `;
+    const params = [tenantId];
+    if (supplierId) {
+      sql += ' AND po.supplier_id = ?';
+      params.push(supplierId);
+    }
+    if (status && status !== 'all') {
+      sql += ' AND po.status = ?';
+      params.push(status);
+    }
+    sql += ' ORDER BY po.id DESC LIMIT ?';
+    params.push(parseInt(limit, 10));
+
+    const rows = await query(sql, params);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getPurchaseOrderById = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { id } = req.params;
+    const orders = await query(
+      `SELECT po.*, s.name AS supplier_name, s.phone AS supplier_phone, s.company_name
+       FROM purchase_orders po
+       LEFT JOIN suppliers s ON po.supplier_id = s.id
+       WHERE po.tenant_id = ? AND po.id = ? AND po.is_deleted = 0`,
+      [tenantId, id]
+    );
+    if (orders.length === 0) {
+      return res.status(404).json({ success: false, error: 'Purchase Order not found' });
+    }
+    const order = orders[0];
+    const items = await query('SELECT * FROM purchase_order_items WHERE tenant_id = ? AND po_id = ?', [tenantId, id]);
+    order.items = items;
+    res.json({ success: true, data: order });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.createPurchaseOrder = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const {
+      po_no,
+      supplier_id = null,
+      supplier_name = '',
+      expected_delivery_date = null,
+      notes = '',
+      items = [],
+      subtotal = 0,
+      tax = 0,
+      shipping_cost = 0,
+      total_amount = 0,
+      status = 'draft'
+    } = req.body;
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Purchase Order items required' });
+    }
+
+    const orderNumber = po_no || generatePOOrderNumber();
+    const grandTotal = parseFloat(total_amount) || parseFloat(subtotal) || 0;
+
+    const createdId = await transaction(async (conn) => {
+      const [insertRes] = await conn.query(
+        `INSERT INTO purchase_orders (
+          tenant_id, po_no, supplier_id, supplier_name, expected_delivery_date,
+          status, subtotal, tax, shipping_cost, total_amount, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          tenantId, orderNumber, supplier_id || null, supplier_name,
+          expected_delivery_date || null, status, subtotal, tax, shipping_cost,
+          grandTotal, notes
+        ]
+      );
+
+      const poId = insertRes.insertId;
+
+      for (const it of items) {
+        const prodId = it.product_id || it.id || null;
+        const vId = it.product_variant_id || it.variant_id || null;
+        const qty = parseFloat(it.quantity) || 1;
+        const cost = parseFloat(it.unit_cost || it.purchase_price) || 0;
+        const lineTotal = parseFloat(it.total) || (qty * cost);
+
+        await conn.query(
+          `INSERT INTO purchase_order_items (
+            tenant_id, po_id, product_id, product_variant_id, product_name,
+            quantity, unit_cost, total
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, poId, prodId, vId, it.product_name || it.name || '', qty, cost, lineTotal]
+        );
+      }
+
+      return poId;
+    });
+
+    const [finalPO] = await query('SELECT * FROM purchase_orders WHERE tenant_id = ? AND id = ?', [tenantId, createdId]);
+    const finalItems = await query('SELECT * FROM purchase_order_items WHERE tenant_id = ? AND po_id = ?', [tenantId, createdId]);
+    finalPO.items = finalItems;
+
+    res.status(201).json({ success: true, data: finalPO });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.updatePurchaseOrder = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { id } = req.params;
+    const { status, expected_delivery_date, notes } = req.body;
+    await query(
+      `UPDATE purchase_orders SET 
+        status = COALESCE(?, status),
+        expected_delivery_date = COALESCE(?, expected_delivery_date),
+        notes = COALESCE(?, notes)
+       WHERE tenant_id = ? AND id = ?`,
+      [status, expected_delivery_date, notes, tenantId, id]
+    );
+    res.json({ success: true, message: 'Purchase Order updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.deletePurchaseOrder = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { id } = req.params;
+    await query('UPDATE purchase_orders SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+    res.json({ success: true, message: 'Purchase Order deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.convertPOToPurchase = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { id } = req.params;
+    const { paid_amount = 0, payment_method = 'cash', account_id = null } = req.body;
+
+    const orders = await query('SELECT * FROM purchase_orders WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    if (orders.length === 0) {
+      return res.status(404).json({ success: false, error: 'Purchase Order not found' });
+    }
+    const po = orders[0];
+    const items = await query('SELECT * FROM purchase_order_items WHERE tenant_id = ? AND po_id = ?', [tenantId, id]);
+
+    if (items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Purchase Order has no items' });
+    }
+
+    const dueAmount = (parseFloat(po.total_amount) || 0) - (parseFloat(paid_amount) || 0);
+    const purchaseNum = generatePONumber();
+
+    const purchaseId = await transaction(async (conn) => {
+      // 1. Insert into purchases
+      const [pRes] = await conn.query(
+        `INSERT INTO purchases (
+          tenant_id, purchase_number, supplier_id, supplier_name, subtotal,
+          tax, shipping_cost, grand_total, paid_amount, due_amount,
+          payment_method, account_id, notes, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received')`,
+        [
+          tenantId, purchaseNum, po.supplier_id, po.supplier_name, po.subtotal,
+          po.tax, po.shipping_cost, po.total_amount, paid_amount, dueAmount,
+          payment_method, account_id || null, `Converted from PO: ${po.po_no}`
+        ]
+      );
+
+      const newPurchId = pRes.insertId;
+
+      // 2. Insert items & increase stock
+      for (const it of items) {
+        await conn.query(
+          `INSERT INTO purchase_items (tenant_id, purchase_id, product_id, product_name, quantity, unit_cost, total)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, newPurchId, it.product_id, it.product_name, it.quantity, it.unit_cost, it.total]
+        );
+
+        if (it.product_id) {
+          await conn.query(
+            'UPDATE products SET stock = stock + ?, purchase_price = ? WHERE tenant_id = ? AND id = ?',
+            [it.quantity, it.unit_cost, tenantId, it.product_id]
+          );
+        }
+      }
+
+      // 3. Update supplier balance if due
+      if (po.supplier_id && dueAmount > 0) {
+        await conn.query('UPDATE suppliers SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [dueAmount, tenantId, po.supplier_id]);
+      }
+
+      // 4. Mark PO as received
+      await conn.query('UPDATE purchase_orders SET status = "received" WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+
+      return newPurchId;
+    });
+
+    res.json({ success: true, message: 'Purchase Order successfully converted to Purchase', purchaseId });
   } catch (error) {
     next(error);
   }
