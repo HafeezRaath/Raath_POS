@@ -1969,12 +1969,14 @@ export default function EMI() {
       }));
       return;
     }
+    const pName = (product.product_name || product.name || '') + (product.variant_name ? ` - ${product.variant_name}` : '');
+    const pPrice = Number(product.retail_price || product.sale_price || product.price || 0);
     setCalc(prev => ({
       ...prev,
       productVariantId: String(product.id),
-      productName: product.product_name + (product.variant_name ? ` - ${product.variant_name}` : ''),
+      productName: pName.trim(),
       productSKU: product.sku || '',
-      totalAmount: Number(product.retail_price || 0)
+      totalAmount: pPrice
     }));
   };
 
@@ -3494,7 +3496,14 @@ export default function EMI() {
               if (val?.isNewAction) {
                 setOpenCustomerModal(true);
               } else {
-                setCalc(prev => ({ ...prev, customerId: val ? val.id : '' }));
+                setCalc(prev => ({ ...prev, customerId: val ? String(val.id) : '' }));
+              }
+            }}
+            onSelect={(val) => {
+              if (val?.isNewAction) {
+                setOpenCustomerModal(true);
+              } else {
+                setCalc(prev => ({ ...prev, customerId: val ? String(val.id) : '' }));
               }
             }}
             isOptionEqualToValue={(opt, val) => String(opt.id) === String(val?.id)}
@@ -3526,10 +3535,14 @@ export default function EMI() {
             options={products}
             getOptionLabel={(option) => {
               if (!option || !option.id) return '';
-              return `${option.product_name || ''}${option.variant_name ? ` - ${option.variant_name}` : ''} [${option.sku || 'No SKU'}]`;
+              const pName = option.product_name || option.name || '';
+              const vName = option.variant_name ? ` - ${option.variant_name}` : '';
+              const sku = option.sku ? ` [${option.sku}]` : '';
+              return `${pName}${vName}${sku}`.trim();
             }}
             value={products.find(p => String(p.id) === String(calc.productVariantId)) || null}
             onChange={(e, newValue) => handleProductSelect(newValue)}
+            onSelect={(newValue) => handleProductSelect(newValue)}
             isOptionEqualToValue={(option, value) => String(option.id) === String(value?.id)}
             renderOption={(props, option) => (
               <li {...props} key={option.id}>

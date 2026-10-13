@@ -22,20 +22,35 @@ exports.createUser = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { name, username, email, password, role = 'cashier', phone = '', shop_name = 'RAATH POS Store' } = req.body;
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, error: 'Name, email, and password required' });
+    if (!name || !name.trim() || !password || !password.trim()) {
+      return res.status(400).json({ success: false, error: 'Name and password required' });
     }
 
-    const existing = await query('SELECT id FROM users WHERE email = ?', [email.trim().toLowerCase()]);
-    if (existing.length > 0) {
-      return res.status(400).json({ success: false, error: 'Email already registered' });
+    const cleanName = name.trim();
+    const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null;
+    const cleanUsername = (username && typeof username === 'string' && username.trim())
+      ? username.trim().toLowerCase()
+      : (cleanEmail ? cleanEmail.split('@')[0] : `user_${Date.now()}`);
+
+    if (cleanEmail) {
+      const existing = await query('SELECT id FROM users WHERE email = ? AND is_deleted = 0', [cleanEmail]);
+      if (existing.length > 0) {
+        return res.status(400).json({ success: false, error: 'Email already registered' });
+      }
+    }
+
+    if (cleanUsername) {
+      const existingUser = await query('SELECT id FROM users WHERE username = ? AND is_deleted = 0', [cleanUsername]);
+      if (existingUser.length > 0) {
+        return res.status(400).json({ success: false, error: 'Username already registered' });
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await query(
       `INSERT INTO users (tenant_id, name, username, email, phone, password_hash, role, shop_name, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-      [tenantId, name.trim(), username || email.split('@')[0], email.trim().toLowerCase(), phone, passwordHash, role, shop_name]
+      [tenantId, cleanName, cleanUsername, cleanEmail, phone || '', passwordHash, role, shop_name]
     );
 
     const [created] = await query('SELECT id, tenant_id, name, username, email, phone, role, shop_name, status FROM users WHERE tenant_id = ? AND id = ?', [tenantId, result.insertId]);
@@ -51,8 +66,25 @@ exports.updateUser = async (req, res, next) => {
     const { id } = req.params;
     const { name, username, email, phone, role, shop_name, status, password } = req.body;
 
+    const cleanEmail = email && typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : (email === '' ? null : undefined);
+    const cleanUsername = username && typeof username === 'string' && username.trim() ? username.trim().toLowerCase() : undefined;
+
+    if (cleanEmail) {
+      const existingEmail = await query('SELECT id FROM users WHERE email = ? AND id != ? AND is_deleted = 0', [cleanEmail, id]);
+      if (existingEmail.length > 0) {
+        return res.status(400).json({ success: false, error: 'Email already registered by another user' });
+      }
+    }
+
+    if (cleanUsername) {
+      const existingUser = await query('SELECT id FROM users WHERE username = ? AND id != ? AND is_deleted = 0', [cleanUsername, id]);
+      if (existingUser.length > 0) {
+        return res.status(400).json({ success: false, error: 'Username already registered by another user' });
+      }
+    }
+
     let passUpdateSql = '';
-    const params = [name, username, email, phone, role, shop_name, status];
+    const params = [name, cleanUsername !== undefined ? cleanUsername : null, cleanEmail !== undefined ? cleanEmail : null, phone, role, shop_name, status];
 
     if (password && password.trim()) {
       const hash = await bcrypt.hash(password, 10);
@@ -65,14 +97,14 @@ exports.updateUser = async (req, res, next) => {
       `UPDATE users SET
         name = COALESCE(?, name),
         username = COALESCE(?, username),
-        email = COALESCE(?, email),
+        email = CASE WHEN ? IS NOT NULL THEN ? ELSE email END,
         phone = COALESCE(?, phone),
         role = COALESCE(?, role),
         shop_name = COALESCE(?, shop_name),
         status = COALESCE(?, status)
         ${passUpdateSql}
        WHERE tenant_id = ? AND id = ? AND is_deleted = 0`,
-      params
+      [name, cleanUsername !== undefined ? cleanUsername : null, cleanEmail, cleanEmail, phone, role, shop_name, status, ...(password && password.trim() ? [params[7]] : []), tenantId, id]
     );
 
     const [updated] = await query('SELECT id, tenant_id, name, username, email, phone, role, shop_name, status FROM users WHERE tenant_id = ? AND id = ?', [tenantId, id]);

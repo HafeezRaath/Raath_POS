@@ -2695,12 +2695,19 @@ const handleProcessReturn = async () => {
               <Autocomplete
                 size="small"
                 options={suppliers}
-                getOptionLabel={(option) => option.name}
-                value={suppliers.find(s => s.id == purchaseForm.supplier_id) || null}
+                getOptionLabel={(option) => option?.name || ''}
+                value={suppliers.find(s => String(s.id) === String(purchaseForm.supplier_id)) || null}
                 onChange={(e, newValue) => {
                   setPurchaseForm(prev => ({
                     ...prev,
-                    supplier_id: newValue?.id || '',
+                    supplier_id: newValue?.id ? String(newValue.id) : '',
+                    supplier_name: newValue?.name || ''
+                  }));
+                }}
+                onSelect={(newValue) => {
+                  setPurchaseForm(prev => ({
+                    ...prev,
+                    supplier_id: newValue?.id ? String(newValue.id) : '',
                     supplier_name: newValue?.name || ''
                   }));
                 }}
@@ -4073,12 +4080,19 @@ const handleProcessReturn = async () => {
               <Autocomplete
                 size="small"
                 options={suppliers}
-                getOptionLabel={(option) => option.name || ''}
+                getOptionLabel={(option) => option?.name || ''}
                 value={suppliers.find(s => String(s.id) === String(poForm.supplier_id)) || null}
                 onChange={(e, newVal) => {
                   setPoForm(prev => ({
                     ...prev,
-                    supplier_id: newVal?.id || '',
+                    supplier_id: newVal?.id ? String(newVal.id) : '',
+                    supplier_name: newVal?.name || ''
+                  }));
+                }}
+                onSelect={(newVal) => {
+                  setPoForm(prev => ({
+                    ...prev,
+                    supplier_id: newVal?.id ? String(newVal.id) : '',
                     supplier_name: newVal?.name || ''
                   }));
                 }}

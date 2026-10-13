@@ -8,13 +8,19 @@ exports.getProducts = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const sql = `
-      SELECT p.*, 
-             b.name AS brand_name, 
-             c.name AS category_name
+      SELECT 
+        p.*, 
+        p.id AS product_id,
+        p.name AS product_name,
+        COALESCE(p.stock, 0) AS current_stock,
+        COALESCE(p.retail_price, p.sale_price, 0) AS retail_price,
+        COALESCE(p.sale_price, p.retail_price, 0) AS sale_price,
+        b.name AS brand_name, 
+        c.name AS category_name
       FROM products p
       LEFT JOIN brands b ON p.brand_id = b.id
       LEFT JOIN categories c ON p.category_id = c.id
-      WHERE p.tenant_id = ? AND p.is_deleted = 0
+      WHERE p.tenant_id = ? AND COALESCE(p.is_deleted, 0) = 0
       ORDER BY p.id DESC
     `;
     const products = await query(sql, [tenantId]);
@@ -120,11 +126,15 @@ exports.createProduct = async (req, res, next) => {
     });
 
     const created = await query('SELECT * FROM products WHERE tenant_id = ? AND id = ?', [tenantId, result]);
+    const prodObj = created[0] || {};
     res.status(201).json({
       success: true,
       data: {
-        ...created[0],
+        ...prodObj,
         id: result,
+        product_id: result,
+        product_name: prodObj.name,
+        current_stock: prodObj.stock,
         lastInsertRowid: result,
         variant_id: defaultVariantId
       }
@@ -260,17 +270,17 @@ exports.getAllVariants = async (req, res, next) => {
         p.brand_id,
         b.name AS brand_name,
         c.name AS category_name,
-        p.image_url,
+        COALESCE(pv.image_url, p.image_url) AS image_url,
         p.description,
         p.status,
         p.tax_type,
         p.tax_rate,
         p.is_serialized
       FROM products p
-      LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_deleted = 0
+      LEFT JOIN product_variants pv ON pv.product_id = p.id AND COALESCE(pv.is_deleted, 0) = 0
       LEFT JOIN brands b ON p.brand_id = b.id
       LEFT JOIN categories c ON p.category_id = c.id
-      WHERE p.tenant_id = ? AND p.is_deleted = 0
+      WHERE p.tenant_id = ? AND COALESCE(p.is_deleted, 0) = 0
       ORDER BY p.id DESC, pv.id ASC
     `;
     const rows = await query(sql, [tenantId]);
@@ -298,32 +308,36 @@ exports.createVariant = async (req, res, next) => {
 
     if (actualName === 'Default' && product_id) {
       const existing = await query(
-        `SELECT id FROM product_variants WHERE tenant_id = ? AND product_id = ? AND name = 'Default' AND is_deleted = 0 ORDER BY id ASC`,
+        `SELECT id FROM product_variants WHERE tenant_id = ? AND product_id = ? AND name = 'Default' AND COALESCE(is_deleted, 0) = 0 ORDER BY id ASC`,
         [tenantId, product_id]
       );
       if (existing.length > 0) {
         variantId = existing[0].id;
         await query(
           `UPDATE product_variants SET
+             variant_name = ?,
+             name = ?,
              sku = COALESCE(?, sku),
              barcode = COALESCE(?, barcode),
              purchase_price = CASE WHEN ? > 0 THEN ? ELSE purchase_price END,
+             retail_price = CASE WHEN ? > 0 THEN ? ELSE retail_price END,
              sale_price = CASE WHEN ? > 0 THEN ? ELSE sale_price END,
+             current_stock = CASE WHEN ? > 0 THEN ? ELSE current_stock END,
              stock = CASE WHEN ? > 0 THEN ? ELSE stock END
            WHERE tenant_id = ? AND id = ?`,
-          [sku || null, barcode || null, actualCost, actualCost, actualPrice, actualPrice, actualStock, actualStock, tenantId, variantId]
+          [actualName, actualName, sku || null, barcode || null, actualCost, actualCost, actualPrice, actualPrice, actualPrice, actualPrice, actualStock, actualStock, actualStock, actualStock, tenantId, variantId]
         );
       }
     }
 
     if (!variantId) {
       const sql = `
-        INSERT INTO product_variants (tenant_id, product_id, name, sku, barcode, purchase_price, sale_price, stock)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO product_variants (tenant_id, product_id, variant_name, name, sku, barcode, purchase_price, retail_price, sale_price, current_stock, stock)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       const result = await query(sql, [
-        tenantId, product_id, actualName, sku || null, barcode || null,
-        actualCost, actualPrice, actualStock
+        tenantId, product_id, actualName, actualName, sku || null, barcode || null,
+        actualCost, actualPrice, actualPrice, actualStock, actualStock
       ]);
       variantId = result.insertId;
     }

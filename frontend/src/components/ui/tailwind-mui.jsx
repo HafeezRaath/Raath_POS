@@ -800,10 +800,15 @@ export const MenuItem = ({ value, children, ...props }) => {
 export const Autocomplete = forwardRef(function Autocomplete(
   {
     options = [],
-    getOptionLabel = (o) => (typeof o === 'string' ? o : o.label || o.name || ''),
-    value,
+    getOptionLabel = (o) => (typeof o === 'string' ? o : o?.label || o?.name || ''),
+    value = null,
     onChange,
+    onSelect,
+    inputValue,
+    onInputChange,
     renderInput,
+    renderOption,
+    isOptionEqualToValue,
     className = '',
     sx,
     style = {},
@@ -814,38 +819,115 @@ export const Autocomplete = forwardRef(function Autocomplete(
   const parsedSx = parseSx(sx);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const wrapperRef = useRef(null);
 
+  const safeGetOptionLabel = (o) => {
+    if (o === null || o === undefined) return '';
+    if (typeof o === 'string') return o;
+    try {
+      const res = getOptionLabel ? getOptionLabel(o) : (o.label || o.name || '');
+      return res !== undefined && res !== null ? String(res) : '';
+    } catch {
+      return o.name || o.label || o.product_name || '';
+    }
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setOpen(false);
+        setIsFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const currentSearchText = inputValue !== undefined ? inputValue : query;
+  const filterText = (currentSearchText || '').toLowerCase().trim();
+
   const filtered = options.filter((opt) => {
-    const lbl = getOptionLabel(opt).toLowerCase();
-    return lbl.includes(query.toLowerCase());
+    if (!filterText) return true;
+    const lbl = safeGetOptionLabel(opt).toLowerCase();
+    const idStr = String(opt?.id || '').toLowerCase();
+    const skuStr = String(opt?.sku || '').toLowerCase();
+    return lbl.includes(filterText) || idStr.includes(filterText) || skuStr.includes(filterText);
   });
+
+  const handleSelect = (opt, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (onChange) onChange(e || null, opt);
+    if (onSelect) onSelect(opt);
+    if (props.onSelect) props.onSelect(opt);
+    if (onInputChange) onInputChange(e || null, safeGetOptionLabel(opt), 'reset');
+    setQuery('');
+    setOpen(false);
+    setIsFocused(false);
+  };
+
+  const displayInputValue = inputValue !== undefined 
+    ? inputValue 
+    : (isFocused ? query : (value ? safeGetOptionLabel(value) : query));
 
   return (
     <div ref={wrapperRef} className={`relative ${className}`} style={{ ...parsedSx, ...style }}>
       {renderInput({
-        value: query || (value ? getOptionLabel(value) : ''),
+        value: displayInputValue,
         onChange: (e) => {
-          setQuery(e.target.value);
+          const val = e.target.value;
+          setQuery(val);
+          if (onInputChange) onInputChange(e, val, 'input');
           setOpen(true);
         },
-        onFocus: () => setOpen(true),
+        onFocus: () => {
+          setIsFocused(true);
+          setOpen(true);
+        },
+        onBlur: () => {
+          // Delay to allow onMouseDown to execute
+          setTimeout(() => setIsFocused(false), 200);
+        }
       })}
       {open && filtered.length > 0 && (
         <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-xl shadow-xl border border-slate-200 max-h-56 overflow-y-auto z-50 py-1">
-          {filtered.slice(0, 20).map((opt, idx) => (
-            <div
-              key={idx}
-              onClick={() => {
-                onChange(null, opt);
-                setQuery('');
-                setOpen(false);
-              }}
-              className="px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 cursor-pointer font-medium"
-            >
-              {getOptionLabel(opt)}
-            </div>
-          ))}
+          {filtered.slice(0, 30).map((opt, idx) => {
+            const isSelected = value && isOptionEqualToValue 
+              ? isOptionEqualToValue(opt, value) 
+              : (value && opt?.id && value?.id && String(opt.id) === String(value.id));
+
+            if (typeof renderOption === 'function') {
+              const optionProps = {
+                key: opt?.id ?? idx,
+                onClick: (e) => handleSelect(opt, e),
+                onMouseDown: (e) => { e.preventDefault(); handleSelect(opt, e); },
+                className: `px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 cursor-pointer font-medium ${isSelected ? 'bg-emerald-50 text-emerald-800' : ''}`
+              };
+              return (
+                <div
+                  key={opt?.id ?? idx}
+                  onMouseDown={(e) => { e.preventDefault(); handleSelect(opt, e); }}
+                  onClick={(e) => handleSelect(opt, e)}
+                >
+                  {renderOption(optionProps, opt, { selected: isSelected })}
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={opt?.id ?? idx}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(opt, e); }}
+                onClick={(e) => handleSelect(opt, e)}
+                className={`px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 cursor-pointer font-medium ${isSelected ? 'bg-emerald-50 text-emerald-800 font-semibold' : ''}`}
+              >
+                {safeGetOptionLabel(opt)}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

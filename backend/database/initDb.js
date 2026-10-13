@@ -119,6 +119,33 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'sales', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
     await addColumnIfMissing(connection, 'sales', '`fbr_status` VARCHAR(50) DEFAULT "PENDING"');
     await addColumnIfMissing(connection, 'sales', '`fbr_reference` VARCHAR(150)');
+    await addColumnIfMissing(connection, 'sales', '`split_payments` TEXT NULL');
+    await addColumnIfMissing(connection, 'sales', '`tax_type` VARCHAR(50) DEFAULT "inclusive"');
+    await addColumnIfMissing(connection, 'sales', '`tax_rate` DECIMAL(5,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'sales', '`sale_type` VARCHAR(50) DEFAULT "retail"');
+    await addColumnIfMissing(connection, 'sales', '`customer_ntn` VARCHAR(100)');
+    await addColumnIfMissing(connection, 'sales', '`item_discount` DECIMAL(15,2) DEFAULT 0');
+
+    await addColumnIfMissing(connection, 'work_orders', '`machine_name` VARCHAR(150) NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`device_model` VARCHAR(150) NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`imei` VARCHAR(100) NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`problem_description` TEXT NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`parts_used` TEXT NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`notes` TEXT NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`total_cost` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'work_orders', '`total_amount` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'work_orders', '`paid_amount` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'work_orders', '`payment_status` VARCHAR(50) DEFAULT "unpaid"');
+    await addColumnIfMissing(connection, 'work_orders', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
+    await addColumnIfMissing(connection, 'work_orders', '`commission_amount` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'work_orders', '`completed_at` DATETIME NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`deleted_at` DATETIME NULL');
+
+    try {
+      await connection.query("ALTER TABLE `users` MODIFY COLUMN `email` VARCHAR(150) NULL");
+    } catch (e) {
+      // Ignore if already nullable
+    }
 
     await addColumnIfMissing(connection, 'purchases', '`purchase_no` VARCHAR(100)');
     await addColumnIfMissing(connection, 'purchases', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
