@@ -38,6 +38,8 @@ const TENANT_TABLES = [
   'salesman_ledger', 'salesman_salary_payments', 'salesman_sale_items',
   'salesman_sale_return_items', 'salesman_sale_returns', 'salesman_sales',
   'salesmen', 'services', 'staff', 'supplier_ledger', 'suppliers',
+  'device_imei', 'device_imei_history', 'repair_parts', 'staff_payroll',
+  'supplier_credit_notes',
   'system_settings', 'users', 'warehouse_stocks', 'warehouses', 'work_orders'
 ];
 
@@ -140,6 +142,17 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'work_orders', '`commission_amount` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'work_orders', '`completed_at` DATETIME NULL');
     await addColumnIfMissing(connection, 'work_orders', '`deleted_at` DATETIME NULL');
+    // Mobile shop: repair job card fields
+    await addColumnIfMissing(connection, 'work_orders', '`photo_before_url` VARCHAR(500) NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`photo_after_url` VARCHAR(500) NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`condition_notes` TEXT NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`passcode_encrypted` TEXT NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`advance_amount` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'work_orders', '`labor_amount` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'work_orders', '`parts_amount` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'work_orders', '`commission_percent` DECIMAL(5,2) DEFAULT 0');
+    // Staff table: tenant scoping (getStaff filters by tenant_id)
+    await addColumnIfMissing(connection, 'staff', '`tenant_id` VARCHAR(100) DEFAULT \'tenant_default\'');
 
     try {
       await connection.query("ALTER TABLE `users` MODIFY COLUMN `email` VARCHAR(150) NULL");

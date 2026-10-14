@@ -24,6 +24,7 @@ import autoTable from 'jspdf-autotable';
 import db from '../database/db';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
+import CreditNoteModal from '../components/mobile/CreditNoteModal';
 
 // Formatting functions
 const formatDate = (dateStr) => {
@@ -58,6 +59,7 @@ export default function SuppliersPage() {
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [viewSupplier, setViewSupplier] = useState(null);
   const [paymentDialog, setPaymentDialog] = useState(false);
+  const [creditNoteOpen, setCreditNoteOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
   const [paymentMode, setPaymentMode] = useState('cash');
@@ -1678,6 +1680,15 @@ export default function SuppliersPage() {
                       <Payment sx={{ mr: 0.5 }} /> Pay
                     </Button>
                   )}
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    sx={{ borderColor: '#0f766e', color: '#0f766e' }}
+                    onClick={() => setCreditNoteOpen(true)}
+                    title="Company price drop / rebate"
+                  >
+                    🧾 Credit Note
+                  </Button>
                 </Stack>
               </Box>
             </DialogTitle>
@@ -2229,6 +2240,14 @@ export default function SuppliersPage() {
           </>
         )}
       </Dialog>
+
+      {/* ==================== CREDIT NOTE DIALOG ==================== */}
+      <CreditNoteModal
+        open={creditNoteOpen}
+        onClose={() => setCreditNoteOpen(false)}
+        supplier={viewSupplier}
+        onApplied={() => {}}
+      />
     </Box>
   );
 }

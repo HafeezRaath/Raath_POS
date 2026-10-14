@@ -31,6 +31,8 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ==================== ROUTES ====================
+// Uploaded files (repair job before/after photos)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', apiRoutes);
 
 // Root test endpoint

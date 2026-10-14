@@ -22,6 +22,7 @@ import {
   ReceiptLong, Remove, DeleteOutline, Sliders, PointOfSale, Store
 } from '../components/ui/icons';
 import db from '../database/db';
+import api from '../api/apiClient';
 import useSyncListener from '../hooks/useSyncListener';
 import ThermalReceipt from '../components/receipt/ThermalReceipt';
 import { printReceiptDirect, getEffectiveReceiptSettings, getEffectiveShopProfile } from '../utils/receiptGenerator';
@@ -29,6 +30,7 @@ import WeightCalculatorDialog from '../components/common/WeightCalculatorDialog'
 import RollCalculatorDialog from '../components/common/RollCalculatorDialog';
 import { ArticlePickerModal, SizeExchangeModal } from '../components/shoes/ShoePickModals';
 import ThaanMeterModal from '../components/garments/ThaanMeterModal';
+import ImeiPickerModal from '../components/mobile/ImeiPickerModal';
 
 // ==================== HELPERS ====================
 // ==================== HELPERS ====================
@@ -1097,6 +1099,60 @@ export default function BillingPage() {
   const [showWholesalePrice, setShowWholesalePrice] = useState(false);
   const [revealedWholesaleIds, setRevealedWholesaleIds] = useState({});
   const [weightDialog, setWeightDialog] = useState({ open: false, item: null, index: null });
+  // IMEI (serialized phones)
+  const [imeiPickerOpen, setImeiPickerOpen] = useState(false);
+
+  const addSerializedToCart = useCallback((device) => {
+    const label = `${device.brand || ''} ${device.model || ''}`.trim() + ` [${device.imei1}]`;
+    let added = false;
+    setCart(prev => {
+      if (prev.some(c => c.isSerialized && c.deviceImeiId === device.id)) {
+        showSnackbar('Ye IMEI already cart mein hai', 'warning');
+        return prev;
+      }
+      added = true;
+      const price = Number(device.sale_price) || 0;
+      return [...prev, {
+        id: `imei-${device.id}-${Date.now()}`,
+        variantId: device.product_variant_id,
+        productId: device.product_id,
+        name: label,
+        sku: device.imei1,
+        unit: 'piece',
+        qty: 1,
+        price, total: price,
+        discount: 0, discountType: 'percent',
+        stock: 1,
+        isOfferItem: false, offerName: null,
+        originalPrice: price,
+        costPrice: Number(device.purchase_price) || 0,
+        minPrice: 0,
+        isSerialized: true,
+        deviceImeiId: device.id,
+        imei1: device.imei1,
+        selectedSellUnit: 'piece',
+      }];
+    });
+    if (added) {
+      setTimeout(() => showSnackbar(`${label} added`, 'success'), 50);
+      setSearchQuery(''); setSearchResults([]);
+    }
+  }, []);
+
+  const handleImeiScan = useCallback(async (imeiDigits) => {
+    try {
+      const r = await api.get(`/imei/lookup/${imeiDigits}`);
+      const d = r.data?.data?.device;
+      if (!d) { showSnackbar('IMEI system mein nahi mila', 'error'); return; }
+      if (d.status !== 'IN_STOCK') {
+        showSnackbar(`Ye IMEI ${d.status} hai — sale nahi ho sakta`, 'error');
+        return;
+      }
+      addSerializedToCart(d);
+    } catch (e) {
+      showSnackbar(e.response?.data?.error || 'IMEI lookup failed', 'error');
+    }
+  }, [addSerializedToCart]);
   const [rollDialog, setRollDialog] = useState({ open: false, item: null, index: null });
   const [showCartMiniList, setShowCartMiniList] = useState(true);
   const wholesaleTimersRef = useRef({});
@@ -2055,6 +2111,21 @@ useEffect(() => {
 
       const saleId = result.id || result.lastInsertRowid;
 
+      // IMEI: serialized phones IN_STOCK -> SOLD (lifecycle + customer link)
+      const serializedItems = cart.filter(c => c.isSerialized && c.deviceImeiId);
+      for (const si of serializedItems) {
+        try {
+          await api.post(`/imei/${si.deviceImeiId}/sell`, {
+            sale_id: saleId,
+            customer_id: saleData.customer_id || null,
+            customer_name: saleData.customer_name || '',
+            amount: si.total,
+          });
+        } catch (imeiErr) {
+          console.error('[IMEI] sell failed for', si.imei1, imeiErr.message);
+        }
+      }
+
       // Feature 9: Dedicated Audit Log for Discount
       if (calc.billDiscount > 0 || calc.itemDiscount > 0) {
         try {
@@ -2305,6 +2376,19 @@ useEffect(() => {
       }
 
       const saleId = result.id || result.lastInsertRowid;
+
+      // IMEI: serialized phones IN_STOCK -> SOLD (lifecycle + customer link)
+      try {
+        const serializedItems2 = cart.filter(c => c.isSerialized && c.deviceImeiId);
+        for (const si of serializedItems2) {
+          await api.post(`/imei/${si.deviceImeiId}/sell`, {
+            sale_id: saleId,
+            customer_id: saleData.customer_id || null,
+            customer_name: saleData.customer_name || '',
+            amount: si.total,
+          }).catch(imeiErr => console.error('[IMEI] sell failed for', si.imei1, imeiErr.message));
+        }
+      } catch (e) { console.error('[IMEI] batch sell error', e.message); }
 
       // Feature 9: Dedicated Audit Log for Discount
       if (calc.billDiscount > 0 || calc.itemDiscount > 0) {
@@ -2887,6 +2971,12 @@ useEffect(() => {
         e.preventDefault();
         const q = (searchQuery || '').trim();
         if (!q) return;
+        // IMEI scan: 15-digit barcode -> serialized phone lookup
+        const digits = q.replace(/\D/g, '');
+        if (digits.length === 15 && digits === q) {
+          handleImeiScan(digits);
+          return;
+        }
         const norm = (v) => String(v ?? '').toLowerCase().trim();
         const exact = products.find(p =>
           (p.barcode || p.bar_code || '').toString().trim() === q ||
@@ -2975,6 +3065,12 @@ useEffect(() => {
       sx={{ height: 40, flexShrink: 0, fontSize: '0.7rem', fontWeight: 'bold', borderColor: '#f59e0b', color: '#b45309' }}
       title="Size Exchange (wapis +1 / naya -1)">
       Exchange
+    </Button>
+
+    <Button variant="outlined" size="small" onClick={() => setImeiPickerOpen(true)}
+      sx={{ height: 40, flexShrink: 0, fontSize: '0.7rem', fontWeight: 'bold', borderColor: '#1e40af', color: '#1e40af' }}
+      title="Serialized phone select karo (IMEI)">
+      📱 IMEI
     </Button>
 
     <FormControl size="small" sx={{ minWidth: 105, flexShrink: 0 }}>
@@ -4224,6 +4320,13 @@ sx={{ width: 85 }}
           if (res?.error) { showSnackbar(res.error, 'warning'); return; }
           if (res?.meters && thaanModal.product) addToCart(thaanModal.product, 0, res.meters);
         }}
+      />
+
+      {/* Mobile: IMEI unit picker */}
+      <ImeiPickerModal
+        open={imeiPickerOpen}
+        onClose={() => setImeiPickerOpen(false)}
+        onSelect={(u) => { setImeiPickerOpen(false); addSerializedToCart(u); }}
       />
     </Box>
   );

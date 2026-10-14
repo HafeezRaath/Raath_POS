@@ -107,6 +107,7 @@ const NAV_GROUPS = [
     icon: Build,
     items: [
       { id: 'workorders', label: 'Work Orders', icon: HomeRepairService, path: '/services' },
+      { id: 'workorders', label: 'Staff Payroll', icon: AttachMoney, path: '/payroll' },
       { id: 'distribution', label: 'Distribution', icon: LocalShipping, path: '/distribution' },
     ],
   },

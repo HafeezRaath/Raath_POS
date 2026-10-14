@@ -15,6 +15,7 @@ import {
   QrCode, Palette, DesignServices, ReceiptLong, Info
 } from '../components/ui/icons';
 import db from '../database/db';
+import RepairJobCardModal from '../components/mobile/RepairJobCardModal';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { printReceiptDirect, getEffectiveReceiptSettings, getEffectiveShopProfile, getThermalDimensions, formatCleanId, isHashId } from '../utils/receiptGenerator';
@@ -505,6 +506,7 @@ export default function ServicesPage() {
   
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
+  const [jobCardOpen, setJobCardOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -2126,6 +2128,9 @@ export default function ServicesPage() {
             <Button variant="contained" startIcon={<Add />} onClick={() => openModal('workorder')} sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, borderRadius: 2 }}>
               New Repair Order
             </Button>
+            <Button variant="contained" startIcon={<Add />} onClick={() => setJobCardOpen(true)} sx={{ bgcolor: '#7c3aed', '&:hover': { bgcolor: '#6d28d9' }, borderRadius: 2 }}>
+              🔧 Repair Job Card
+            </Button>
             <TextField size="small" placeholder="Search by model, IMEI, customer..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} sx={{ flex: 1, minWidth: 220, bgcolor: 'background.paper', borderRadius: 2 }} />
             <FormControl size="small" sx={{ minWidth: 150 }}>
               <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} displayEmpty sx={{ bgcolor: 'background.paper', borderRadius: 2 }}>
@@ -2349,6 +2354,13 @@ export default function ServicesPage() {
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
       </Snackbar>
+
+      {/* Mobile shop: full repair job card (token, photos, parts, commission) */}
+      <RepairJobCardModal
+        open={jobCardOpen}
+        onClose={() => setJobCardOpen(false)}
+        onSaved={() => { if (typeof loadAll === 'function') loadAll(); }}
+      />
     </Box>
   );
 }

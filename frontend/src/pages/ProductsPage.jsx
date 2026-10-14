@@ -41,6 +41,8 @@ import ReadymadeMatrix from '../components/garments/ReadymadeMatrix';
 import GroceryModeForm from '../components/grocery/GroceryModeForm';
 import BatchManager from '../components/grocery/BatchManager';
 import PharmacyModeForm from '../components/pharmacy/PharmacyModeForm';
+import BulkImeiForm from '../components/mobile/BulkImeiForm';
+import ImeiLookupModal from '../components/mobile/ImeiLookupModal';
 import { formatShoeStock, formatThaanStock, formatKurtaStock, formatLooseWeightStock, formatPharmacyStock } from '../utils/stockFormat';
 
 // ==================== CONSTANTS ====================
@@ -332,6 +334,7 @@ const [copies, setCopies] = useState(1);
   // Pharmacy vertical
   const [pharmacyData, setPharmacyData] = useState(null);
   const handlePharmacyData = useCallback((d) => setPharmacyData(d), []);
+  const [imeiLookupOpen, setImeiLookupOpen] = useState(false);
 
   const [variantDialog, setVariantDialog] = useState(false);
   const [variantParent, setVariantParent] = useState(null);
@@ -3669,11 +3672,20 @@ const [copies, setCopies] = useState(1);
 
               {/* CARD 5: Type-Specific Details */}
               {dialogProductType === 'imei' && (
-                <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #bfdbfe', bgcolor: '#eff6ff' }}>
-                  <Typography variant="subtitle2" fontWeight="bold" color="#1e40af" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <PhoneAndroid fontSize="small" sx={{ color: '#2563eb' }} />
-                    Mobile / IMEI Telemetry
-                  </Typography>
+                <>
+                {!editingProduct && (
+                  <BulkImeiForm onDone={() => { loadData(); }} />
+                )}
+                <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #bfdbfe', bgcolor: '#eff6ff', mt: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <Typography variant="subtitle2" fontWeight="bold" color="#1e40af" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <PhoneAndroid fontSize="small" sx={{ color: '#2563eb' }} />
+                      Mobile / IMEI Telemetry
+                    </Typography>
+                    <Button size="small" variant="outlined" sx={{ ml: 'auto' }} onClick={() => setImeiLookupOpen(true)}>
+                      IMEI Lookup
+                    </Button>
+                  </Box>
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
                       <TextField 
@@ -3702,6 +3714,7 @@ const [copies, setCopies] = useState(1);
                     </Grid>
                   </Grid>
                 </Paper>
+                </>
               )}
 
               {dialogProductType === 'medical' && (
@@ -4468,6 +4481,9 @@ const [copies, setCopies] = useState(1);
         onClose={() => setBatchProduct(null)}
         onChanged={() => loadData()}
       />
+
+      {/* IMEI history lookup */}
+      <ImeiLookupModal open={imeiLookupOpen} onClose={() => setImeiLookupOpen(false)} />
 
       {/* SNACKBAR */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }} sx={{ mb: isMobile ? 8 : 0 }}>

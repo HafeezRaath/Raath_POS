@@ -33,6 +33,10 @@ const fbrRoutes = require('./fbrRoutes');
 const userRoutes = require('./userRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const auditRoutes = require('./auditRoutes');
+const imeiRoutes = require('./imeiRoutes');
+const repairRoutes = require('./repairRoutes');
+const payrollRoutes = require('./payrollRoutes');
+const creditNoteRoutes = require('./creditNoteRoutes');
 
 // API Health Check
 router.get('/health', (req, res) => {
@@ -91,5 +95,9 @@ router.use('/fbr', fbrRoutes);
 router.use('/users', userRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/audit-logs', auditRoutes);
+router.use('/imei', imeiRoutes);
+router.use('/repairs', repairRoutes);
+router.use('/payroll', payrollRoutes);
+router.use('/credit-notes', creditNoteRoutes);
 
 module.exports = router;

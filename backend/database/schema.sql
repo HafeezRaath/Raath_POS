@@ -1354,4 +1354,108 @@ LEFT JOIN distributor_payments dp ON d.id = dp.distributor_id
 WHERE d.is_deleted = 0
 GROUP BY d.id, d.tenant_id;
 
+-- ============================================================
+-- MOBILE SHOP MODULE: Bulk IMEI, Repair Job Cards, Staff Payroll, Supplier Credit Notes
+-- ============================================================
+
+-- 39. Device IMEI (serialized phones — never aggregated, never deleted)
+CREATE TABLE IF NOT EXISTS `device_imei` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` VARCHAR(100) NOT NULL,
+  `product_id` INT NULL,
+  `product_variant_id` INT NULL,
+  `imei1` VARCHAR(20) NOT NULL,
+  `imei2` VARCHAR(20) NULL,
+  `brand` VARCHAR(100) NULL,
+  `model` VARCHAR(150) NULL,
+  `ram` VARCHAR(20) NULL,
+  `rom` VARCHAR(20) NULL,
+  `color` VARCHAR(50) NULL,
+  `condition_type` VARCHAR(20) DEFAULT 'new',
+  `purchase_price` DECIMAL(15,2) DEFAULT 0,
+  `sale_price` DECIMAL(15,2) DEFAULT 0,
+  `status` VARCHAR(20) DEFAULT 'IN_STOCK',
+  `sale_id` INT NULL,
+  `customer_id` INT NULL,
+  `customer_name` VARCHAR(150) NULL,
+  `supplier_id` INT NULL,
+  `purchase_id` INT NULL,
+  `warranty_months` INT DEFAULT 0,
+  `warranty_start` DATE NULL,
+  `notes` TEXT NULL,
+  `is_deleted` TINYINT(1) DEFAULT 0,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_tenant_imei1` (`tenant_id`, `imei1`),
+  INDEX `idx_imei_status` (`tenant_id`, `status`),
+  INDEX `idx_imei2` (`imei2`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 40. Device IMEI lifecycle history (append-only audit trail)
+CREATE TABLE IF NOT EXISTS `device_imei_history` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` VARCHAR(100) NOT NULL,
+  `device_imei_id` INT NOT NULL,
+  `action` VARCHAR(50) NOT NULL,
+  `from_status` VARCHAR(20) NULL,
+  `to_status` VARCHAR(20) NULL,
+  `ref_type` VARCHAR(50) NULL,
+  `ref_id` INT NULL,
+  `customer_id` INT NULL,
+  `customer_name` VARCHAR(150) NULL,
+  `amount` DECIMAL(15,2) DEFAULT 0,
+  `user_id` INT NULL,
+  `notes` TEXT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_hist_device` (`device_imei_id`),
+  INDEX `idx_hist_tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 41. Repair parts used per job (inventory deduction log)
+CREATE TABLE IF NOT EXISTS `repair_parts` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` VARCHAR(100) NOT NULL,
+  `job_id` INT NOT NULL,
+  `product_variant_id` INT NOT NULL,
+  `part_name` VARCHAR(200) NULL,
+  `qty` INT DEFAULT 1,
+  `cost_price` DECIMAL(15,2) DEFAULT 0,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_rp_job` (`job_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 42. Staff monthly payroll (base salary + labor commission)
+CREATE TABLE IF NOT EXISTS `staff_payroll` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` VARCHAR(100) NOT NULL,
+  `staff_id` INT NOT NULL,
+  `month` VARCHAR(7) NOT NULL,
+  `base_salary` DECIMAL(15,2) DEFAULT 0,
+  `labor_total` DECIMAL(15,2) DEFAULT 0,
+  `commission_percent` DECIMAL(5,2) DEFAULT 0,
+  `commission_amount` DECIMAL(15,2) DEFAULT 0,
+  `deductions` DECIMAL(15,2) DEFAULT 0,
+  `deduction_note` VARCHAR(255) NULL,
+  `net_pay` DECIMAL(15,2) DEFAULT 0,
+  `status` VARCHAR(20) DEFAULT 'unpaid',
+  `paid_at` DATETIME NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_payroll` (`tenant_id`, `staff_id`, `month`),
+  INDEX `idx_payroll_month` (`tenant_id`, `month`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 43. Supplier credit notes (post-purchase price drops / rebates)
+CREATE TABLE IF NOT EXISTS `supplier_credit_notes` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` VARCHAR(100) NOT NULL,
+  `supplier_id` INT NOT NULL,
+  `note_no` VARCHAR(100) NOT NULL,
+  `purchase_id` INT NULL,
+  `amount` DECIMAL(15,2) NOT NULL,
+  `reason` VARCHAR(255) NULL,
+  `status` VARCHAR(20) DEFAULT 'applied',
+  `created_by` INT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_scn_sup` (`tenant_id`, `supplier_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 1;

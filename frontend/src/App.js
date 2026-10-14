@@ -37,6 +37,7 @@ const Signup = lazy(() => import('./pages/Signup'));
 // ===== SERVICES & DISTRIBUTION SECTION =====
 const ServicesPage = lazy(() => import('./pages/ServicesPage'));
 const Distribution = lazy(() => import('./pages/Distribution'));
+const PayrollPage = lazy(() => import('./pages/PayrollPage'));
 
 // ==================== COMPONENTS ====================
 const Navbar = lazy(() => import('./components/Sidebar'));
@@ -139,6 +140,7 @@ const AppRoutes = React.memo(function AppRoutes() {
         {/* ===== SERVICES & DISTRIBUTION ROUTES ===== */}
         <Route path="/services" element={<ProtectedRoute pageId="workorders"><MainLayout><ServicesPage /></MainLayout></ProtectedRoute>} />
         <Route path="/distribution" element={<ProtectedRoute pageId="distribution"><MainLayout><Distribution /></MainLayout></ProtectedRoute>} />
+        <Route path="/payroll" element={<ProtectedRoute pageId="workorders"><MainLayout><PayrollPage /></MainLayout></ProtectedRoute>} />
 
         <Route path="/emi" element={<ProtectedRoute pageId="emi"><MainLayout><EMI /></MainLayout></ProtectedRoute>} />
         <Route path="/expenses" element={<ProtectedRoute pageId="expenses"><MainLayout><ExpensesPage /></MainLayout></ProtectedRoute>} />
