@@ -1586,7 +1586,6 @@ export default function SettingsPage({ initialTab } = {}) {
       }
     }
   };
-  };
 
   const toggleUserActive = async (id) => {
     const user = users.find(u => u.id === id);
