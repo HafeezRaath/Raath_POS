@@ -274,6 +274,49 @@ async function initializeDatabase() {
     } catch (e) {
       console.warn('[InitDB] products.id fix skipped: ' + e.message);
     }
+
+    // ---- Generic id repair for other tables (same bug class as products) ----
+    // Customers table had the identical issue: id=0 rows -> edit created
+    // duplicates (editingId=0 is falsy) and payments silently no-oped (!id).
+    const repairTableId = async (table) => {
+      try {
+        const [cols] = await connection.query(
+          `SELECT EXTRA, COLUMN_KEY FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'id'`,
+          [table]
+        );
+        if (cols.length === 0) return; // no id column
+        if (String(cols[0].EXTRA || '').toLowerCase().includes('auto_increment')) return; // already fine
+        // Remove test rows with id=0 (QATEST-/DEMO- only — real data untouched)
+        const [doomed] = await connection.query(
+          `SELECT id FROM \`${table}\` WHERE id = 0 AND (name LIKE 'QATEST-%' OR name LIKE 'DEMO-%' OR sku LIKE 'QATEST-%' OR sku LIKE 'DEMO-%')`
+        );
+        if (doomed.length > 0) {
+          await connection.query(
+            `DELETE FROM \`${table}\` WHERE id = 0 AND (name LIKE 'QATEST-%' OR name LIKE 'DEMO-%' OR sku LIKE 'QATEST-%' OR sku LIKE 'DEMO-%')`
+          );
+          console.log(`[InitDB] Removed ${doomed.length} test rows (id=0) from ${table}.`);
+        }
+        const [dupes] = await connection.query(
+          `SELECT id, COUNT(*) AS c FROM \`${table}\` GROUP BY id HAVING c > 1 LIMIT 3`
+        );
+        if (dupes.length > 0) {
+          console.warn(`[InitDB] ${table}: duplicate ids remain, PK/AI skipped: ` + JSON.stringify(dupes));
+          return;
+        }
+        if (String(cols[0].COLUMN_KEY || '').toUpperCase() !== 'PRI') {
+          await connection.query(`ALTER TABLE \`${table}\` ADD PRIMARY KEY (\`id\`)`);
+          console.log(`[InitDB] Added PRIMARY KEY on ${table}.id`);
+        }
+        await connection.query(`ALTER TABLE \`${table}\` MODIFY COLUMN \`id\` INT NOT NULL AUTO_INCREMENT`);
+        console.log(`[InitDB] Fixed ${table}.id -> AUTO_INCREMENT PRIMARY KEY`);
+      } catch (e) {
+        console.warn(`[InitDB] ${table}.id repair skipped: ` + e.message);
+      }
+    };
+    // Tables where the app INSERTs without id and expects insertId back
+    for (const t of ['customers', 'suppliers', 'expenses', 'product_variants', 'sales', 'purchases']) {
+      await repairTableId(t);
+    }
     await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');
 
     await addColumnIfMissing(connection, 'product_serialized_items', '`product_variant_id` INT NULL');

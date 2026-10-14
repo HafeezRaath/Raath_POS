@@ -339,13 +339,13 @@ export default function CustomerPage() {
     const credLimit = parseFloat(form.credit_limit) || 0;
 
     const data = { ...form, opening_balance: openingBal, credit_limit: credLimit };
-    if (editingId) {
+    if (editingId != null) {
       const existing = customers.find(c => c.id === editingId);
       data.current_balance = existing ? existing.current_balance : 0;
     }
 
     try {
-      if (editingId) {
+      if (editingId != null) {
         await db.updateCustomer(editingId, data);
         setSnackbar({ open: true, message: 'Customer updated successfully!', severity: 'success' });
       } else {
@@ -487,7 +487,7 @@ export default function CustomerPage() {
       setSnackbar({ open: true, message: 'Enter valid amount', severity: 'warning' });
       return;
     }
-    if (!selectedCustomer?.id) return;
+    if (selectedCustomer?.id == null) return;
 
     setPaymentLoading(true);
     try {
@@ -867,7 +867,7 @@ export default function CustomerPage() {
       <Dialog open={showForm} onClose={() => { setShowForm(false); resetForm(); }} maxWidth="md" fullWidth fullScreen={isMobile} scroll="paper">
         <DialogTitle sx={{ bgcolor: '#10b981', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Person /> {editingId ? 'Edit Customer' : 'Add New Customer'}
+            <Person /> {editingId != null ? 'Edit Customer' : 'Add New Customer'}
           </Box>
           <IconButton size="small" sx={{ color: 'white' }} onClick={() => { setShowForm(false); resetForm(); }}><Close /></IconButton>
         </DialogTitle>
@@ -965,7 +965,7 @@ export default function CustomerPage() {
         <DialogActions sx={{ p: 2, flexDirection: isMobile ? 'column' : 'row', gap: 1 }}>
           <Button fullWidth={isMobile} variant="outlined" onClick={() => { setShowForm(false); resetForm(); }}>Cancel</Button>
           <Button fullWidth={isMobile} type="submit" form="customer-form" variant="contained" startIcon={editingId ? <Save /> : <Add />} sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }}>
-            {editingId ? 'Update Customer' : 'Save Customer'}
+            {editingId != null ? 'Update Customer' : 'Save Customer'}
           </Button>
         </DialogActions>
       </Dialog>
