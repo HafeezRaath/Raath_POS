@@ -1078,7 +1078,7 @@ export default function EMI() {
       if (db.createEMI) {
         try {
           const res = await db.createEMI(emiPayload);
-          newEmiId = res.lastInsertRowid || res.record?.id || res.id;
+          newEmiId = res.lastInsertRowid || res.record?.id || res.data?.id || res.id;
         } catch (innerErr) {
           console.warn('createEMI mixin failed, trying fallback:', innerErr.message);
           if (!window?.electronAPI) throw innerErr;

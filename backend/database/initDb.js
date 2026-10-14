@@ -148,6 +148,8 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'sales', '`item_discount` DECIMAL(15,2) DEFAULT 0');
 
     await addColumnIfMissing(connection, 'work_orders', '`machine_name` VARCHAR(150) NULL');
+    await addColumnIfMissing(connection, 'account_transactions', '`reference_no` VARCHAR(100) NULL');
+    await addColumnIfMissing(connection, 'emi_records', '`is_deleted` TINYINT(1) DEFAULT 0');
     await addColumnIfMissing(connection, 'work_orders', '`device_model` VARCHAR(150) NULL');
     await addColumnIfMissing(connection, 'work_orders', '`imei` VARCHAR(100) NULL');
     await addColumnIfMissing(connection, 'work_orders', '`problem_description` TEXT NULL');
@@ -331,7 +333,7 @@ async function initializeDatabase() {
       }
     };
     // Tables where the app INSERTs without id and expects insertId back
-    for (const t of ['customers', 'suppliers', 'expenses', 'product_variants', 'sales', 'purchases']) {
+    for (const t of ['customers', 'suppliers', 'expenses', 'product_variants', 'sales', 'purchases', 'accounts', 'account_transactions', 'emi_records', 'emi_payments', 'emi_schedule', 'work_orders', 'repairs']) {
       await repairTableId(t);
     }
     await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');

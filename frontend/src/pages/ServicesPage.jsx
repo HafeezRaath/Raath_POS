@@ -503,6 +503,7 @@ export default function ServicesPage() {
   const [categories, setCategories] = useState([]);
   const [customerHistory, setCustomerHistory] = useState({ open: false, customer: null, orders: [] });
   const [stockAlert, setStockAlert] = useState({ open: false, message: '', parts: [] });
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, type: null, id: null });
   
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
@@ -668,7 +669,13 @@ export default function ServicesPage() {
   };
 
   const handleDelete = async (type, id) => {
-    if (!window.confirm('Are you sure you want to delete this?')) return;
+    // Use MUI dialog instead of window.confirm (which hangs automated browsers)
+    setDeleteConfirm({ open: true, type, id });
+  };
+
+  const confirmDelete = async () => {
+    const { type, id } = deleteConfirm;
+    setDeleteConfirm({ open: false, type: null, id: null });
     try {
       if (type === 'service') await db.deleteService(id);
       else if (type === 'staff') await db.deleteStaff(id);
@@ -2361,6 +2368,18 @@ export default function ServicesPage() {
         onClose={() => setJobCardOpen(false)}
         onSaved={() => { if (typeof loadAll === 'function') loadAll(); }}
       />
+
+      {/* DELETE CONFIRM DIALOG (replaces window.confirm which hangs browsers) */}
+      <Dialog open={deleteConfirm.open} onClose={() => setDeleteConfirm({ open: false, type: null, id: null })} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent dividers>
+          <Typography>Are you sure you want to delete this? This action cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirm({ open: false, type: null, id: null })}>Cancel</Button>
+          <Button onClick={confirmDelete} color="error" variant="contained">Delete</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
