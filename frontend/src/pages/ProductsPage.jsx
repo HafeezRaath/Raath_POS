@@ -1879,6 +1879,8 @@ const [copies, setCopies] = useState(1);
       finalStock = +thaanData.meters.toFixed(2);
     }
     // Grocery: mode stock (bakery = 0, batch add karegi)
+    // (groceryStock declared BEFORE first use — was a TDZ ReferenceError)
+    let groceryUnit = null, groceryStock = null;
     if (groceryStock != null) finalStock = groceryStock;
 
     // Set variant name for box products
@@ -1912,7 +1914,6 @@ const [copies, setCopies] = useState(1);
 
     // Grocery: mode-specific unit/pricing/stock (DB: grams Int / packs Int / pieces Int)
     const isGroceryNew = productForm.type === 'grocery' && groceryData;
-    let groceryUnit = null, groceryStock = null;
     if (isGroceryNew) {
       const g = groceryData;
       if (g.mode === 'WEIGHT_LOOSE') {
