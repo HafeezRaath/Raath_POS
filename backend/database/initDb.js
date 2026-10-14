@@ -276,8 +276,10 @@ async function initializeDatabase() {
     }
 
     // ---- Generic id repair for other tables (same bug class as products) ----
-    // Customers table had the identical issue: id=0 rows -> edit created
-    // duplicates (editingId=0 is falsy) and payments silently no-oped (!id).
+    // Customers table had the identical issue: id=0 rows -> edit mass-updated
+    // all id=0 rows (editingId=0), payments silently no-oped (!id).
+    // v21: column-agnostic — builds the test-row filter from columns that
+    // actually exist in each table (v20 wrongly assumed name/sku everywhere).
     const repairTableId = async (table) => {
       try {
         const [cols] = await connection.query(
@@ -285,16 +287,31 @@ async function initializeDatabase() {
           [table]
         );
         if (cols.length === 0) return; // no id column
-        if (String(cols[0].EXTRA || '').toLowerCase().includes('auto_increment')) return; // already fine
-        // Remove test rows with id=0 (QATEST-/DEMO- only — real data untouched)
+        if (String(cols[0].EXTRA || '').toLowerCase().includes('auto_increment')) {
+          console.log(`[InitDB] ${table}.id already AUTO_INCREMENT — nothing to do.`);
+          return;
+        }
+        // Discover text columns that actually exist for the test-row filter
+        const [allCols] = await connection.query(
+          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+          [table]
+        );
+        const colNames = allCols.map(c => c.COLUMN_NAME);
+        const candidates = ['name', 'sku', 'title', 'invoice_no', 'invoice_number', 'purchase_no', 'purchase_number', 'customer_name', 'supplier_name', 'company_name', 'description', 'notes'];
+        const textCols = candidates.filter(c => colNames.includes(c));
+        if (textCols.length === 0) {
+          console.warn(`[InitDB] ${table}: no text columns for test filter — manual review needed, PK/AI skipped.`);
+          return;
+        }
+        const testFilter = textCols.map(c => `\`${c}\` LIKE 'QATEST-%' OR \`${c}\` LIKE 'DEMO-%'`).join(' OR ');
         const [doomed] = await connection.query(
-          `SELECT id FROM \`${table}\` WHERE id = 0 AND (name LIKE 'QATEST-%' OR name LIKE 'DEMO-%' OR sku LIKE 'QATEST-%' OR sku LIKE 'DEMO-%')`
+          `SELECT id FROM \`${table}\` WHERE id = 0 AND (${testFilter})`
         );
         if (doomed.length > 0) {
-          await connection.query(
-            `DELETE FROM \`${table}\` WHERE id = 0 AND (name LIKE 'QATEST-%' OR name LIKE 'DEMO-%' OR sku LIKE 'QATEST-%' OR sku LIKE 'DEMO-%')`
+          const [delRes] = await connection.query(
+            `DELETE FROM \`${table}\` WHERE id = 0 AND (${testFilter})`
           );
-          console.log(`[InitDB] Removed ${doomed.length} test rows (id=0) from ${table}.`);
+          console.log(`[InitDB] Removed ${delRes.affectedRows} test rows (id=0) from ${table}.`);
         }
         const [dupes] = await connection.query(
           `SELECT id, COUNT(*) AS c FROM \`${table}\` GROUP BY id HAVING c > 1 LIMIT 3`
