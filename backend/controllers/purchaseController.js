@@ -114,6 +114,9 @@ exports.createPurchase = async (req, res, next) => {
       // 2. Insert items & increase inventory
       for (const it of items) {
         const prodId = it.product_id || it.id;
+        if (!prodId) {
+          throw new Error(`Purchase item "${it.product_name || it.name || '?'}" has no product_id — select the product from the dropdown.`);
+        }
         const qty = parseFloat(it.quantity) || 1;
         const unitCost = parseFloat(it.unit_cost || it.purchase_price) || 0;
         const total = parseFloat(it.total) || (qty * unitCost);

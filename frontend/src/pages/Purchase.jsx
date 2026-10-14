@@ -813,6 +813,7 @@ export default function PurchasePage() {
     
     setItems(prev => [...prev, {
       ...currentItem,
+      product_id: matchedProduct?.product_id || currentItem.product_id || null,
       product_variant_id: variantId,
       product_name: matchedProduct?.product_name || matchedProduct?.name || currentItem.product_name || '',
       sku: matchedProduct?.sku || currentItem.sku || '',
