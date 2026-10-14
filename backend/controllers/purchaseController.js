@@ -89,6 +89,12 @@ exports.createPurchase = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Purchase items required' });
     }
 
+    // TEMP DEBUG: log what the frontend actually sends
+    console.log('[PURCHASE DEBUG] items received:', JSON.stringify(items.map(it => ({
+      product_id: it.product_id, id: it.id, product_variant_id: it.product_variant_id,
+      product_name: it.product_name, name: it.name, sku: it.sku
+    }))));
+
     const calculatedTotal = parseFloat(grand_total) || 0;
     const poNum = purchase_number || generatePONumber();
 
