@@ -279,6 +279,27 @@ CREATE TABLE IF NOT EXISTS `product_variants` (
   INDEX idx_pv_barcode (`barcode`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 17b. Product Batches (batch-wise pricing + expiry: Grocery / Pharmacy)
+CREATE TABLE IF NOT EXISTS `product_batches` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` VARCHAR(50) NOT NULL DEFAULT 'tenant_default',
+  `product_id` INT NOT NULL,
+  `variant_id` INT NULL,
+  `batch_no` VARCHAR(100) NULL,
+  `expiry_date` DATE NULL,
+  `supplier_id` INT NULL,
+  `qty_received` DECIMAL(15,3) DEFAULT 0,
+  `qty_remaining` DECIMAL(15,3) DEFAULT 0,
+  `cost_price` DECIMAL(15,2) DEFAULT 0,
+  `sale_price` DECIMAL(15,2) DEFAULT 0,
+  `is_active` TINYINT(1) DEFAULT 1,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_pb_prod (`product_id`),
+  INDEX idx_pb_variant (`variant_id`),
+  INDEX idx_pb_expiry (`expiry_date`),
+  INDEX idx_pb_tenant (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 18. Product Serialized Items
 CREATE TABLE IF NOT EXISTS `product_serialized_items` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,

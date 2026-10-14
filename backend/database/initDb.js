@@ -30,7 +30,7 @@ const TENANT_TABLES = [
   'emi_documents', 'emi_guarantors', 'emi_payments', 'emi_penalty_rules',
   'emi_records', 'emi_reschedule_log', 'emi_schedule', 'emi_visit_log',
   'emis', 'expense_categories', 'expenses', 'fbr_invoices', 'general_ledger',
-  'offer_items', 'offers', 'payments', 'product_serialized_items',
+  'offer_items', 'offers', 'payments', 'product_batches', 'product_serialized_items',
   'product_variants', 'products', 'purchase_items', 'purchase_order_items',
   'purchase_orders', 'purchase_return_items',
   'purchase_returns', 'purchases', 'sale_items', 'sale_return_items',
@@ -212,6 +212,30 @@ async function initializeDatabase() {
 
     await addColumnIfMissing(connection, 'product_variants', '`expiry_date` DATE NULL');
     await addColumnIfMissing(connection, 'purchase_items', '`expiry_date` DATE NULL');
+
+    // Product batches: batch-wise pricing + expiry (Grocery / Pharmacy verticals)
+    // Stock lots: har purchase pe nayi row; purani batches ki price overwrite nahi hoti.
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`product_batches\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`tenant_id\` VARCHAR(50) NOT NULL DEFAULT 'tenant_default',
+        \`product_id\` INT NOT NULL,
+        \`variant_id\` INT NULL,
+        \`batch_no\` VARCHAR(100) NULL,
+        \`expiry_date\` DATE NULL,
+        \`supplier_id\` INT NULL,
+        \`qty_received\` DECIMAL(15,3) DEFAULT 0,
+        \`qty_remaining\` DECIMAL(15,3) DEFAULT 0,
+        \`cost_price\` DECIMAL(15,2) DEFAULT 0,
+        \`sale_price\` DECIMAL(15,2) DEFAULT 0,
+        \`is_active\` TINYINT(1) DEFAULT 1,
+        \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_pb_prod (\`product_id\`),
+        INDEX idx_pb_variant (\`variant_id\`),
+        INDEX idx_pb_expiry (\`expiry_date\`),
+        INDEX idx_pb_tenant (\`tenant_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
 
     // Create Purchase Orders tables if not exist
     await connection.query(`

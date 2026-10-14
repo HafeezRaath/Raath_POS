@@ -3,6 +3,7 @@
 // ============================================================
 
 const { query, transaction } = require('../config/db');
+const batchController = require('./batchController');
 
 // Helper: Generate unique invoice number
 function generateInvoiceNumber() {
@@ -176,6 +177,11 @@ exports.createSale = async (req, res, next) => {
             'UPDATE products SET stock = stock - ? WHERE tenant_id = ? AND id = ?',
             [deductQty, tenantId, prodId]
           );
+        }
+
+        // Batch-wise FEFO deduction (Grocery / Pharmacy lots) — sale never fails on this
+        if (prodId) {
+          await batchController.deductBatchesFEFO(conn, tenantId, prodId, variantId, deductQty);
         }
       }
 

@@ -1056,6 +1056,8 @@ export default function BillingPage() {
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [cart, setCart] = useState([]);
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
   const [partyType, setPartyType] = useState('customer');
   const [selectedParty, setSelectedParty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -1395,7 +1397,15 @@ useEffect(() => {
 }, [searchQuery, products, selectedCategory]);
   // ---- ADD TO CART (WITH CARTON/BOX/PIECE & WEIGHT/ROLL AWARENESS) ----
   const addToCart = useCallback((product, perDiscount = 0, qtyOverride = null) => {
-    const availableStock = Number(product.current_stock || 0);
+    // Grocery vertical: WEIGHT_LOOSE stock grams mein, cart KG mein
+    let groceryMode = null;
+    try {
+      const d = typeof product.description === 'string' ? JSON.parse(product.description) : (product.description || {});
+      groceryMode = d.grocery_mode || null;
+    } catch (e) {}
+    const isGramItem = groceryMode === 'WEIGHT_LOOSE';
+    const rawStock = Number(product.current_stock || 0);
+    const availableStock = isGramItem ? rawStock / 1000 : rawStock;
     const wantQty = qtyOverride != null ? Number(qtyOverride) : 1;
     if (availableStock <= 0) {
       showSnackbar(`${product.product_name} Out of Stock!`, 'error');
@@ -1479,7 +1489,10 @@ useEffect(() => {
         selectedSellUnit: 'piece',
         // Loose Weight & Roll
         isWeightItem,
-        isLengthItem
+        isLengthItem,
+        // Grocery: gram-based stock (KG in cart, grams in DB)
+        isGramItem,
+        groceryMode
       }]);
     }
     
@@ -1498,17 +1511,36 @@ useEffect(() => {
     } catch { return null; }
   }, []);
 
-  // ---- SHOES + GARMENTS: article search → picker; thaan → meter modal (scanner exact-match bypasses) ----
+  // ---- SHOES + GARMENTS + GROCERY: pickers/modals (scanner exact-match bypasses) ----
   const pickProduct = useCallback((p) => {
     if (!p) return;
     const ptype = p.product_type || p.type;
     const isShoes = (ptype === 'shoes');
     const garmentMode = (ptype === 'fabric' || ptype === 'cloth') ? getGarmentMode(p) : null;
+    let groceryMode = null;
+    if (ptype === 'grocery') {
+      try {
+        const d = typeof p.description === 'string' ? JSON.parse(p.description) : (p.description || {});
+        groceryMode = d.grocery_mode || null;
+      } catch (e) {}
+    }
     // Thaan: meter select modal
     if (garmentMode === 'THAAN_FABRIC') {
       setThaanModal({ open: true, product: p });
       setSearchQuery('');
       setSearchResults([]);
+      return;
+    }
+    // Grocery loose weight: cart mein add + weight calculator kholo (reverse calc inside)
+    if (groceryMode === 'WEIGHT_LOOSE') {
+      addToCart(p, 0);
+      setSearchQuery('');
+      setSearchResults([]);
+      setTimeout(() => {
+        const latest = cartRef.current || [];
+        const i = latest.findIndex(c => String(c.variantId) === String(p.id));
+        if (i >= 0) setWeightDialog({ open: true, item: latest[i], index: i });
+      }, 300);
       return;
     }
     const art = p.article_no;
@@ -1942,7 +1974,9 @@ useEffect(() => {
         } else if (item.selectedSellUnit === 'box') {
           multiplier = ppb;
         }
-        const deductQty = item.qty * multiplier;
+        const deductQty = item.isGramItem
+          ? Math.round(Number(item.qty || 0) * 1000) // KG → grams
+          : item.qty * multiplier;
 
         return {
           product_variant_id: item.variantId,
@@ -2181,7 +2215,9 @@ useEffect(() => {
         } else if (item.selectedSellUnit === 'box') {
           multiplier = ppb;
         }
-        const deductQty = item.qty * multiplier;
+        const deductQty = item.isGramItem
+          ? Math.round(Number(item.qty || 0) * 1000) // KG → grams
+          : item.qty * multiplier;
 
         return {
           product_variant_id: item.variantId,
@@ -4047,8 +4083,11 @@ sx={{ width: 85 }}
       <WeightCalculatorDialog
         open={weightDialog.open}
         onClose={() => setWeightDialog({ open: false, item: null, index: null })}
-        product={weightDialog.item}
-        onApply={handleApplyWeightDialog}
+        item={weightDialog.item}
+        onApplyWeight={(kg) => handleApplyWeightDialog({
+          computedQty: kg,
+          computedTotal: kg * Number(weightDialog.item?.price || weightDialog.item?.originalPrice || 0),
+        })}
       />
 
       {/* Roll & Sheet Calculator Dialog (Feature 3: Sold by meter/yard/inches) */}

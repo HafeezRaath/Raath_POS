@@ -30,6 +30,7 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import db from '../database/db';
+import api from '../api/apiClient';
 import { useNavigate } from 'react-router-dom';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
@@ -37,7 +38,9 @@ import { getDefaultProductType } from '../config/businessModules';
 import ShoeVariantMatrix from '../components/shoes/ShoeVariantMatrix';
 import ThaanFabricForm from '../components/garments/ThaanFabricForm';
 import ReadymadeMatrix from '../components/garments/ReadymadeMatrix';
-import { formatShoeStock, formatThaanStock, formatKurtaStock } from '../utils/stockFormat';
+import GroceryModeForm from '../components/grocery/GroceryModeForm';
+import BatchManager from '../components/grocery/BatchManager';
+import { formatShoeStock, formatThaanStock, formatKurtaStock, formatLooseWeightStock } from '../utils/stockFormat';
 
 // ==================== CONSTANTS ====================
 const PRODUCT_TYPES = [
@@ -321,6 +324,10 @@ const [copies, setCopies] = useState(1);
   const handleThaanPrice = useCallback((field, val) => {
     setProductForm(prev => ({ ...prev, [field]: val }));
   }, []);
+  // Grocery vertical
+  const [groceryData, setGroceryData] = useState(null);
+  const handleGroceryData = useCallback((d) => setGroceryData(d), []);
+  const [batchProduct, setBatchProduct] = useState(null);
 
   const [variantDialog, setVariantDialog] = useState(false);
   const [variantParent, setVariantParent] = useState(null);
@@ -443,7 +450,10 @@ const [copies, setCopies] = useState(1);
           article_no: p.article_no || meta.article_no || '',
           garment_mode: meta.garment_mode || '',
           thaan_suit_meters: meta.thaan_suit_meters || 4,
-          rm_pieces_per_box: meta.pieces_per_box || 0
+          rm_pieces_per_box: meta.pieces_per_box || 0,
+          grocery_mode: meta.grocery_mode || '',
+          grams_per_sack: meta.grams_per_sack || 0,
+          units_per_box_or_pet: meta.units_per_box_or_pet || 0
         };
       });
       
@@ -578,6 +588,16 @@ const [copies, setCopies] = useState(1);
     }
     if ((ptype === 'fabric' || ptype === 'cloth') && parent.garment_mode === 'READYMADE_STITCHED' && parent.rm_pieces_per_box > 0) {
       return <Typography fontWeight="bold" color={color}>{formatKurtaStock(totalStock, parent.rm_pieces_per_box)}</Typography>;
+    }
+    if (ptype === 'grocery' && parent.grocery_mode === 'WEIGHT_LOOSE') {
+      return <Typography fontWeight="bold" color={color}>{formatLooseWeightStock(totalStock, parent.grams_per_sack)}</Typography>;
+    }
+    if (ptype === 'grocery' && parent.grocery_mode === 'PACKED_UNIT' && parent.units_per_box_or_pet > 0) {
+      const upb = parent.units_per_box_or_pet;
+      const boxes = Math.floor(totalStock / upb);
+      const loose = totalStock % upb;
+      const txt = boxes === 0 ? `${loose} Pcs` : loose === 0 ? `${boxes} Boxes (${totalStock} Pcs)` : `${boxes} Boxes, ${loose} Pcs (${totalStock} Total)`;
+      return <Typography fontWeight="bold" color={color}>{txt}</Typography>;
     }
     return <Typography fontWeight="bold" color={color}>{totalStock}</Typography>;
   };
@@ -1343,6 +1363,8 @@ const [copies, setCopies] = useState(1);
     setThaanData(null);
     setReadymadeVariants([]);
     setReadymadeBoxInfo(null);
+    setGroceryData(null);
+    setBatchProduct(null);
     setIsBoxEntry(false);
     setUnitsPerBox('');
     setBoxQuantity('');
@@ -1696,6 +1718,20 @@ const [copies, setCopies] = useState(1);
       meta.expiryDate = productForm.expiryDate;
       meta.batchNumber = productForm.batchNumber;
     }
+    if (productForm.type === 'grocery' && groceryData) {
+      const g = groceryData;
+      meta.grocery_mode = g.mode;
+      meta.urdu_name = g.urduName || '';
+      meta.aisle = g.aisle || '';
+      if (g.mode === 'WEIGHT_LOOSE') {
+        meta.grams_per_sack = g.gramsPerSack;
+        meta.cost_per_sack = g.costPerSack;
+      }
+      if (g.mode === 'PACKED_UNIT') {
+        meta.units_per_box_or_pet = g.unitsPerBox;
+        meta.wholesale_box_price = g.wholesaleBoxPrice;
+      }
+    }
     if (productForm.type === 'medical') {
       meta.manufacturer = productForm.manufacturer || '';
       meta.generic_name = productForm.generic_name || '';
@@ -1764,6 +1800,8 @@ const [copies, setCopies] = useState(1);
     if (isThaan && thaanData && thaanData.meters > 0) {
       finalStock = +thaanData.meters.toFixed(2);
     }
+    // Grocery: mode stock (bakery = 0, batch add karegi)
+    if (groceryStock != null) finalStock = groceryStock;
 
     // Set variant name for box products
     let variantName = productForm.variant_name || 'Default';
@@ -1784,6 +1822,28 @@ const [copies, setCopies] = useState(1);
       unitWholesale = unitRetail;
     }
 
+    // Grocery: mode-specific unit/pricing/stock (DB: grams Int / packs Int / pieces Int)
+    const isGroceryNew = productForm.type === 'grocery' && groceryData;
+    let groceryUnit = null, groceryStock = null;
+    if (isGroceryNew) {
+      const g = groceryData;
+      if (g.mode === 'WEIGHT_LOOSE') {
+        groceryUnit = 'gram';
+        groceryStock = g.totalGrams;
+        unitCost = g.costPerKg; unitRetail = g.retailPerKg;
+        unitWholesale = g.wholesalePerKg > 0 ? g.wholesalePerKg : g.retailPerKg;
+      } else if (g.mode === 'PACKED_UNIT') {
+        groceryUnit = 'pack';
+        groceryStock = g.totalUnits;
+        unitCost = g.costPerUnit; unitRetail = g.retailPerUnit;
+        unitWholesale = (g.wholesaleBoxPrice > 0 && g.unitsPerBox > 0)
+          ? +(g.wholesaleBoxPrice / g.unitsPerBox).toFixed(2) : g.retailPerUnit;
+      } else if (g.mode === 'FRESH_BAKERY') {
+        groceryUnit = 'piece';
+        groceryStock = 0; // batch add karegi stock (double-count se bachne ke liye)
+      }
+    }
+
     if (isBoxEntry && meta.units_per_box > 0) {
       unitCost = unitCost / meta.units_per_box;
       unitRetail = unitRetail / meta.units_per_box;
@@ -1795,9 +1855,9 @@ const [copies, setCopies] = useState(1);
       brand_id: productForm.brand_id || null,
       category_id: productForm.category_id ? String(productForm.category_id) : null,
       type: productForm.type,
-      unit: isThaan ? 'meter' : productForm.unit,
+      unit: groceryUnit || (isThaan ? 'meter' : productForm.unit),
       sku: sku || null,
-      barcode: productForm.barcode || null,
+      barcode: (isGroceryNew && groceryData.barcode) || productForm.barcode || null,
       purchase_price: unitCost,
       sale_price: unitRetail,
       retail_price: unitRetail,
@@ -1912,6 +1972,59 @@ const [copies, setCopies] = useState(1);
         setIsBoxEntry(false);
         setUnitsPerBox('');
         setBoxQuantity('');
+        return;
+      }
+      // GROCERY PACKED: quick price variants → 1 product + N variants
+      if (!editingProduct && isGroceryNew && groceryData.mode === 'PACKED_UNIT' && groceryData.quickVariants.length > 0) {
+        const qv = groceryData.quickVariants;
+        const totalU = qv.reduce((s, v) => s + (Number(v.qty) || 0), 0);
+        const gPayload = {
+          ...productData,
+          stock: totalU,
+          variants: qv.map((v, i) => ({
+            variant_name: `${productForm.name} ${v.label}`,
+            sku: v.barcode || `${productForm.barcode || 'PK'}-${i + 1}`,
+            barcode: v.barcode || null,
+            purchase_price: unitCost,
+            retail_price: v.price,
+            sale_price: v.price,
+            minimum_retail_price: v.price,
+            stock: Number(v.qty) || 0,
+            current_stock: Number(v.qty) || 0,
+            stock_alert_quantity: 5,
+          })),
+        };
+        await db.addProduct(gPayload);
+        setSnackbar({ open: true, message: `${qv.length} price variants saved (${totalU} units)`, severity: 'success' });
+        await loadData();
+        setProductDialog(false);
+        setEditingProduct(null);
+        resetProductForm();
+        return;
+      }
+      // GROCERY BAKERY: product + variant (0 stock) → batch add (expiry + stock)
+      if (!editingProduct && isGroceryNew && groceryData.mode === 'FRESH_BAKERY') {
+        const g = groceryData;
+        if (!(g.bakeryQty > 0) || !g.expiryDate) {
+          setSnackbar({ open: true, message: 'Quantity aur Expiry Date zaroori hai', severity: 'warning' });
+          return;
+        }
+        const prodResult = await db.addProduct({ ...productData, stock: 0 });
+        const productId = prodResult?.id || prodResult?.lastInsertRowid || prodResult?.data?.id;
+        const varResult = await db.addVariant({ ...variantData, product_id: productId, current_stock: 0, expiry_date: g.expiryDate });
+        const variantId = varResult?.id || varResult?.lastInsertRowid || varResult?.data?.id || productId;
+        await api.post(`/products/${productId}/batches`, {
+          expiry_date: g.expiryDate,
+          qty: g.bakeryQty,
+          cost_price: unitCost,
+          sale_price: unitRetail,
+          variant_id: variantId,
+        });
+        setSnackbar({ open: true, message: `Bakery stock saved: ${g.bakeryQty} pcs (exp ${g.expiryDate})`, severity: 'success' });
+        await loadData();
+        setProductDialog(false);
+        setEditingProduct(null);
+        resetProductForm();
         return;
       }
       const existingVariant = await db.getVariantBySKU ? await db.getVariantBySKU(sku) : null;
@@ -2656,6 +2769,13 @@ const [copies, setCopies] = useState(1);
                                   <Tooltip title="Add Variant">
                                     <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); handleOpenVariant(parent); }}>
                                       <AddCircle />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                                {(parent.product_type === 'grocery' || parent.type === 'grocery' || parent.product_type === 'medical' || parent.type === 'medical') && (
+                                  <Tooltip title="Batches (stock + expiry)">
+                                    <IconButton size="small" sx={{ color: '#d97706' }} onClick={(e) => { e.stopPropagation(); setBatchProduct(parent); }}>
+                                      <History />
                                     </IconButton>
                                   </Tooltip>
                                 )}
@@ -3616,23 +3736,18 @@ const [copies, setCopies] = useState(1);
               )}
 
               {dialogProductType === 'grocery' && (
-                <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #fed7aa', bgcolor: '#fff7ed' }}>
-                  <Typography variant="subtitle2" fontWeight="bold" color="#9a3412" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <LocalGroceryStore fontSize="small" sx={{ color: '#ea580c' }} />
-                    Grocery & Food Details
-                  </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={4}>
-                      <TextField fullWidth size="small" label="Weight (kg / grams)" name="weight" type="number" value={productForm.weight} onChange={handleProductChange} />
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <TextField fullWidth size="small" label="Expiry Date" name="expiryDate" type="date" value={productForm.expiryDate} onChange={handleProductChange} slotProps={{ inputLabel: { shrink: true } }} />
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <TextField fullWidth size="small" label="Batch / Lot Number" name="batchNumber" value={productForm.batchNumber} onChange={handleProductChange} />
-                    </Grid>
-                  </Grid>
-                </Paper>
+                <>
+                {!editingProduct && (
+                  <GroceryModeForm onChange={handleGroceryData} />
+                )}
+                {editingProduct && (
+                  <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #fed7aa', bgcolor: '#fff7ed' }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Stock aur batches row ke <b>Batches</b> button se manage karein.
+                    </Typography>
+                  </Paper>
+                )}
+                </>
               )}
 
               {dialogProductType === 'shoes' && (
@@ -4272,6 +4387,14 @@ const [copies, setCopies] = useState(1);
           <LocalOffer />
         </Fab>
       )}
+
+      {/* Batch manager (Grocery / Pharmacy) */}
+      <BatchManager
+        open={!!batchProduct}
+        product={batchProduct}
+        onClose={() => setBatchProduct(null)}
+        onChanged={() => loadData()}
+      />
 
       {/* SNACKBAR */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }} sx={{ mb: isMobile ? 8 : 0 }}>

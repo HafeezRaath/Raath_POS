@@ -5,6 +5,14 @@
 const express = require('express');
 const router = express.Router();
 const productController = require('../controllers/productController');
+const batchController = require('../controllers/batchController');
+
+// Batches: batch-wise pricing + expiry (Grocery / Pharmacy)
+router.get('/batches/expiry-alerts', batchController.expiryAlerts);
+router.get('/:id/batches', batchController.listBatches);
+router.post('/:id/batches', batchController.addBatch);
+router.put('/batches/:id', batchController.updateBatch);
+router.post('/batches/:id/vendor-return', batchController.vendorReturn);
 
 router.get('/variants', productController.getAllVariants);
 router.post('/variants', productController.createVariant);
