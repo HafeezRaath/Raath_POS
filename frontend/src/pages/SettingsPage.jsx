@@ -384,6 +384,7 @@ export default function SettingsPage({ initialTab } = {}) {
   const [users, setUsers] = useState([]);
   const [userDialog, setUserDialog] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, type: null, id: null, role: null });
   const [showPassword, setShowPassword] = useState(false);
 
   // Auto-detected Attached System Printers (from Electron IPC)
@@ -1417,17 +1418,7 @@ export default function SettingsPage({ initialTab } = {}) {
       setSnackbar({ open: true, message: `Cannot delete: ${usersWithRole.length} user(s) assigned!`, severity: 'warning' }); 
       return; 
     }
-    if (!window.confirm(`Delete role "${role.label}"?`)) return;
-
-    setLoading(true);
-    try {
-      const newRoles = roles.filter(r => r.id !== role.id);
-      const newPerms = buildPermissionsMap(newRoles);
-      await persistRoles(newRoles, newPerms);
-      setSnackbar({ open: true, message: `Role "${role.label}" deleted!`, severity: 'success' });
-    } catch (e) {}
-    setLoading(false);
-  };
+    setDeleteConfirm({ open: true, type: 'role', id: role.id, role });
 
   // NEW: Granular CRUD permission toggle
   const toggleRolePermission = (pageId, action) => {
@@ -1559,20 +1550,42 @@ export default function SettingsPage({ initialTab } = {}) {
   };
 
   const handleDeleteUser = async (id) => {
-    if (users.length <= 1) { 
-      setSnackbar({ open: true, message: 'Cannot delete last user!', severity: 'error' }); 
-      return; 
+    if (users.length <= 1) {
+      setSnackbar({ open: true, message: 'Cannot delete last user!', severity: 'error' });
+      return;
     }
-    if (!window.confirm('Delete this user?')) return;
-    setLoading(true);
-    try { 
-      await db.deleteUser(id); 
-      await refreshUsersList(); 
-      setSnackbar({ open: true, message: 'User deleted!', severity: 'success' }); 
-    } catch (err) { 
-      setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' }); 
+    setDeleteConfirm({ open: true, type: 'user', id });
+  };
+
+  const confirmDeleteDialog = async () => {
+    const { type, id } = deleteConfirm;
+    setDeleteConfirm({ open: false, type: null, id: null });
+    if (type === 'user') {
+      setLoading(true);
+      try {
+        await db.deleteUser(id);
+        await refreshUsersList();
+        setSnackbar({ open: true, message: 'User deleted!', severity: 'success' });
+      } catch (err) {
+        setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' });
+      }
+      setLoading(false);
+    } else if (type === 'role') {
+      // role delete via dialog
+      if (deleteConfirm.role) {
+        setLoading(true);
+        try {
+          const newRoles = roles.filter(r => r.id !== deleteConfirm.role.id);
+          const newPerms = buildPermissionsMap(newRoles);
+          await persistRoles(newRoles, newPerms);
+          setSnackbar({ open: true, message: `Role "${deleteConfirm.role.label}" deleted!`, severity: 'success' });
+        } catch (e) {
+          setSnackbar({ open: true, message: 'Error: ' + e.message, severity: 'error' });
+        }
+        setLoading(false);
+      }
     }
-    setLoading(false);
+  };
   };
 
   const toggleUserActive = async (id) => {
@@ -3634,6 +3647,22 @@ export default function SettingsPage({ initialTab } = {}) {
         anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }}
         sx={{ mb: isMobile ? 8 : 0 }}
       >
+
+      {/* DELETE CONFIRM DIALOG (replaces window.confirm which hangs browsers) */}
+      <Dialog open={deleteConfirm.open} onClose={() => setDeleteConfirm({ open: false, type: null, id: null, role: null })} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent dividers>
+          <Typography>
+            {deleteConfirm.type === 'role'
+              ? `Delete role "${deleteConfirm.role?.label}"?`
+              : 'Delete this user? This action cannot be undone.'}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirm({ open: false, type: null, id: null, role: null })}>Cancel</Button>
+          <Button onClick={confirmDeleteDialog} color="error" variant="contained">Delete</Button>
+        </DialogActions>
+      </Dialog>
         <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}>
           {snackbar.message}
         </Alert>
