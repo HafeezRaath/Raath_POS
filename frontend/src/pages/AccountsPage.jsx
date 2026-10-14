@@ -22,6 +22,7 @@ import {
 import db from '../database/db';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
+import { round2 } from '../utils/money';
 
 // ==================== CONSTANTS ====================
 const ACCOUNT_TYPES = [
@@ -501,7 +502,7 @@ export default function AccountsPage() {
       const activeAccounts = (allAccounts || []).filter(a => !a.is_deleted);
       setAccounts(activeAccounts);
 
-      const totalBalance = activeAccounts.reduce((sum, a) => sum + Number(a.current_balance || 0), 0);
+      const totalBalance = round2(activeAccounts.reduce((sum, a) => sum + Number(a.current_balance || 0), 0));
       setStats(prev => ({ ...prev, totalAccounts: activeAccounts.length, totalBalance }));
 
       const txFilters = {};
@@ -623,114 +624,114 @@ export default function AccountsPage() {
 
       // SALES
       periodSales.forEach(s => {
-        const total = Number(s.grand_total || 0);
-        const paid = Number(s.paid_amount || 0);
-        const due = Number(s.due_amount || 0);
-        accountsMap['4001'].credit += total;
+        const total = round2(s.grand_total || 0);
+        const paid = round2(s.paid_amount || 0);
+        const due = round2(s.due_amount || 0);
+        accountsMap['4001'].credit = round2(accountsMap['4001'].credit + total);
         if (['cash', 'cod', 'cash_on_delivery'].includes(s.payment_mode)) {
-          accountsMap['1001'].debit += paid;
+          accountsMap['1001'].debit = round2(accountsMap['1001'].debit + paid);
         } else {
-          accountsMap['1002'].debit += paid;
+          accountsMap['1002'].debit = round2(accountsMap['1002'].debit + paid);
         }
-        if (due > 0) accountsMap['1101'].debit += due;
+        if (due > 0) accountsMap['1101'].debit = round2(accountsMap['1101'].debit + due);
       });
 
       // PURCHASES
       periodPurchases.forEach(p => {
-        const total = Number(p.grand_total || 0);
-        const paid = Number(p.paid_amount || 0);
-        accountsMap['1102'].debit += total;
-        accountsMap['1001'].credit += paid;
-        const unpaid = total - paid;
-        if (unpaid > 0) accountsMap['2001'].credit += unpaid;
+        const total = round2(p.grand_total || 0);
+        const paid = round2(p.paid_amount || 0);
+        accountsMap['1102'].debit = round2(accountsMap['1102'].debit + total);
+        accountsMap['1001'].credit = round2(accountsMap['1001'].credit + paid);
+        const unpaid = round2(total - paid);
+        if (unpaid > 0) accountsMap['2001'].credit = round2(accountsMap['2001'].credit + unpaid);
       });
 
       // EXPENSES
       periodExpenses.forEach(e => {
-        const amt = Number(e.amount || 0);
-        accountsMap['6008'].debit += amt;
-        accountsMap['1001'].credit += amt;
+        const amt = round2(e.amount || 0);
+        accountsMap['6008'].debit = round2(accountsMap['6008'].debit + amt);
+        accountsMap['1001'].credit = round2(accountsMap['1001'].credit + amt);
       });
 
       // COGS (Perpetual Inventory)
-      const cogs = periodSaleItems.reduce((sum, si) => {
+      const cogs = round2(periodSaleItems.reduce((sum, si) => {
         const variant = variants.find(v => String(v.id) === String(si.product_variant_id));
-        return sum + (variant ? (Number(variant.purchase_price || 0) * Number(si.quantity || 0)) : 0);
-      }, 0);
-      accountsMap['5001'].debit += cogs;
-      accountsMap['1102'].credit += cogs;
+        return sum + (variant ? round2(Number(variant.purchase_price || 0) * Number(si.quantity || 0)) : 0);
+      }, 0));
+      accountsMap['5001'].debit = round2(accountsMap['5001'].debit + cogs);
+      accountsMap['1102'].credit = round2(accountsMap['1102'].credit + cogs);
 
       // INVENTORY ADJUSTMENT (Physical vs Expected)
-      const expectedInventory = accountsMap['1102'].debit - accountsMap['1102'].credit;
-      const physicalInventory = variants.reduce((sum, v) => {
-        return sum + (Number(v.current_stock || 0) * Number(v.purchase_price || 0));
-      }, 0);
-      const adjustment = physicalInventory - expectedInventory;
+      const expectedInventory = round2(accountsMap['1102'].debit - accountsMap['1102'].credit);
+      const physicalInventory = round2(variants.reduce((sum, v) => {
+        return sum + round2(Number(v.current_stock || 0) * Number(v.purchase_price || 0));
+      }, 0));
+      const adjustment = round2(physicalInventory - expectedInventory);
       if (adjustment > 0.01) {
-        accountsMap['1102'].debit += adjustment;
+        accountsMap['1102'].debit = round2(accountsMap['1102'].debit + adjustment);
       } else if (adjustment < -0.01) {
-        accountsMap['1102'].credit += Math.abs(adjustment);
+        accountsMap['1102'].credit = round2(accountsMap['1102'].credit + Math.abs(adjustment));
       }
 
       // NET INCOME
       const revenue = accountsMap['4001'].credit;
       const cogsVal = accountsMap['5001'].debit;
       const expVal = accountsMap['6008'].debit;
-      const netIncome = revenue - cogsVal - expVal;
+      const netIncome = round2(revenue - cogsVal - expVal);
 
       accountsMap['3002'].credit = netIncome > 0 ? netIncome : 0;
-      if (netIncome < 0) accountsMap['3002'].debit = Math.abs(netIncome);
+      if (netIncome < 0) accountsMap['3002'].debit = round2(Math.abs(netIncome));
 
       // EQUITY
-      const totalAssets = (accountsMap['1001'].debit - accountsMap['1001'].credit) 
+      const totalAssets = round2((accountsMap['1001'].debit - accountsMap['1001'].credit) 
                         + (accountsMap['1002'].debit - accountsMap['1002'].credit) 
                         + (accountsMap['1101'].debit - accountsMap['1101'].credit) 
-                        + (accountsMap['1102'].debit - accountsMap['1102'].credit);
+                        + (accountsMap['1102'].debit - accountsMap['1102'].credit));
 
-      const totalLiabilities = accountsMap['2001'].credit - accountsMap['2001'].debit;
-      const totalEquity = totalAssets - totalLiabilities;
-      const retainedEarnings = accountsMap['3002'].credit - accountsMap['3002'].debit;
-      const ownerCapital = totalEquity - retainedEarnings;
+      const totalLiabilities = round2(accountsMap['2001'].credit - accountsMap['2001'].debit);
+      const totalEquity = round2(totalAssets - totalLiabilities);
+      const retainedEarnings = round2(accountsMap['3002'].credit - accountsMap['3002'].debit);
+      const ownerCapital = round2(totalEquity - retainedEarnings);
 
       accountsMap['3001'].credit = ownerCapital > 0 ? ownerCapital : 0;
-      if (ownerCapital < 0) accountsMap['3001'].debit = Math.abs(ownerCapital);
+      if (ownerCapital < 0) accountsMap['3001'].debit = round2(Math.abs(ownerCapital));
 
       // TRIAL BALANCE
       const trial = Object.values(accountsMap)
         .map(acc => {
-          const net = acc.normal_balance === 'debit' ? (acc.debit - acc.credit) : (acc.credit - acc.debit);
+          const net = round2(acc.normal_balance === 'debit' ? (acc.debit - acc.credit) : (acc.credit - acc.debit));
           return { ...acc, net };
         })
         .filter(acc => acc.debit !== 0 || acc.credit !== 0);
 
-      const totalDebit = trial.reduce((s, a) => s + a.debit, 0);
-      const totalCredit = trial.reduce((s, a) => s + a.credit, 0);
+      const totalDebit = round2(trial.reduce((s, a) => s + a.debit, 0));
+      const totalCredit = round2(trial.reduce((s, a) => s + a.credit, 0));
 
       setFinancialData({
         trial, totalDebit, totalCredit,
         balanceSheet: {
           assets: [
-            { name: 'Cash in Hand', code: '1001', amount: accountsMap['1001'].debit - accountsMap['1001'].credit },
-            { name: 'Bank Account', code: '1002', amount: accountsMap['1002'].debit - accountsMap['1002'].credit },
-            { name: 'Accounts Receivable', code: '1101', amount: accountsMap['1101'].debit - accountsMap['1101'].credit },
-            { name: 'Inventory', code: '1102', amount: accountsMap['1102'].debit - accountsMap['1102'].credit },
+            { name: 'Cash in Hand', code: '1001', amount: round2(accountsMap['1001'].debit - accountsMap['1001'].credit) },
+            { name: 'Bank Account', code: '1002', amount: round2(accountsMap['1002'].debit - accountsMap['1002'].credit) },
+            { name: 'Accounts Receivable', code: '1101', amount: round2(accountsMap['1101'].debit - accountsMap['1101'].credit) },
+            { name: 'Inventory', code: '1102', amount: round2(accountsMap['1102'].debit - accountsMap['1102'].credit) },
           ],
           liabilities: [
-            { name: 'Accounts Payable', code: '2001', amount: accountsMap['2001'].credit - accountsMap['2001'].debit },
+            { name: 'Accounts Payable', code: '2001', amount: round2(accountsMap['2001'].credit - accountsMap['2001'].debit) },
           ],
           equity: [
-            { name: "Owner's Capital", code: '3001', amount: accountsMap['3001'].credit - accountsMap['3001'].debit },
-            { name: 'Retained Earnings', code: '3002', amount: accountsMap['3002'].credit - accountsMap['3002'].debit },
+            { name: "Owner's Capital", code: '3001', amount: round2(accountsMap['3001'].credit - accountsMap['3001'].debit) },
+            { name: 'Retained Earnings', code: '3002', amount: round2(accountsMap['3002'].credit - accountsMap['3002'].debit) },
           ]
         },
         pnl: { revenue, cogs: cogsVal, expenses: expVal, netIncome },
         summary: {
           totalAssets, totalLiabilities, totalEquity,
-          cash: accountsMap['1001'].debit - accountsMap['1001'].credit,
-          bank: accountsMap['1002'].debit - accountsMap['1002'].credit,
-          receivables: accountsMap['1101'].debit - accountsMap['1101'].credit,
-          inventory: accountsMap['1102'].debit - accountsMap['1102'].credit,
-          payables: accountsMap['2001'].credit - accountsMap['2001'].debit,
+          cash: round2(accountsMap['1001'].debit - accountsMap['1001'].credit),
+          bank: round2(accountsMap['1002'].debit - accountsMap['1002'].credit),
+          receivables: round2(accountsMap['1101'].debit - accountsMap['1101'].credit),
+          inventory: round2(accountsMap['1102'].debit - accountsMap['1102'].credit),
+          payables: round2(accountsMap['2001'].credit - accountsMap['2001'].debit),
         }
       });
       setTrialPage(0);
@@ -825,7 +826,7 @@ export default function AccountsPage() {
       if (!transferForm.from_account_id) throw new Error('Select source account');
       if (!transferForm.to_account_id) throw new Error('Select destination account');
       if (transferForm.from_account_id === transferForm.to_account_id) throw new Error('Cannot transfer to same account');
-      const amount = Number(transferForm.amount);
+      const amount = round2(transferForm.amount);
       if (!amount || amount <= 0) throw new Error('Enter valid amount');
       await db.transferBetweenAccounts({
         from_account_id: transferForm.from_account_id, to_account_id: transferForm.to_account_id,
@@ -847,7 +848,7 @@ export default function AccountsPage() {
 
   const handleAdjust = async () => {
     try {
-      const newBalance = Number(adjustForm.new_balance);
+      const newBalance = round2(adjustForm.new_balance);
       if (!Number.isFinite(newBalance)) throw new Error('Enter valid balance');
       await db.adjustAccountBalance({
         account_id: adjustForm.account_id, new_balance: newBalance,
@@ -869,7 +870,7 @@ export default function AccountsPage() {
 
   const handleSetOpening = async () => {
     try {
-      const bal = Number(openingForm.opening_balance);
+      const bal = round2(openingForm.opening_balance);
       if (!Number.isFinite(bal)) throw new Error('Enter valid balance');
       await db.setDailyOpeningBalance({ account_id: openingForm.account_id, opening_balance: bal, date: openingForm.date, notes: openingForm.notes });
       setSnackbar({ open: true, message: 'Daily opening balance set!', severity: 'success' });
@@ -898,9 +899,9 @@ export default function AccountsPage() {
       }
       if (Array.isArray(data)) {
         const opening = 0;
-        const totalCredits = data.filter(t => t.type === 'credit' || t.transaction_type === 'credit').reduce((s, t) => s + Number(t.amount || 0), 0);
-        const totalDebits = data.filter(t => t.type === 'debit' || t.transaction_type === 'debit').reduce((s, t) => s + Number(t.amount || 0), 0);
-        const closing = opening + totalCredits - totalDebits;
+        const totalCredits = round2(data.filter(t => t.type === 'credit' || t.transaction_type === 'credit').reduce((s, t) => s + Number(t.amount || 0), 0));
+        const totalDebits = round2(data.filter(t => t.type === 'debit' || t.transaction_type === 'debit').reduce((s, t) => s + Number(t.amount || 0), 0));
+        const closing = round2(opening + totalCredits - totalDebits);
         data = { opening_balance: opening, closing_balance: closing, total_credits: totalCredits, total_debits: totalDebits, transactions: data };
       }
       if (!data || !data.transactions) {
@@ -916,9 +917,9 @@ export default function AccountsPage() {
             return d >= f && d <= tDate;
           })
           .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
-        const opening = accTxs.length > 0 ? (accTxs[0].previous_balance || 0) : 0;
-        const totalCredits = accTxs.filter(t => t.transaction_type === 'credit').reduce((s, t) => s + Number(t.amount || 0), 0);
-        const totalDebits = accTxs.filter(t => t.transaction_type === 'debit').reduce((s, t) => s + Number(t.amount || 0), 0);
+        const opening = accTxs.length > 0 ? round2(accTxs[0].previous_balance || 0) : 0;
+        const totalCredits = round2(accTxs.filter(t => t.transaction_type === 'credit').reduce((s, t) => s + Number(t.amount || 0), 0));
+        const totalDebits = round2(accTxs.filter(t => t.transaction_type === 'debit').reduce((s, t) => s + Number(t.amount || 0), 0));
         const closing = accTxs.length > 0 ? (accTxs[accTxs.length - 1].balance_after || opening) : opening;
         data = { opening_balance: opening, closing_balance: closing, total_credits: totalCredits, total_debits: totalDebits, transactions: accTxs };
       }
@@ -942,7 +943,7 @@ export default function AccountsPage() {
   const handleSaveLedgerEntry = async () => {
     try {
       if (!ledgerEntryForm.account_id) throw new Error('Account select karein');
-      const amt = Number(ledgerEntryForm.amount);
+      const amt = round2(ledgerEntryForm.amount);
       if (!amt || amt <= 0) throw new Error('Sahi amount daalein');
       if (!ledgerEntryForm.description.trim()) throw new Error('Reason / Description zaroori hai');
       await db.createTransaction({
@@ -1037,16 +1038,16 @@ export default function AccountsPage() {
   const todayLedgerStats = useMemo(() => {
     const today = getToday();
     const entries = ledgerData.filter(e => String(e.date || '').substring(0, 10) === today);
-    const incoming = entries.filter(e => Number(e.credit) > 0).reduce((s, e) => s + Number(e.credit), 0);
-    const outgoing = entries.filter(e => Number(e.debit) > 0).reduce((s, e) => s + Number(e.debit), 0);
+    const incoming = round2(entries.filter(e => Number(e.credit) > 0).reduce((s, e) => s + Number(e.credit), 0));
+    const outgoing = round2(entries.filter(e => Number(e.debit) > 0).reduce((s, e) => s + Number(e.debit), 0));
     const byMode = {};
     entries.forEach(e => {
       const mode = e.payment_mode || 'other';
       if (!byMode[mode]) byMode[mode] = { in: 0, out: 0 };
-      if (Number(e.credit) > 0) byMode[mode].in += Number(e.credit);
-      if (Number(e.debit) > 0) byMode[mode].out += Number(e.debit);
+      if (Number(e.credit) > 0) byMode[mode].in = round2(byMode[mode].in + Number(e.credit));
+      if (Number(e.debit) > 0) byMode[mode].out = round2(byMode[mode].out + Number(e.debit));
     });
-    return { incoming, outgoing, net: incoming - outgoing, count: entries.length, byMode };
+    return { incoming, outgoing, net: round2(incoming - outgoing), count: entries.length, byMode };
   }, [ledgerData]);
 
   const paginatedTrial = useMemo(() => {
