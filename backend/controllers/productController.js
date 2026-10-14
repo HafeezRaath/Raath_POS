@@ -284,6 +284,7 @@ exports.getAllVariants = async (req, res, next) => {
         c.name AS category_name,
         COALESCE(pv.image_url, p.image_url) AS image_url,
         p.description,
+        pv.description AS variant_description,
         p.status,
         p.tax_type,
         p.tax_rate,

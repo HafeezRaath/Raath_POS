@@ -1683,7 +1683,8 @@ useEffect(() => {
       if (list.length > 1) {
         let school = '', itemName = '';
         try {
-          const d = typeof list[0].description === 'string' ? JSON.parse(list[0].description) : (list[0].description || {});
+          const vd = list[0].variant_description || list[0].description;
+          const d = typeof vd === 'string' ? JSON.parse(vd) : (vd || {});
           school = d.school || ''; itemName = d.item || '';
         } catch (e) {}
         // variant_name format "Shirt - Size 24" -> fallback parse

@@ -71,7 +71,13 @@ async function initializeDatabase() {
     });
 
     console.log(`[InitDB] Creating database '${DB_NAME}' if not exists...`);
-    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
+    try {
+      await connection.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
+    } catch (dbErr) {
+      // Shared hosting DB users often lack CREATE DATABASE privilege.
+      // The database already exists in production — continue with migrations.
+      console.warn(`[InitDB] CREATE DATABASE skipped (${dbErr.message}); continuing with existing database.`);
+    }
     await connection.query(`USE \`${DB_NAME}\`;`);
 
     // 2. Multi-tenant table
