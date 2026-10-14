@@ -922,7 +922,9 @@ export default function PurchasePage() {
       payment_mode: purchaseForm.payment_mode,
       notes: purchaseForm.notes,
       items: items.map(item => ({
+        product_id: item.product_id || null,
         product_variant_id: item.product_variant_id,
+        product_name: item.product_name || '',
         quantity: Number(item.quantity),
         purchase_price: Number(item.purchase_price),
         tax_percentage: Number(item.tax_percentage),
