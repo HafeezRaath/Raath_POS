@@ -1683,6 +1683,9 @@ const [copies, setCopies] = useState(1);
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
+    // Whole-handler guard: NOTHING in product save may ever fail silently.
+    // Any unexpected error is surfaced in the snackbar (and console).
+    try {
     if (editingProduct && !can('inventory', 'edit')) {
       setSnackbar({ open: true, message: 'Permission Denied: Cannot edit products!', severity: 'error' });
       return;
@@ -1691,10 +1694,10 @@ const [copies, setCopies] = useState(1);
       setSnackbar({ open: true, message: 'Permission Denied: Cannot add products!', severity: 'error' });
       return;
     }
-    const sku = productForm.sku.trim();
-    if (!productForm.name.trim() || !sku) { 
+    const sku = (productForm.sku || '').trim();
+    if (!(productForm.name || '').trim() || !sku) {
       setSnackbar({ open: true, message: 'Name and SKU required!', severity: 'error' });
-      return; 
+      return;
     }
 
     // ====== PRICE VALIDATION ======
@@ -2255,6 +2258,11 @@ const [copies, setCopies] = useState(1);
     } catch (err) {
       console.error('Save error:', err);
       setSnackbar({ open: true, message: 'Error saving product: ' + err.message, severity: 'error' });
+    }
+    } catch (outerErr) {
+      // Catches anything thrown before/during form prep (validation, meta building)
+      console.error('Save prep error:', outerErr);
+      setSnackbar({ open: true, message: 'Error: ' + (outerErr?.message || outerErr), severity: 'error' });
     }
   };
 
