@@ -4,9 +4,10 @@
 --  Contains all tables from Electron & Server Schemas
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS `raath_pos_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `raath_pos_db`;
-
+-- NOTE: database creation/selection is handled by initDb.js using DB_NAME
+-- from the environment. Do NOT hardcode CREATE DATABASE / USE here —
+-- on shared hosting the DB user lacks server-level CREATE privilege and
+-- a hardcoded name aborts the whole migration batch.
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- 1. System Settings
@@ -1259,6 +1260,36 @@ CREATE TABLE IF NOT EXISTS `account_daily_balances` (
   UNIQUE KEY uq_acc_date (`account_id`, `date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+
+-- ============================================================
+-- Bookshop: Class bundles (e.g. "Class 5 Complete Set")
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `bundles` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` INT NOT NULL,
+  `name` VARCHAR(200) NOT NULL,
+  `class_name` VARCHAR(100) NULL,
+  `sku` VARCHAR(100) NULL,
+  `barcode` VARCHAR(100) NULL,
+  `bundle_price` DECIMAL(15,2) NOT NULL DEFAULT 0,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `notes` TEXT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY `idx_bundles_tenant` (`tenant_id`),
+  UNIQUE KEY `uq_bundles_barcode_tenant` (`tenant_id`, `barcode`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `bundle_items` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `bundle_id` INT NOT NULL,
+  `product_variant_id` INT NOT NULL,
+  `qty` INT NOT NULL DEFAULT 1,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY `idx_bi_bundle` (`bundle_id`),
+  KEY `idx_bi_variant` (`product_variant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ==================== VIEWS ====================
 
 DROP VIEW IF EXISTS `v_emi_ledger`;
@@ -1480,31 +1511,3 @@ CREATE TABLE IF NOT EXISTS `supplier_credit_notes` (
 
 SET FOREIGN_KEY_CHECKS = 1;
 
--- ============================================================
--- Bookshop: Class bundles (e.g. "Class 5 Complete Set")
--- ============================================================
-CREATE TABLE IF NOT EXISTS `bundles` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `tenant_id` INT NOT NULL,
-  `name` VARCHAR(200) NOT NULL,
-  `class_name` VARCHAR(100) NULL,
-  `sku` VARCHAR(100) NULL,
-  `barcode` VARCHAR(100) NULL,
-  `bundle_price` DECIMAL(15,2) NOT NULL DEFAULT 0,
-  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
-  `notes` TEXT NULL,
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY `idx_bundles_tenant` (`tenant_id`),
-  UNIQUE KEY `uq_bundles_barcode_tenant` (`tenant_id`, `barcode`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS `bundle_items` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `bundle_id` INT NOT NULL,
-  `product_variant_id` INT NOT NULL,
-  `qty` INT NOT NULL DEFAULT 1,
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  KEY `idx_bi_bundle` (`bundle_id`),
-  KEY `idx_bi_variant` (`product_variant_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

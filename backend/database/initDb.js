@@ -110,10 +110,23 @@ async function initializeDatabase() {
     const tablesSql = viewSplitIndex !== -1 ? schemaSql.substring(0, viewSplitIndex) : schemaSql;
     const viewsSql = viewSplitIndex !== -1 ? schemaSql.substring(viewSplitIndex) : '';
 
-    // 4. Create all base tables first
+    // 4. Create all base tables first — statement by statement, so one bad
+    //    statement can never abort the rest of the migration (shared hosting
+    //    lesson: a single access-denied used to kill the entire batch).
     console.log('[InitDB] Executing base tables...');
-    await connection.query(tablesSql);
-    console.log('[InitDB] Base tables created.');
+    const isCommentOnly = (s) => s.split('\n').every(l => !l.trim() || l.trim().startsWith('--'));
+    const tableStatements = tablesSql.split(';').map(s => s.trim()).filter(s => s && !isCommentOnly(s));
+    let tableOk = 0, tableSkipped = 0;
+    for (const stmt of tableStatements) {
+      try {
+        await connection.query(stmt);
+        tableOk++;
+      } catch (stmtErr) {
+        tableSkipped++;
+        console.warn(`[InitDB] Statement skipped (${stmtErr.message}): ${stmt.substring(0, 90).replace(/\n/g, ' ')}...`);
+      }
+    }
+    console.log(`[InitDB] Base tables done: ${tableOk} executed, ${tableSkipped} skipped.`);
 
     // 5. Safe migrations for existing tables before running views
     await addColumnIfMissing(connection, 'emi_payments', '`penalty_amount` DECIMAL(15,2) DEFAULT 0');
@@ -349,7 +362,14 @@ async function initializeDatabase() {
     // 7. Now execute views (guaranteed to find tenant_id and migration columns)
     if (viewsSql) {
       console.log('[InitDB] Executing views...');
-      await connection.query(viewsSql);
+      const viewStatements = viewsSql.split(';').map(s => s.trim()).filter(s => s && !isCommentOnly(s));
+      for (const stmt of viewStatements) {
+        try {
+          await connection.query(stmt);
+        } catch (stmtErr) {
+          console.warn(`[InitDB] View statement skipped (${stmtErr.message}): ${stmt.substring(0, 90).replace(/\n/g, ' ')}...`);
+        }
+      }
     }
     console.log('[InitDB] All tables & views created successfully.');
 
