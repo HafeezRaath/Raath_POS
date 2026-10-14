@@ -49,8 +49,26 @@ const MAIN_NAV = [
 const MobileNav = memo(() => {
   const { pathname } = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [pageVisibility, setPageVisibility] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('page_visibility') || '{}'); }
+    catch { return {}; }
+  });
+
+  React.useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'page_visibility') {
+        try { setPageVisibility(JSON.parse(e.newValue || '{}')); } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const isActive = useCallback((p) => pathname === p, [pathname]);
+  const visibleMain = MAIN_NAV.filter((item) => {
+    if (item.path === '/emi' && pageVisibility.emi === false) return false;
+    return true;
+  });
 
   if (pathname === '/billing') return null;
 
@@ -67,7 +85,7 @@ const MobileNav = memo(() => {
 
       {/* Bottom Navigation Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-2 py-1.5 flex items-center justify-between safe-area-pb">
-        {MAIN_NAV.slice(0, 2).map((item) => {
+        {visibleMain.slice(0, 2).map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
           return (
@@ -87,7 +105,7 @@ const MobileNav = memo(() => {
         {/* Center Gap for FAB */}
         <div className="w-14 flex-shrink-0" />
 
-        {MAIN_NAV.slice(2).map((item) => {
+        {visibleMain.slice(2).map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
           return (

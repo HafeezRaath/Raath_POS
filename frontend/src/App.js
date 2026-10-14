@@ -9,6 +9,9 @@ import {
 import { useResponsive } from './hooks/useResponsive';
 import { AuthProvider, useAuth } from './AuthContext';
 import { hasPermission } from './role';
+import { isModuleEnabled, TOGGLEABLE_MODULES } from './config/businessModules';
+
+const TOGGLEABLE_IDS = new Set(TOGGLEABLE_MODULES.map(m => m.id));
 
 // ==================== LAZY LOADED PAGES ====================
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -70,6 +73,10 @@ function ProtectedRoute({ children, pageId }) {
   if (loading) return <PageLoader />;
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
   if (pageId && !hasAccess) return <Navigate to="/" replace />;
+  // Business-type ke hisaab se disabled module direct URL se bhi na khule
+  if (pageId && TOGGLEABLE_IDS.has(pageId) && !isModuleEnabled(pageId)) {
+    return <Navigate to="/" replace />;
+  }
 
   return children;
 }
@@ -130,8 +137,8 @@ const AppRoutes = React.memo(function AppRoutes() {
         <Route path="/suppliers" element={<ProtectedRoute pageId="suppliers"><MainLayout><SuppliersPage /></MainLayout></ProtectedRoute>} />
         
         {/* ===== SERVICES & DISTRIBUTION ROUTES ===== */}
-        <Route path="/services" element={<ProtectedRoute pageId="services"><MainLayout><ServicesPage /></MainLayout></ProtectedRoute>} />
-        <Route path="/distribution" element={<ProtectedRoute pageId="services"><MainLayout><Distribution /></MainLayout></ProtectedRoute>} />
+        <Route path="/services" element={<ProtectedRoute pageId="workorders"><MainLayout><ServicesPage /></MainLayout></ProtectedRoute>} />
+        <Route path="/distribution" element={<ProtectedRoute pageId="distribution"><MainLayout><Distribution /></MainLayout></ProtectedRoute>} />
 
         <Route path="/emi" element={<ProtectedRoute pageId="emi"><MainLayout><EMI /></MainLayout></ProtectedRoute>} />
         <Route path="/expenses" element={<ProtectedRoute pageId="expenses"><MainLayout><ExpensesPage /></MainLayout></ProtectedRoute>} />

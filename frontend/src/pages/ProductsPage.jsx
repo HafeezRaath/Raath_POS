@@ -33,6 +33,7 @@ import db from '../database/db';
 import { useNavigate } from 'react-router-dom';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
+import { getDefaultProductType } from '../config/businessModules';
 
 // ==================== CONSTANTS ====================
 const PRODUCT_TYPES = [
@@ -283,7 +284,7 @@ const [copies, setCopies] = useState(1);
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const { can } = usePermissions();
+  const { can, currentUser } = usePermissions();
   const [mobileDrawer, setMobileDrawer] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(0);
 
@@ -310,6 +311,11 @@ const [copies, setCopies] = useState(1);
   const [cartonPrice, setCartonPrice] = useState('');
   const [boxPrice, setBoxPrice] = useState('');
 
+  // Box/Carton toggle sirf Wholesale ya Mart (Grocery/Kirana) business type wali shops mein dikhega.
+  // Pehle se save ki hui box-product entry edit karte waqt card phir bhi visible rahega taake data orphan na ho.
+  const shopBusinessType = String(currentUser?.business_type || 'retail').toLowerCase();
+  const showBoxEntryCard = shopBusinessType === 'wholesale' || shopBusinessType === 'grocery' || isBoxEntry;
+
   const [variantDialog, setVariantDialog] = useState(false);
   const [variantParent, setVariantParent] = useState(null);
   const [variantForm, setVariantForm] = useState({
@@ -321,8 +327,12 @@ const [copies, setCopies] = useState(1);
   const variantFileInputRef = useRef(null);
 
   // ==================== PRODUCT FORM STATE ====================
-  const [productForm, setProductForm] = useState({
-    name: '', sku: '', type: 'standard', category_id: '', unit: 'Piece',
+  // type ka default shop ke business_type se aata hai (mobile→imei, kapra→fabric...)
+  const [productForm, setProductForm] = useState(() => {
+    const defType = getDefaultProductType();
+    const defUnits = (typeof UNITS_BY_TYPE !== 'undefined' && UNITS_BY_TYPE[defType]) || DEFAULT_UNITS;
+    return {
+    name: '', sku: '', type: defType, category_id: '', unit: defUnits[0] || 'Piece',
     costPrice: '', retailPrice: '', wholesalePrice: '', barcode: '',
     stock: '', minStock: '5', tax: '0', imeiList: '', fabricLength: '',
     weight: '', expiryDate: '', batchNumber: '', description: '',
@@ -339,6 +349,7 @@ const [copies, setCopies] = useState(1);
     is_box_product: false,
     units_per_box: '',
     box_quantity: '',
+    };
   });
 
   const [imagePreview, setImagePreview] = useState(null);
@@ -1251,9 +1262,10 @@ const [copies, setCopies] = useState(1);
 
   const resetProductForm = useCallback(() => {
     const last = JSON.parse(localStorage.getItem('last_product_defaults') || '{}');
-    const defaultUnits = UNITS_BY_TYPE[last.type || 'standard'] || DEFAULT_UNITS;
+    const defType = last.type || getDefaultProductType();
+    const defaultUnits = UNITS_BY_TYPE[defType] || DEFAULT_UNITS;
     setProductForm({
-      name: '', sku: '', type: last.type || 'standard', category_id: last.category_id || '',
+      name: '', sku: '', type: defType, category_id: last.category_id || '',
       unit: defaultUnits[0] || 'Piece', costPrice: '', retailPrice: '', wholesalePrice: '',
       barcode: '', stock: '', minStock: '5', tax: '0', imeiList: '', fabricLength: '',
       weight: '', expiryDate: '', batchNumber: '', description: '', status: 'active', 
@@ -1272,7 +1284,7 @@ const [copies, setCopies] = useState(1);
       box_quantity: '',
     });
     setImagePreview(null);
-    setDialogProductType(last.type || 'standard');
+    setDialogProductType(defType);
     setIsBoxEntry(false);
     setUnitsPerBox('');
     setBoxQuantity('');
@@ -2981,7 +2993,8 @@ const [copies, setCopies] = useState(1);
                 </Grid>
               </Paper>
 
-              {/* CARD 3: Packaging & Box Entry Mode */}
+              {/* CARD 3: Packaging & Box Entry Mode — sirf Wholesale / Mart (Grocery) shops ke liye */}
+              {showBoxEntryCard && (
               <Paper sx={{ 
                 p: isMobile ? 2 : 2.5, 
                 borderRadius: 3, 
@@ -3170,6 +3183,7 @@ const [copies, setCopies] = useState(1);
                   </Box>
                 )}
               </Paper>
+              )}
 
               {/* CARD 4: Pricing & Inventory */}
               <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>

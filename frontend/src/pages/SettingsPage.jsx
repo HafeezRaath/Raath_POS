@@ -30,6 +30,10 @@ import {
 } from '../role';
 import ThermalReceipt from '../components/receipt/ThermalReceipt';
 import { printReceiptDirect } from '../utils/receiptGenerator';
+import {
+  TOGGLEABLE_MODULES, BUSINESS_MODULE_DEFAULTS,
+  getShopBusinessType, getBusinessTypeLabel, applyBusinessTypeDefaults,
+} from '../config/businessModules';
 
 const SETTINGS_TABS = [
   { id: 'shop', label: 'Shop Profile', icon: <Store fontSize="small" /> },
@@ -504,11 +508,13 @@ export default function SettingsPage() {
       expenses: true,
       reports: true, 
       settings: true, 
-      emi: true, 
-      users: true, 
+      emi: true,
+      workorders: true,
+      distribution: true,
+      users: true,
       backup: true,
-      services: true, 
-      staff: true, 
+      services: true,
+      staff: true,
       work_orders: true,
       deals: true,
       offers: true,
@@ -1244,6 +1250,12 @@ export default function SettingsPage() {
         db.saveNotificationSettings(notifications),
         db.savePageVisibility(pageVisibility)
       ]);
+
+      // Sidebar/MobileNav localStorage se parhtay hain — isi liye yahan sync zaroori hai
+      try {
+        localStorage.setItem('page_visibility', JSON.stringify(pageVisibility));
+        localStorage.setItem('page_visibility_source', 'manual');
+      } catch { /* ignore */ }
 
       // 2. Sync directly to Firebase Cloud under active shop_id
       let cloudSynced = false;
@@ -3206,11 +3218,42 @@ export default function SettingsPage() {
             
             <Alert severity="info" sx={{ mb: 3 }}>
               <Typography variant="body2">
-                <strong>Tip:</strong> Hide pages that are not relevant to your business. 
-                Hidden pages will not appear in the sidebar navigation for any user.
-                Administrators can still access hidden pages via direct URL.
+                <strong>Tip:</strong> Hide pages that are not relevant to your business.
+                Hidden pages will not appear in the sidebar navigation for any user,
+                aur direct URL se bhi nahi khulenge.
               </Typography>
             </Alert>
+
+            {/* Business-type module defaults */}
+            <Paper sx={{ p: 2, mb: 3, borderRadius: 2, border: '1px solid #e2e8f0', bgcolor: '#f8fafc' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
+                <Box>
+                  <Typography variant="body2" fontWeight="bold">
+                    Business type: {getBusinessTypeLabel(getShopBusinessType())}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Default: {TOGGLEABLE_MODULES.map(m => {
+                      const on = !!(BUSINESS_MODULE_DEFAULTS[getShopBusinessType()] || {})[m.id];
+                      return `${m.label} ${on ? 'ON' : 'OFF'}`;
+                    }).join(' • ')}
+                  </Typography>
+                </Box>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => {
+                    const next = applyBusinessTypeDefaults(getShopBusinessType());
+                    if (next) {
+                      setPageVisibility(next);
+                      setHasChanges(true);
+                      setSnackbar({ open: true, message: `Modules reset to ${getBusinessTypeLabel(getShopBusinessType())} defaults — Save dabayein`, severity: 'success' });
+                    }
+                  }}
+                >
+                  Apply {getBusinessTypeLabel(getShopBusinessType())} Defaults
+                </Button>
+              </Box>
+            </Paper>
 
             <Grid container spacing={isMobile ? 1 : 2}>
               {Object.entries(pageVisibility).map(([pageId, visible]) => {

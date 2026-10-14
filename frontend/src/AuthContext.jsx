@@ -111,6 +111,17 @@ export function AuthProvider({ children }) {
       localStorage.setItem('raath_tenant_id', tenantId);
       localStorage.setItem('raath_shop_name', userData.shop_name || 'RAATH POS Store');
 
+      // Business-type ke hisaab se module defaults lagao (sirf pehli baar —
+      // agar shop ne pehle se apni visibility customize ki hai to usay chhedo mat)
+      try {
+        const already = localStorage.getItem('page_visibility');
+        if (!already) {
+          const { applyBusinessTypeDefaults } = await import('./config/businessModules');
+          const btype = String(userData.business_type || 'retail').toLowerCase();
+          applyBusinessTypeDefaults(btype);
+        }
+      } catch { /* non-blocking */ }
+
       setUser(userData);
       setIsAuthenticated(true);
       setShopId(tenantId);
@@ -159,6 +170,13 @@ export function AuthProvider({ children }) {
         localStorage.setItem('current_user', JSON.stringify(userData));
         localStorage.setItem('raath_tenant_id', tenantId);
         localStorage.setItem('raath_shop_name', userData.shop_name || 'RAATH POS Store');
+        // Nayi shop: business-type ke mutabiq module defaults (pehli baar hi)
+        try {
+          if (!localStorage.getItem('page_visibility')) {
+            const { applyBusinessTypeDefaults } = await import('./config/businessModules');
+            applyBusinessTypeDefaults(String(userData.business_type || 'retail').toLowerCase());
+          }
+        } catch { /* non-blocking */ }
         setUser(userData);
         setIsAuthenticated(true);
         setShopId(tenantId);

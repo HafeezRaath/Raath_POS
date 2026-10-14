@@ -14,6 +14,8 @@ export const AVAILABLE_PAGES = [
   { id: 'reports', label: 'Reports', icon: '' },
   { id: 'settings', label: 'Settings', icon: '' },
   { id: 'emi', label: 'EMI System', icon: '' },
+  { id: 'workorders', label: 'Work Orders', icon: '' },
+  { id: 'distribution', label: 'Distribution', icon: '' },
   { id: 'users', label: 'User Management', icon: '' },
   { id: 'backup', label: 'Backup', icon: '' },
 ];
