@@ -1443,6 +1443,25 @@ CREATE TABLE IF NOT EXISTS `staff_payroll` (
   INDEX `idx_payroll_month` (`tenant_id`, `month`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 44. Guarantors master (one guarantor, many customers)
+CREATE TABLE IF NOT EXISTS `guarantors` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` VARCHAR(100) NOT NULL,
+  `name` VARCHAR(150) NOT NULL,
+  `phone` VARCHAR(50) NULL,
+  `cnic` VARCHAR(20) NULL,
+  `address` TEXT NULL,
+  `occupation` VARCHAR(100) NULL,
+  `monthly_income` DECIMAL(15,2) DEFAULT 0,
+  `relation_to_customer` VARCHAR(100) NULL,
+  `notes` TEXT NULL,
+  `is_active` TINYINT(1) DEFAULT 1,
+  `is_deleted` TINYINT(1) DEFAULT 0,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_guarantor_cnic` (`tenant_id`, `cnic`),
+  INDEX `idx_guarantor_name` (`tenant_id`, `name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 43. Supplier credit notes (post-purchase price drops / rebates)
 CREATE TABLE IF NOT EXISTS `supplier_credit_notes` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,

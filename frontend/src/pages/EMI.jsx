@@ -5,6 +5,9 @@
 // ============================================================
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import EmiWizardModal from '../components/emi/EmiWizardModal';
+import EmiCollectionDashboard from '../components/emi/EmiCollectionDashboard';
+import EarlySettlementModal from '../components/emi/EarlySettlementModal';
 import {
   Box, Paper, Grid, TextField, Button, Typography, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -362,6 +365,9 @@ export default function EMI() {
   const [trackingLoading, setTrackingLoading] = useState(false);
 
   const [openCalculator, setOpenCalculator] = useState(false);
+  const [advancedWizardOpen, setAdvancedWizardOpen] = useState(false);
+  const [settleModalOpen, setSettleModalOpen] = useState(false);
+  const [settleEmi, setSettleEmi] = useState(null);
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [historyDialog, setHistoryDialog] = useState(false);
   const [viewDialog, setViewDialog] = useState(false);
@@ -3067,9 +3073,15 @@ export default function EMI() {
         <DialogActions>
           <Button onClick={() => setViewDialog(false)}>Close</Button>
           {details.remainingMonths > 0 && details.computedStatus !== 'completed' && (
-            <Button variant="contained" sx={{ bgcolor: '#10b981' }} onClick={() => { setViewDialog(false); openPaymentDialog(selectedEMI); }}>
-              Record Payment
-            </Button>
+            <>
+              <Button variant="outlined" sx={{ borderColor: '#059669', color: '#059669' }}
+                onClick={() => { setSettleEmi(selectedEMI); setSettleModalOpen(true); }}>
+                ✅ Early Settlement
+              </Button>
+              <Button variant="contained" sx={{ bgcolor: '#10b981' }} onClick={() => { setViewDialog(false); openPaymentDialog(selectedEMI); }}>
+                Record Payment
+              </Button>
+            </>
           )}
         </DialogActions>
       </Dialog>
@@ -4822,6 +4834,14 @@ export default function EMI() {
           >
             {isMobile ? 'New EMI' : 'New Agreement'}
           </Button>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => setAdvancedWizardOpen(true)}
+            sx={{ bgcolor: '#7c3aed', '&:hover': { bgcolor: '#6d28d9' }, whiteSpace: 'nowrap' }}
+          >
+            📋 Advanced EMI
+          </Button>
         </Stack>
       </Paper>
 
@@ -4862,6 +4882,10 @@ export default function EMI() {
             label={`Guarantors (${allGuarantors.length})`}
             onClick={() => loadAllGuarantors()}
             sx={{ textTransform: 'none', fontWeight: 'bold', minHeight: isMobile ? 44 : 48, cursor: 'pointer' }}
+          />
+          <Tab
+            label="📊 Collection"
+            sx={{ textTransform: 'none', fontWeight: 'bold', minHeight: isMobile ? 44 : 48 }}
           />
         </Tabs>
       </Paper>
@@ -5056,10 +5080,30 @@ export default function EMI() {
         </Box>
       </Drawer>
 
+      {activeTab === 4 && (
+        <Paper sx={{ p: 2, borderRadius: 2 }}>
+          <EmiCollectionDashboard onCollect={(emiId) => {
+            const emi = emis.find(e => e.id === emiId);
+            if (emi) openViewDialog(emi);
+          }} />
+        </Paper>
+      )}
+
       {/* DIALOGS */}
       {renderNewEMIDialog()}
       {renderPaymentDialog()}
       {renderHistoryDialog()}
+      <EmiWizardModal
+        open={advancedWizardOpen}
+        onClose={() => setAdvancedWizardOpen(false)}
+        onCreated={() => { loadData(true); }}
+      />
+      <EarlySettlementModal
+        open={settleModalOpen}
+        emi={settleEmi}
+        onClose={() => { setSettleModalOpen(false); setSettleEmi(null); }}
+        onSettled={() => { loadData(true); }}
+      />
       {renderViewDialog()}
       {renderDeleteDialog()}
       {renderDeletePaymentDialog()}

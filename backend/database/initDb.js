@@ -39,7 +39,7 @@ const TENANT_TABLES = [
   'salesman_sale_return_items', 'salesman_sale_returns', 'salesman_sales',
   'salesmen', 'services', 'staff', 'supplier_ledger', 'suppliers',
   'device_imei', 'device_imei_history', 'repair_parts', 'staff_payroll',
-  'supplier_credit_notes',
+  'supplier_credit_notes', 'guarantors',
   'system_settings', 'users', 'warehouse_stocks', 'warehouses', 'work_orders'
 ];
 
@@ -153,6 +153,18 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'work_orders', '`commission_percent` DECIMAL(5,2) DEFAULT 0');
     // Staff table: tenant scoping (getStaff filters by tenant_id)
     await addColumnIfMissing(connection, 'staff', '`tenant_id` VARCHAR(100) DEFAULT \'tenant_default\'');
+    // Advanced EMI columns
+    await addColumnIfMissing(connection, 'emi_records', '`source_mode` VARCHAR(20) DEFAULT \'inventory\'');
+    await addColumnIfMissing(connection, 'emi_records', '`device_imei_id` INT NULL');
+    await addColumnIfMissing(connection, 'emi_records', '`cost_price` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_records', '`interest_amount` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_records', '`total_payable` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_records', '`monthly_target` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_records', '`early_settlement_discount` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_records', '`settled_at` DATETIME NULL');
+    await addColumnIfMissing(connection, 'emi_records', '`cnic_only` TINYINT(1) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_guarantors', '`guarantor_id` INT NULL');
+    await addColumnIfMissing(connection, 'emi_schedule', '`tenant_id` VARCHAR(100) DEFAULT \'tenant_default\'');
 
     try {
       await connection.query("ALTER TABLE `users` MODIFY COLUMN `email` VARCHAR(150) NULL");
