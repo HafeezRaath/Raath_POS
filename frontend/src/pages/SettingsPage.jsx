@@ -2152,7 +2152,7 @@ export default function SettingsPage({ initialTab } = {}) {
                   onClick={handleSaveUser} 
                   startIcon={<Save />} 
                   sx={{ bgcolor: '#10b981' }} 
-                  disabled={loading || !!(editingUser?.password && editingUser.password.length > 0 && editingUser.password.length < 6) || !(editingUser?.name || '').trim() || !(editingUser?.username || '').trim() || (!editingUser?.id && !editingUser?.password)}
+                  disabled={loading || !!(editingUser?.password && editingUser.password.length > 0 && editingUser.password.length < 6) || !(editingUser?.name || '').trim() || (!editingUser?.id && (!(editingUser?.username || '').trim() || !editingUser?.password))}
                 >
                   {loading ? 'Saving...' : (editingUser?.isFirstAdmin ? 'Create Admin' : 'Save User')}
                 </Button>
