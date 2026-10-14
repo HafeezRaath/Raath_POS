@@ -40,7 +40,8 @@ import ThaanFabricForm from '../components/garments/ThaanFabricForm';
 import ReadymadeMatrix from '../components/garments/ReadymadeMatrix';
 import GroceryModeForm from '../components/grocery/GroceryModeForm';
 import BatchManager from '../components/grocery/BatchManager';
-import { formatShoeStock, formatThaanStock, formatKurtaStock, formatLooseWeightStock } from '../utils/stockFormat';
+import PharmacyModeForm from '../components/pharmacy/PharmacyModeForm';
+import { formatShoeStock, formatThaanStock, formatKurtaStock, formatLooseWeightStock, formatPharmacyStock } from '../utils/stockFormat';
 
 // ==================== CONSTANTS ====================
 const PRODUCT_TYPES = [
@@ -328,6 +329,9 @@ const [copies, setCopies] = useState(1);
   const [groceryData, setGroceryData] = useState(null);
   const handleGroceryData = useCallback((d) => setGroceryData(d), []);
   const [batchProduct, setBatchProduct] = useState(null);
+  // Pharmacy vertical
+  const [pharmacyData, setPharmacyData] = useState(null);
+  const handlePharmacyData = useCallback((d) => setPharmacyData(d), []);
 
   const [variantDialog, setVariantDialog] = useState(false);
   const [variantParent, setVariantParent] = useState(null);
@@ -453,7 +457,12 @@ const [copies, setCopies] = useState(1);
           rm_pieces_per_box: meta.pieces_per_box || 0,
           grocery_mode: meta.grocery_mode || '',
           grams_per_sack: meta.grams_per_sack || 0,
-          units_per_box_or_pet: meta.units_per_box_or_pet || 0
+          units_per_box_or_pet: meta.units_per_box_or_pet || 0,
+          pharmacy_mode: meta.pharmacy_mode || '',
+          strips_per_box: meta.strips_per_box || 0,
+          units_per_strip: meta.units_per_strip || 0,
+          cold_chain: !!meta.cold_chain,
+          rx_required: !!meta.rx_required
         };
       });
       
@@ -598,6 +607,19 @@ const [copies, setCopies] = useState(1);
       const loose = totalStock % upb;
       const txt = boxes === 0 ? `${loose} Pcs` : loose === 0 ? `${boxes} Boxes (${totalStock} Pcs)` : `${boxes} Boxes, ${loose} Pcs (${totalStock} Total)`;
       return <Typography fontWeight="bold" color={color}>{txt}</Typography>;
+    }
+    if (ptype === 'medical' && parent.pharmacy_mode) {
+      return (
+        <Box>
+          <Typography fontWeight="bold" color={color}>
+            {formatPharmacyStock(totalStock, parent.pharmacy_mode, parent.strips_per_box, parent.units_per_strip)}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+            {parent.rx_required && <Chip size="small" color="error" label="Rx" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 'bold' }} />}
+            {parent.cold_chain && <Chip size="small" color="info" label="Fridge" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 'bold' }} />}
+          </Box>
+        </Box>
+      );
     }
     return <Typography fontWeight="bold" color={color}>{totalStock}</Typography>;
   };
@@ -1365,6 +1387,7 @@ const [copies, setCopies] = useState(1);
     setReadymadeBoxInfo(null);
     setGroceryData(null);
     setBatchProduct(null);
+    setPharmacyData(null);
     setIsBoxEntry(false);
     setUnitsPerBox('');
     setBoxQuantity('');
@@ -1738,6 +1761,21 @@ const [copies, setCopies] = useState(1);
       meta.supplier_name = productForm.supplier_name || '';
       meta.shelf_rack = productForm.shelf_rack || '';
       meta.remarks = productForm.remarks || '';
+      if (pharmacyData) {
+        const ph = pharmacyData;
+        meta.pharmacy_mode = ph.mode;
+        meta.generic_name = ph.genericName || meta.generic_name;
+        meta.dosage_form = ph.dosageForm || '';
+        meta.strength = ph.strength || '';
+        meta.manufacturer = ph.manufacturer || meta.manufacturer;
+        meta.shelf_rack = ph.rack || meta.shelf_rack;
+        meta.cold_chain = !!ph.coldChain;
+        meta.rx_required = !!ph.rxRequired;
+        meta.boxes_per_carton = ph.boxesPerCarton || 0;
+        meta.strips_per_box = ph.stripsPerBox || 0;
+        meta.units_per_strip = ph.unitsPerStrip || 0;
+        meta.units_per_box = ph.unitsPerBox || 0;
+      }
     }
     if (productForm.type === 'shoes') {
       meta.shoe_size = productForm.shoe_size || '';
@@ -1822,6 +1860,17 @@ const [copies, setCopies] = useState(1);
       unitWholesale = unitRetail;
     }
 
+    // Pharmacy: per-smallest-unit pricing, stock via batch (FEFO)
+    const isPharmacyNew = productForm.type === 'medical' && pharmacyData;
+    let pharmacyUnit = null;
+    if (isPharmacyNew) {
+      const ph = pharmacyData;
+      pharmacyUnit = ph.mode === 'THREE_LEVEL' ? 'tablet' : ph.mode === 'TWO_LEVEL' ? 'piece' : 'unit';
+      unitCost = ph.costPerUnit || 0;
+      unitRetail = ph.salePerUnit || 0;
+      unitWholesale = ph.salePerUnit || 0;
+    }
+
     // Grocery: mode-specific unit/pricing/stock (DB: grams Int / packs Int / pieces Int)
     const isGroceryNew = productForm.type === 'grocery' && groceryData;
     let groceryUnit = null, groceryStock = null;
@@ -1855,7 +1904,7 @@ const [copies, setCopies] = useState(1);
       brand_id: productForm.brand_id || null,
       category_id: productForm.category_id ? String(productForm.category_id) : null,
       type: productForm.type,
-      unit: groceryUnit || (isThaan ? 'meter' : productForm.unit),
+      unit: pharmacyUnit || groceryUnit || (isThaan ? 'meter' : productForm.unit),
       sku: sku || null,
       barcode: (isGroceryNew && groceryData.barcode) || productForm.barcode || null,
       purchase_price: unitCost,
@@ -2021,6 +2070,41 @@ const [copies, setCopies] = useState(1);
           variant_id: variantId,
         });
         setSnackbar({ open: true, message: `Bakery stock saved: ${g.bakeryQty} pcs (exp ${g.expiryDate})`, severity: 'success' });
+        await loadData();
+        setProductDialog(false);
+        setEditingProduct(null);
+        resetProductForm();
+        return;
+      }
+      // PHARMACY: product + variant (0 stock) → batch add (expiry + FEFO stock)
+      if (!editingProduct && isPharmacyNew) {
+        const ph = pharmacyData;
+        if (!ph.genericName || !ph.genericName.trim()) {
+          setSnackbar({ open: true, message: 'Generic / Salt name zaroori hai', severity: 'warning' });
+          return;
+        }
+        if (!(ph.totalUnits > 0)) {
+          setSnackbar({ open: true, message: 'Stock quantity zaroori hai', severity: 'warning' });
+          return;
+        }
+        if (!ph.expiry) {
+          setSnackbar({ open: true, message: 'Expiry date zaroori hai', severity: 'warning' });
+          return;
+        }
+        const prodResult = await db.addProduct({ ...productData, stock: 0 });
+        const productId = prodResult?.id || prodResult?.lastInsertRowid || prodResult?.data?.id;
+        const varResult = await db.addVariant({ ...variantData, product_id: productId, current_stock: 0 });
+        const variantId = varResult?.id || varResult?.lastInsertRowid || varResult?.data?.id || productId;
+        await api.post(`/products/${productId}/batches`, {
+          variant_id: variantId,
+          batch_no: ph.batchNo || null,
+          expiry_date: ph.expiry,
+          qty: ph.totalUnits,
+          cost_price: ph.costPerUnit || 0,
+          sale_price: ph.salePerUnit || 0,
+          sync_old_price: !!ph.syncOldPrice,
+        });
+        setSnackbar({ open: true, message: `${ph.genericName}: ${ph.totalUnits} units, batch ${ph.batchNo || ''} saved`, severity: 'success' });
         await loadData();
         setProductDialog(false);
         setEditingProduct(null);
@@ -3621,29 +3705,18 @@ const [copies, setCopies] = useState(1);
               )}
 
               {dialogProductType === 'medical' && (
-                <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #fecdd3', bgcolor: '#fff1f2' }}>
-                  <Typography variant="subtitle2" fontWeight="bold" color="#9f1239" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <MedicalServices fontSize="small" sx={{ color: '#e11d48' }} />
-                    Pharmacy / Medical Specifications
-                  </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <TextField fullWidth size="small" label="Manufacturer / Lab" name="manufacturer" value={productForm.manufacturer} onChange={handleProductChange} placeholder="GSK, Abbott, Searle" />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField fullWidth size="small" label="Generic / Chemical Name" name="generic_name" value={productForm.generic_name} onChange={handleProductChange} placeholder="Paracetamol, Omeprazole" />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField fullWidth size="small" label="Supplier / Distributor" name="supplier_name" value={productForm.supplier_name} onChange={handleProductChange} />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField fullWidth size="small" label="Shelf / Rack Location" name="shelf_rack" value={productForm.shelf_rack} onChange={handleProductChange} placeholder="Rack A-4, Box 2" />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField fullWidth size="small" multiline rows={2} label="Clinical Remarks / Instructions" name="remarks" value={productForm.remarks} onChange={handleProductChange} />
-                    </Grid>
-                  </Grid>
-                </Paper>
+                <>
+                {!editingProduct && (
+                  <PharmacyModeForm onChange={handlePharmacyData} />
+                )}
+                {editingProduct && (
+                  <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #fecdd3', bgcolor: '#fff1f2' }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Stock aur batches row ke <b>Batches</b> button se manage karein.
+                    </Typography>
+                  </Paper>
+                )}
+                </>
               )}
 
               {dialogProductType === 'fabric' && (

@@ -1385,11 +1385,16 @@ useEffect(() => {
     const sku     = norm(p.sku || p.sku_code || p.code);
     const barcode = norm(p.barcode || p.bar_code);
     const article = norm(p.article_no);
+    let generic = '';
+    try {
+      const d = typeof p.description === 'string' ? JSON.parse(p.description) : (p.description || {});
+      generic = norm(d.generic_name || '');
+    } catch (e) {}
 
     if (barcode === q || sku === q) { starts.unshift(p); continue; }   // exact match pehle (scanner)
     else if (article === q) { starts.unshift(p); continue; }          // article number exact
-    else if (name.startsWith(q) || sku.startsWith(q) || barcode.startsWith(q) || article.startsWith(q)) starts.push(p);
-    else if (name.includes(q) || sku.includes(q) || barcode.includes(q) || article.includes(q)) contains.push(p);
+    else if (name.startsWith(q) || sku.startsWith(q) || barcode.startsWith(q) || article.startsWith(q) || generic.startsWith(q)) starts.push(p);
+    else if (name.includes(q) || sku.includes(q) || barcode.includes(q) || article.includes(q) || generic.includes(q)) contains.push(p);
   }
 
   setSearchResults([...starts, ...contains].slice(0, 15));
@@ -1404,6 +1409,15 @@ useEffect(() => {
       groceryMode = d.grocery_mode || null;
     } catch (e) {}
     const isGramItem = groceryMode === 'WEIGHT_LOOSE';
+    // Pharmacy vertical: 3-level conversion config
+    let pharmacyMode = null, phStripsPerBox = 0, phUnitsPerStrip = 0, phUnitsPerBox = 0;
+    try {
+      const d = typeof product.description === 'string' ? JSON.parse(product.description) : (product.description || {});
+      pharmacyMode = d.pharmacy_mode || null;
+      phStripsPerBox = Number(d.strips_per_box) || 0;
+      phUnitsPerStrip = Number(d.units_per_strip) || 0;
+      phUnitsPerBox = Number(d.units_per_box) || 0;
+    } catch (e) {}
     const rawStock = Number(product.current_stock || 0);
     const availableStock = isGramItem ? rawStock / 1000 : rawStock;
     const wantQty = qtyOverride != null ? Number(qtyOverride) : 1;
@@ -1486,13 +1500,18 @@ useEffect(() => {
         cartonPrice,
         boxPrice,
         hasPackaging,
-        selectedSellUnit: 'piece',
         // Loose Weight & Roll
         isWeightItem,
         isLengthItem,
         // Grocery: gram-based stock (KG in cart, grams in DB)
         isGramItem,
-        groceryMode
+        groceryMode,
+        // Pharmacy: 3-level conversion
+        pharmacyMode,
+        phStripsPerBox,
+        phUnitsPerStrip,
+        phUnitsPerBox,
+        selectedSellUnit: pharmacyMode === 'THREE_LEVEL' ? 'strip' : 'piece',
       }]);
     }
     
@@ -1570,7 +1589,17 @@ useEffect(() => {
       const ppb = Number(item.piecesPerBox || 1);
       let unitPrice = item.originalPrice;
 
-      if (unitType === 'carton') {
+      if (item.pharmacyMode === 'THREE_LEVEL') {
+        // Pharmacy: price per smallest unit (tablet) is the base
+        const ups = Number(item.phUnitsPerStrip) || 1;
+        const spb = Number(item.phStripsPerBox) || 1;
+        if (unitType === 'strip') unitPrice = item.originalPrice * ups;
+        else if (unitType === 'box') unitPrice = item.originalPrice * ups * spb;
+        else unitPrice = item.originalPrice; // tablet
+      } else if (item.pharmacyMode === 'TWO_LEVEL' && unitType === 'box') {
+        const upb = Number(item.phUnitsPerBox) || 1;
+        unitPrice = item.originalPrice * upb;
+      } else if (unitType === 'carton') {
         unitPrice = item.cartonPrice > 0 
           ? item.cartonPrice 
           : (item.boxPrice > 0 ? item.boxPrice * bpc : item.originalPrice * ppb * bpc);
@@ -1974,6 +2003,16 @@ useEffect(() => {
         } else if (item.selectedSellUnit === 'box') {
           multiplier = ppb;
         }
+        // Pharmacy 3-level: strip/box → smallest units
+        if (item.pharmacyMode === 'THREE_LEVEL') {
+          const ups = Number(item.phUnitsPerStrip) || 1;
+          const spb = Number(item.phStripsPerBox) || 1;
+          if (item.selectedSellUnit === 'strip') multiplier = ups;
+          else if (item.selectedSellUnit === 'box') multiplier = ups * spb;
+          else multiplier = 1;
+        } else if (item.pharmacyMode === 'TWO_LEVEL' && item.selectedSellUnit === 'box') {
+          multiplier = Number(item.phUnitsPerBox) || 1;
+        }
         const deductQty = item.isGramItem
           ? Math.round(Number(item.qty || 0) * 1000) // KG → grams
           : item.qty * multiplier;
@@ -2214,6 +2253,16 @@ useEffect(() => {
           multiplier = bpc * ppb;
         } else if (item.selectedSellUnit === 'box') {
           multiplier = ppb;
+        }
+        // Pharmacy 3-level: strip/box → smallest units
+        if (item.pharmacyMode === 'THREE_LEVEL') {
+          const ups = Number(item.phUnitsPerStrip) || 1;
+          const spb = Number(item.phStripsPerBox) || 1;
+          if (item.selectedSellUnit === 'strip') multiplier = ups;
+          else if (item.selectedSellUnit === 'box') multiplier = ups * spb;
+          else multiplier = 1;
+        } else if (item.pharmacyMode === 'TWO_LEVEL' && item.selectedSellUnit === 'box') {
+          multiplier = Number(item.phUnitsPerBox) || 1;
         }
         const deductQty = item.isGramItem
           ? Math.round(Number(item.qty || 0) * 1000) // KG → grams
@@ -3346,6 +3395,55 @@ useEffect(() => {
                                 sx={{ height: 18, fontSize: '0.58rem', fontWeight: 800, bgcolor: '#fef3c7', color: '#b45309' }}
                               />
                             )}
+                          </Box>
+                        )}
+
+                        {/* Pharmacy: 3-level unit switcher (Tablet / Strip / Box) */}
+                        {item.pharmacyMode === 'THREE_LEVEL' && (
+                          <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, color: '#9f1239' }}>
+                              💊 Unit:
+                            </Typography>
+                            <ButtonGroup size="small" variant="outlined" sx={{ height: 22 }}>
+                              {[
+                                { v: 'tablet', l: `Tablet (Rs. ${Number(item.originalPrice).toFixed(1)})` },
+                                { v: 'strip', l: `Strip (${item.phUnitsPerStrip})` },
+                                { v: 'box', l: `Box (${item.phStripsPerBox * item.phUnitsPerStrip})` },
+                              ].map(u => (
+                                <Button key={u.v} onClick={() => handleSwitchSellUnit(idx, u.v)}
+                                  sx={{
+                                    fontSize: '0.62rem', px: 0.8, py: 0, fontWeight: 800,
+                                    bgcolor: item.selectedSellUnit === u.v ? '#9f1239' : 'white',
+                                    color: item.selectedSellUnit === u.v ? 'white' : '#9f1239',
+                                    borderColor: '#9f1239',
+                                  }}>
+                                  {u.l}
+                                </Button>
+                              ))}
+                            </ButtonGroup>
+                          </Box>
+                        )}
+                        {item.pharmacyMode === 'TWO_LEVEL' && (
+                          <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 800, color: '#9f1239' }}>
+                              💊 Unit:
+                            </Typography>
+                            <ButtonGroup size="small" variant="outlined" sx={{ height: 22 }}>
+                              <Button onClick={() => handleSwitchSellUnit(idx, 'piece')}
+                                sx={{ fontSize: '0.62rem', px: 0.8, py: 0, fontWeight: 800,
+                                  bgcolor: (!item.selectedSellUnit || item.selectedSellUnit === 'piece') ? '#9f1239' : 'white',
+                                  color: (!item.selectedSellUnit || item.selectedSellUnit === 'piece') ? 'white' : '#9f1239',
+                                  borderColor: '#9f1239' }}>
+                                Piece
+                              </Button>
+                              <Button onClick={() => handleSwitchSellUnit(idx, 'box')}
+                                sx={{ fontSize: '0.62rem', px: 0.8, py: 0, fontWeight: 800,
+                                  bgcolor: item.selectedSellUnit === 'box' ? '#059669' : 'white',
+                                  color: item.selectedSellUnit === 'box' ? 'white' : '#059669',
+                                  borderColor: '#059669' }}>
+                                Box ({item.phUnitsPerBox} pcs)
+                              </Button>
+                            </ButtonGroup>
                           </Box>
                         )}
 
