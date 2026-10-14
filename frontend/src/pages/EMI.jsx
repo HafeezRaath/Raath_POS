@@ -5,6 +5,7 @@
 // ============================================================
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { round2 } from '../utils/money';
 import EmiWizardModal from '../components/emi/EmiWizardModal';
 import EmiCollectionDashboard from '../components/emi/EmiCollectionDashboard';
 import EarlySettlementModal from '../components/emi/EarlySettlementModal';
@@ -632,7 +633,7 @@ export default function EMI() {
             const rate = Number(emi.interest_rate || 0);
             const retailPrice = Number(emi.product_retail_price || 0);
             const markupAmt = rate > 0
-              ? (retailPrice > 0 ? Math.round(retailPrice * (rate / 100)) : Math.round(totalAmt - (totalAmt / (1 + rate / 100))))
+              ? (retailPrice > 0 ? round2(retailPrice * (rate / 100)) : round2(totalAmt - (totalAmt / (1 + rate / 100))))
               : 0;
 
             linkedEmis.push({
@@ -825,11 +826,11 @@ export default function EMI() {
   // ==================== EMI DETAILS CALCULATOR ====================
   const getEMIDetails = useCallback((emi) => {
     const payments = paymentsMap.get(String(emi.id)) || [];
-    const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    const totalPenalty = payments.reduce((sum, p) => sum + Number(p.penalty_amount || 0), 0);
-    const totalDiscount = payments.reduce((sum, p) => sum + Number(p.discount_amount || 0), 0);
-    const totalDue = Math.max(0, Number(emi.remaining_amount || 0));
-    const principal = Number(emi.total_amount || 0) - Number(emi.down_payment || 0);
+    const totalPaid = round2(payments.reduce((sum, p) => sum + Number(p.amount || 0), 0));
+    const totalPenalty = round2(payments.reduce((sum, p) => sum + Number(p.penalty_amount || 0), 0));
+    const totalDiscount = round2(payments.reduce((sum, p) => sum + Number(p.discount_amount || 0), 0));
+    const totalDue = Math.max(0, round2(Number(emi.remaining_amount || 0)));
+    const principal = round2(Number(emi.total_amount || 0) - Number(emi.down_payment || 0));
     const progress = principal > 0 ? Math.min(100, (totalPaid / principal) * 100) : 0;
     const daysOverdue = getDaysOverdue(emi.next_due_date);
     const isOverdue = daysOverdue > 0 && emi.status === 'active';
@@ -841,7 +842,7 @@ export default function EMI() {
 
   // ==================== EMI CALCULATOR ====================
   const calculatedMetrics = useMemo(() => {
-    const principal = Math.max(0, Number(calc.totalAmount || 0) - Number(calc.downPayment || 0));
+    const principal = Math.max(0, round2(Number(calc.totalAmount || 0) - Number(calc.downPayment || 0)));
     const interestRate = Number(calc.interestRate || 0);
     const months = Number(calc.months || 12);
 
@@ -850,9 +851,9 @@ export default function EMI() {
     // Total Amount with Interest = Total Amount + Total Interest
     // Net Remaining after Down Payment = Total Amount with Interest - Down Payment
     // Monthly EMI = Net Remaining / Months
-    const totalInterest = Math.round(Number(calc.totalAmount || 0) * (interestRate / 100));
-    const totalWithInterest = Number(calc.totalAmount || 0) + totalInterest;
-    const remainingPayable = Math.max(0, totalWithInterest - Number(calc.downPayment || 0));
+    const totalInterest = round2(Number(calc.totalAmount || 0) * (interestRate / 100));
+    const totalWithInterest = round2(Number(calc.totalAmount || 0) + totalInterest);
+    const remainingPayable = Math.max(0, round2(totalWithInterest - Number(calc.downPayment || 0)));
     const emiAmount = months > 0 ? Math.ceil(remainingPayable / months) : 0;
 
     return {
@@ -948,11 +949,11 @@ export default function EMI() {
       return d.isOverdue;
     });
 
-    const totalPortfolio = emis.reduce((sum, e) => sum + Number(e.total_amount || 0), 0);
-    const totalDown = emis.reduce((sum, e) => sum + Number(e.down_payment || 0), 0);
-    const totalOutstanding = emis.reduce((sum, e) => sum + Number(e.remaining_amount || 0), 0);
-    const totalCollected = emiPayments.filter(p => !p.is_reversal).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    const totalPenalty = emiPayments.filter(p => !p.is_reversal).reduce((sum, p) => sum + Number(p.penalty_amount || 0), 0);
+    const totalPortfolio = round2(emis.reduce((sum, e) => sum + Number(e.total_amount || 0), 0));
+    const totalDown = round2(emis.reduce((sum, e) => sum + Number(e.down_payment || 0), 0));
+    const totalOutstanding = round2(emis.reduce((sum, e) => sum + Number(e.remaining_amount || 0), 0));
+    const totalCollected = round2(emiPayments.filter(p => !p.is_reversal).reduce((sum, p) => sum + Number(p.amount || 0), 0));
+    const totalPenalty = round2(emiPayments.filter(p => !p.is_reversal).reduce((sum, p) => sum + Number(p.penalty_amount || 0), 0));
 
     const thisMonth = String(new Date().getMonth() + 1).padStart(2, '0');
     const thisMonthDue = active.filter(e => String(e.next_due_date).substring(5, 7) === thisMonth).length;
@@ -1003,9 +1004,9 @@ export default function EMI() {
   }, [emiPayments, emis, customers, payFilterCustomer, payFilterProduct, payFilterMode, payFilterDateFrom, payFilterDateTo]);
 
   const paymentMetrics = useMemo(() => {
-    const totalCollected = filteredPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
-    const totalPenalty = filteredPayments.reduce((s, p) => s + Number(p.penalty_amount || 0), 0);
-    const totalDiscount = filteredPayments.reduce((s, p) => s + Number(p.discount_amount || 0), 0);
+    const totalCollected = round2(filteredPayments.reduce((s, p) => s + Number(p.amount || 0), 0));
+    const totalPenalty = round2(filteredPayments.reduce((s, p) => s + Number(p.penalty_amount || 0), 0));
+    const totalDiscount = round2(filteredPayments.reduce((s, p) => s + Number(p.discount_amount || 0), 0));
     const totalCount = filteredPayments.length;
     return { totalCollected, totalPenalty, totalDiscount, totalCount };
   }, [filteredPayments]);
@@ -1257,10 +1258,10 @@ export default function EMI() {
     }
 
     try {
-      const payVal = Number(paymentForm.amount);
-      const penaltyVal = Number(paymentForm.penaltyAmount || 0);
-      const discountVal = Number(paymentForm.discountAmount || 0);
-      const totalReceived = payVal + penaltyVal - discountVal;
+      const payVal = round2(Number(paymentForm.amount));
+      const penaltyVal = round2(Number(paymentForm.penaltyAmount || 0));
+      const discountVal = round2(Number(paymentForm.discountAmount || 0));
+      const totalReceived = round2(payVal + penaltyVal - discountVal);
       let paymentInserted = false;
 
       const paymentObj = {
@@ -1359,12 +1360,12 @@ export default function EMI() {
         allPayments = (idbPayments || []).filter(p => String(p.emi_id) === String(selectedEMI.id) && !p.is_reversal);
       }
 
-      const totalPaid = (allPayments || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+      const totalPaid = round2((allPayments || []).reduce((s, p) => s + Number(p.amount || 0), 0));
       const monthsPaid = selectedEMI.emi_amount > 0
         ? Math.min(Number(selectedEMI.total_months || 0), Math.floor(totalPaid / selectedEMI.emi_amount))
         : (allPayments || []).length;
-      const principal = Number(selectedEMI.total_amount || 0) - Number(selectedEMI.down_payment || 0);
-      const newRemaining = Math.max(0, principal - totalPaid);
+      const principal = round2(Number(selectedEMI.total_amount || 0) - Number(selectedEMI.down_payment || 0));
+      const newRemaining = Math.max(0, round2(principal - totalPaid));
       const isCompleted = newRemaining <= 0 || monthsPaid >= Number(selectedEMI.total_months || 0);
       const newStatus = isCompleted ? 'completed' : 'active';
       const lastPayment = (allPayments || [])[0];
@@ -3468,7 +3469,7 @@ export default function EMI() {
             <TextField fullWidth size="small" label="Notes" multiline rows={2} value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} />
             <Paper variant="outlined" sx={{ p: 1.5, bgcolor: '#f0fdf4', borderRadius: 2 }}>
               <Typography variant="body2" fontWeight="bold" color="success.main">
-                Total Received: {formatCurrency((Number(paymentForm.amount) || 0) + (Number(paymentForm.penaltyAmount) || 0) - (Number(paymentForm.discountAmount) || 0))}
+                Total Received: {formatCurrency(round2((Number(paymentForm.amount) || 0) + (Number(paymentForm.penaltyAmount) || 0) - (Number(paymentForm.discountAmount) || 0)))}
               </Typography>
             </Paper>
           </Stack>

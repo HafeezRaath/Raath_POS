@@ -20,6 +20,7 @@ import {
 } from '../components/ui/icons';
 import db from '../database/db';
 import { useSyncListener } from '../hooks/useSyncListener';
+import { round2 } from '../utils/money';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import UnifiedPagination from '../components/common/UnifiedPagination';
@@ -680,7 +681,7 @@ export default function ReportsPage() {
         if (!vid) return;
         if (!variantSales[vid]) { variantSales[vid] = 0; variantRevenue[vid] = 0; }
         variantSales[vid] += (Number(item.quantity) || Number(item.qty) || 0);
-        variantRevenue[vid] += (Number(item.total) || 0);
+        variantRevenue[vid] = round2(variantRevenue[vid] + (Number(item.total) || 0));
 
         const parentSale = periodSales.find(s => String(s.id) === String(item.sale_id) || String(s.invoice_no) === String(item.sale_id));
         const saleDate = parentSale?.date || parentSale?.created_at || item.sale_date;
@@ -737,9 +738,9 @@ export default function ReportsPage() {
           days_since_sale: getDaysAgo(lastSaleDate),
           status,
           suggested_order: suggestedOrder,
-          stock_value: currentStock * purchasePrice,
-          retail_value: currentStock * retailPrice,
-          potential_profit: currentStock * (retailPrice - purchasePrice)
+          stock_value: round2(currentStock * purchasePrice),
+          retail_value: round2(currentStock * retailPrice),
+          potential_profit: round2(currentStock * (retailPrice - purchasePrice))
         };
       });
 
@@ -789,7 +790,7 @@ export default function ReportsPage() {
           ...s,
           total_items: items.length,
           total_qty: items.reduce((sum, i) => sum + (Number(i.quantity) || Number(i.qty) || 0), 0),
-          total_cost: items.reduce((sum, i) => sum + ((Number(i.quantity) || Number(i.qty) || 0) * (Number(i.unit_cost) || Number(i.purchase_price) || 0)), 0),
+          total_cost: round2(items.reduce((sum, i) => sum + ((Number(i.quantity) || Number(i.qty) || 0) * (Number(i.unit_cost) || Number(i.purchase_price) || 0)), 0)),
           items: items
         };
       });
@@ -798,14 +799,14 @@ export default function ReportsPage() {
 
       const summary = {
         total_bills: enriched.length,
-        total_sales: enriched.reduce((s, x) => s + (Number(x.grand_total) || 0), 0),
-        total_paid: enriched.reduce((s, x) => s + (Number(x.paid_amount) || 0), 0),
-        total_due: enriched.reduce((s, x) => s + (Number(x.due_amount) || 0), 0),
-        total_discount: enriched.reduce((s, x) => s + (Number(x.discount) || 0), 0),
-        total_cost: enriched.reduce((s, x) => s + (Number(x.total_cost) || 0), 0),
+        total_sales: round2(enriched.reduce((s, x) => s + (Number(x.grand_total) || 0), 0)),
+        total_paid: round2(enriched.reduce((s, x) => s + (Number(x.paid_amount) || 0), 0)),
+        total_due: round2(enriched.reduce((s, x) => s + (Number(x.due_amount) || 0), 0)),
+        total_discount: round2(enriched.reduce((s, x) => s + (Number(x.discount) || 0), 0)),
+        total_cost: round2(enriched.reduce((s, x) => s + (Number(x.total_cost) || 0), 0)),
         total_items_sold: enriched.reduce((s, x) => s + (Number(x.total_qty) || 0), 0)
       };
-      summary.gross_profit = summary.total_sales - summary.total_cost;
+      summary.gross_profit = round2(summary.total_sales - summary.total_cost);
 
       setSalesSummary(summary);
 
@@ -818,9 +819,9 @@ export default function ReportsPage() {
           const sku = item.sku || '-';
           const qty = Number(item.quantity || item.qty || 0);
           const price = Number(item.price || 0);
-          const total = Number(item.total || (qty * price));
+          const total = round2(Number(item.total) || (qty * price));
           const unitCost = Number(item.unit_cost || item.purchase_price || 0);
-          const cost = unitCost * qty;
+          const cost = round2(unitCost * qty);
 
           if (!itemMap[key]) {
             itemMap[key] = {
@@ -835,9 +836,9 @@ export default function ReportsPage() {
             };
           }
           itemMap[key].quantity += qty;
-          itemMap[key].total_revenue += total;
-          itemMap[key].total_cost += cost;
-          itemMap[key].total_profit += (total - cost);
+          itemMap[key].total_revenue = round2(itemMap[key].total_revenue + total);
+          itemMap[key].total_cost = round2(itemMap[key].total_cost + cost);
+          itemMap[key].total_profit = round2(itemMap[key].total_profit + (total - cost));
           itemMap[key].bills_count += 1;
         });
       });
@@ -875,8 +876,8 @@ export default function ReportsPage() {
           phone: s.phone,
           company_name: s.company_name,
           current_balance: Number(s.current_balance || 0),
-          total_purchases: supPurchases.reduce((sum, p) => sum + (Number(p.grand_total) || 0), 0),
-          total_paid: supPurchases.reduce((sum, p) => sum + (Number(p.paid_amount) || 0), 0),
+          total_purchases: round2(supPurchases.reduce((sum, p) => sum + (Number(p.grand_total) || 0), 0)),
+          total_paid: round2(supPurchases.reduce((sum, p) => sum + (Number(p.paid_amount) || 0), 0)),
           bill_count: supPurchases.length
         };
       }).sort((a, b) => b.total_purchases - a.total_purchases);
@@ -908,8 +909,8 @@ export default function ReportsPage() {
         const custPeriodSales = periodSales.filter(s => String(s.customer_id) === String(c.id));
         return {
           ...c,
-          period_sales: custPeriodSales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0),
-          period_paid: custPeriodSales.reduce((sum, s) => sum + (Number(s.paid_amount) || 0), 0),
+          period_sales: round2(custPeriodSales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0)),
+          period_paid: round2(custPeriodSales.reduce((sum, s) => sum + (Number(s.paid_amount) || 0), 0)),
           current_balance: Number(c.current_balance || 0)
         };
       });
@@ -936,7 +937,7 @@ export default function ReportsPage() {
         return true;
       });
 
-      const revenue = periodSales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0);
+      const revenue = round2(periodSales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0));
 
       // Compute COGS in 1 single pass
       const allSaleItems = await db.getAllSaleItems().catch(() => []);
@@ -948,7 +949,7 @@ export default function ReportsPage() {
         if (periodSaleIds.has(String(item.sale_id)) || periodInvoices.has(String(item.sale_id))) {
           const qty = Number(item.quantity) || Number(item.qty) || 0;
           const unitCost = Number(item.unit_cost) || Number(item.purchase_price) || 0;
-          cogs += qty * unitCost;
+          cogs = round2(cogs + (qty * unitCost));
         }
       });
 
@@ -960,15 +961,15 @@ export default function ReportsPage() {
         if (toStr && ed > toStr) return false;
         return true;
       });
-      const expenses = periodExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      const expenses = round2(periodExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0));
 
-      const gross = revenue - cogs;
-      const net = gross - expenses;
+      const gross = round2(revenue - cogs);
+      const net = round2(gross - expenses);
 
       setPlSummary({
         revenue, cogs, expenses, gross, net,
-        grossMargin: revenue > 0 ? (gross / revenue) * 100 : 0,
-        netMargin: revenue > 0 ? (net / revenue) * 100 : 0
+        grossMargin: revenue > 0 ? round2((gross / revenue) * 100) : 0,
+        netMargin: revenue > 0 ? round2((net / revenue) * 100) : 0
       });
     } catch (err) {
       console.error(err);
@@ -1004,9 +1005,9 @@ export default function ReportsPage() {
         const retailPrice = Number(v.retail_price) || 0;
         categoryMap[catName].variant_count++;
         categoryMap[catName].total_qty += stock;
-        categoryMap[catName].stock_value_at_cost += stock * purchasePrice;
-        categoryMap[catName].stock_value_at_retail += stock * retailPrice;
-        categoryMap[catName].potential_profit += stock * (retailPrice - purchasePrice);
+        categoryMap[catName].stock_value_at_cost = round2(categoryMap[catName].stock_value_at_cost + (stock * purchasePrice));
+        categoryMap[catName].stock_value_at_retail = round2(categoryMap[catName].stock_value_at_retail + (stock * retailPrice));
+        categoryMap[catName].potential_profit = round2(categoryMap[catName].potential_profit + (stock * (retailPrice - purchasePrice)));
       });
 
       setStockValuation(Object.values(categoryMap).sort((a, b) => b.stock_value_at_cost - a.stock_value_at_cost));
@@ -1039,12 +1040,12 @@ export default function ReportsPage() {
         const cat = e.category_name || e.category || 'General Expense';
         if (!catMap[cat]) catMap[cat] = { category: cat, count: 0, total: 0 };
         catMap[cat].count++;
-        catMap[cat].total += Number(e.amount || 0);
+        catMap[cat].total = round2(catMap[cat].total + Number(e.amount || 0));
       });
 
-      const totalExpenses = Object.values(catMap).reduce((s, c) => s + c.total, 0);
+      const totalExpenses = round2(Object.values(catMap).reduce((s, c) => s + c.total, 0));
       setExpenseSummary(Object.values(catMap).map(c => ({
-        ...c, percentage: totalExpenses > 0 ? (c.total / totalExpenses) * 100 : 0
+        ...c, percentage: totalExpenses > 0 ? round2((c.total / totalExpenses) * 100) : 0
       })).sort((a, b) => b.total - a.total));
     } catch (err) {
       console.error(err);
@@ -1070,7 +1071,7 @@ export default function ReportsPage() {
           price: item.price,
           total: item.total,
           customer_name: parentSale?.customer_name || 'Walk-in',
-          total_profit: ((Number(item.price) || 0) - (Number(item.unit_cost) || Number(item.purchase_price) || 0)) * (Number(item.quantity) || Number(item.qty) || 0)
+          total_profit: round2(((Number(item.price) || 0) - (Number(item.unit_cost) || Number(item.purchase_price) || 0)) * (Number(item.quantity) || Number(item.qty) || 0))
         };
       }).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 50);
 
@@ -1092,10 +1093,10 @@ export default function ReportsPage() {
         sales: salesHistory, purchases: purchaseHistory,
         summary: {
           total_sold: salesHistory.reduce((s, h) => s + h.quantity, 0),
-          total_revenue: salesHistory.reduce((s, h) => s + (Number(h.total) || 0), 0),
-          total_profit: salesHistory.reduce((s, h) => s + h.total_profit, 0),
+          total_revenue: round2(salesHistory.reduce((s, h) => s + (Number(h.total) || 0), 0)),
+          total_profit: round2(salesHistory.reduce((s, h) => s + (Number(h.total_profit) || 0), 0)),
           total_purchased: purchaseHistory.reduce((s, h) => s + (Number(h.quantity) || 0), 0),
-          total_purchase_cost: purchaseHistory.reduce((s, h) => s + (Number(h.sub_total) || 0), 0)
+          total_purchase_cost: round2(purchaseHistory.reduce((s, h) => s + (Number(h.sub_total) || 0), 0))
         }
       });
       setDetailDialog(true);
@@ -1301,9 +1302,9 @@ export default function ReportsPage() {
   }, [supplierSummary, supSearch, supBalanceFilter]);
 
   const supplierStats = useMemo(() => {
-    const totalPurchases = filteredSuppliers.reduce((s, x) => s + (Number(x.total_purchases) || 0), 0);
-    const totalPaid = filteredSuppliers.reduce((s, x) => s + (Number(x.total_paid) || 0), 0);
-    const totalPayable = filteredSuppliers.reduce((s, x) => s + (Number(x.current_balance) || 0), 0);
+    const totalPurchases = round2(filteredSuppliers.reduce((s, x) => s + (Number(x.total_purchases) || 0), 0));
+    const totalPaid = round2(filteredSuppliers.reduce((s, x) => s + (Number(x.total_paid) || 0), 0));
+    const totalPayable = round2(filteredSuppliers.reduce((s, x) => s + (Number(x.current_balance) || 0), 0));
     return { count: filteredSuppliers.length, totalPurchases, totalPaid, totalPayable };
   }, [filteredSuppliers]);
 
@@ -1323,9 +1324,9 @@ export default function ReportsPage() {
   }, [customerData, custSearch, custBalanceFilter]);
 
   const customerStats = useMemo(() => {
-    const totalSales = filteredCustomers.reduce((s, c) => s + (Number(c.period_sales) || 0), 0);
-    const totalPaid = filteredCustomers.reduce((s, c) => s + (Number(c.period_paid) || 0), 0);
-    const totalDebt = filteredCustomers.reduce((s, c) => s + (Number(c.current_balance) || 0), 0);
+    const totalSales = round2(filteredCustomers.reduce((s, c) => s + (Number(c.period_sales) || 0), 0));
+    const totalPaid = round2(filteredCustomers.reduce((s, c) => s + (Number(c.period_paid) || 0), 0));
+    const totalDebt = round2(filteredCustomers.reduce((s, c) => s + (Number(c.current_balance) || 0), 0));
     return { count: filteredCustomers.length, totalSales, totalPaid, totalDebt };
   }, [filteredCustomers]);
 
@@ -1344,8 +1345,8 @@ export default function ReportsPage() {
   }, [expenseData, expSearch, expCategoryFilter, expPaymentFilter]);
 
   const expenseStats = useMemo(() => {
-    const total = filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    return { count: filteredExpenses.length, total, average: filteredExpenses.length > 0 ? total / filteredExpenses.length : 0 };
+    const total = round2(filteredExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0));
+    return { count: filteredExpenses.length, total, average: filteredExpenses.length > 0 ? round2(total / filteredExpenses.length) : 0 };
   }, [filteredExpenses]);
 
   const paginatedExpenses = useMemo(() => {
@@ -1359,9 +1360,9 @@ export default function ReportsPage() {
   }, [stockValuation, stockSearch]);
 
   const stockValuationStats = useMemo(() => {
-    const totalCost = stockValuation.reduce((s, c) => s + (Number(c.stock_value_at_cost) || 0), 0);
-    const totalRetail = stockValuation.reduce((s, c) => s + (Number(c.stock_value_at_retail) || 0), 0);
-    const potentialProfit = stockValuation.reduce((s, c) => s + (Number(c.potential_profit) || 0), 0);
+    const totalCost = round2(stockValuation.reduce((s, c) => s + (Number(c.stock_value_at_cost) || 0), 0));
+    const totalRetail = round2(stockValuation.reduce((s, c) => s + (Number(c.stock_value_at_retail) || 0), 0));
+    const potentialProfit = round2(stockValuation.reduce((s, c) => s + (Number(c.potential_profit) || 0), 0));
     const totalQty = stockValuation.reduce((s, c) => s + (Number(c.total_qty) || 0), 0);
     return { totalCost, totalRetail, potentialProfit, totalQty };
   }, [stockValuation]);
