@@ -229,31 +229,50 @@ async function initializeDatabase() {
       }
     } catch (e) { /* bundles table may not exist yet */ }
     // Ensure products.id is AUTO_INCREMENT PRIMARY KEY (live DBs created from
-    // older schemas may lack it, causing insertId=null and broken product saves)
-    // DIAGNOSTIC MODE (v18): log duplicate-id rows first, fix in a later step
-    // once we know what the id=0 rows are.
+    // older schemas may lack it, causing insertId=null and broken product saves).
+    // v18 diagnostic proved the only duplicate-id rows are 3 TEST artifacts
+    // (DEMO-Test Product, QATEST-API-Probe, QATEST-V15-Probe) with id=0.
+    // v19: remove exactly those test rows (+ their orphan variants), then
+    // add PRIMARY KEY and AUTO_INCREMENT. Real data is never touched:
+    // deletion is restricted to id=0 AND (name/sku LIKE 'QATEST-%' OR 'DEMO-%').
     try {
       const [idCols] = await connection.query(
         `SELECT EXTRA, COLUMN_KEY FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'id'`
       );
       if (idCols.length > 0 && !String(idCols[0].EXTRA || '').toLowerCase().includes('auto_increment')) {
+        const testFilter = `(p.name LIKE 'QATEST-%' OR p.name LIKE 'DEMO-%' OR p.sku LIKE 'QATEST-%' OR p.sku LIKE 'DEMO-%')`;
+        const [doomed] = await connection.query(
+          `SELECT id, name, sku FROM \`products\` p WHERE p.id = 0 AND ${testFilter}`
+        );
+        console.log('[InitDB] Test product rows to remove: ' + JSON.stringify(doomed));
+        if (doomed.length > 0) {
+          await connection.query(
+            `DELETE pv FROM \`product_variants\` pv INNER JOIN \`products\` p ON pv.product_id = p.id WHERE p.id = 0 AND ${testFilter}`
+          );
+          const [delRes] = await connection.query(
+            `DELETE FROM \`products\` WHERE id = 0 AND (name LIKE 'QATEST-%' OR name LIKE 'DEMO-%' OR sku LIKE 'QATEST-%' OR sku LIKE 'DEMO-%')`
+          );
+          console.log(`[InitDB] Removed ${delRes.affectedRows} test product rows (id=0).`);
+        }
+        // Only proceed if no duplicate ids remain
         const [dupes] = await connection.query(
-          `SELECT id, COUNT(*) AS c FROM \`products\` GROUP BY id HAVING c > 1 ORDER BY c DESC LIMIT 10`
+          `SELECT id, COUNT(*) AS c FROM \`products\` GROUP BY id HAVING c > 1 LIMIT 5`
         );
-        console.log('[InitDB] DIAG duplicate product ids: ' + JSON.stringify(dupes));
-        const [zeroRows] = await connection.query(
-          `SELECT id, tenant_id, name, sku, created_at FROM \`products\` WHERE id = 0 ORDER BY created_at LIMIT 20`
-        );
-        console.log('[InitDB] DIAG id=0 products: ' + JSON.stringify(zeroRows));
-        const [maxId] = await connection.query(`SELECT MAX(id) AS m, COUNT(*) AS c FROM \`products\``);
-        console.log('[InitDB] DIAG products max_id/count: ' + JSON.stringify(maxId));
-        const [zeroVariants] = await connection.query(
-          `SELECT COUNT(*) AS c FROM \`product_variants\` WHERE product_id = 0`
-        );
-        console.log('[InitDB] DIAG variants with product_id=0: ' + JSON.stringify(zeroVariants));
+        if (dupes.length === 0) {
+          if (String(idCols[0].COLUMN_KEY || '').toUpperCase() !== 'PRI') {
+            await connection.query(`ALTER TABLE \`products\` ADD PRIMARY KEY (\`id\`)`);
+            console.log('[InitDB] Added PRIMARY KEY on products.id');
+          }
+          await connection.query(`ALTER TABLE \`products\` MODIFY COLUMN \`id\` INT NOT NULL AUTO_INCREMENT`);
+          console.log('[InitDB] Fixed products.id -> AUTO_INCREMENT PRIMARY KEY');
+        } else {
+          console.warn('[InitDB] Duplicate ids still present, PK/AI skipped: ' + JSON.stringify(dupes));
+        }
+      } else {
+        console.log('[InitDB] products.id already AUTO_INCREMENT — nothing to do.');
       }
     } catch (e) {
-      console.warn('[InitDB] products.id diagnostic skipped: ' + e.message);
+      console.warn('[InitDB] products.id fix skipped: ' + e.message);
     }
     await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');
 
