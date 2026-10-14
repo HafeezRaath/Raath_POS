@@ -1283,10 +1283,12 @@ export default function EMI() {
       };
 
       // Try mixin method first
+      let backendHandledTransaction = false;
       if (db.addEMIPayment) {
         try {
           await db.addEMIPayment(paymentObj);
           paymentInserted = true;
+          backendHandledTransaction = true; // backend creates account transaction
         } catch (innerErr) {
           console.warn('addEMIPayment mixin failed, trying fallback:', innerErr.message);
           if (!window?.electronAPI) throw innerErr;
@@ -1322,8 +1324,10 @@ export default function EMI() {
         throw new Error('Failed to record payment');
       }
 
-      // If account transaction was not run by mixin, ensure it is recorded now
-      if (paymentForm.accountId && typeof db.createTransaction === 'function') {
+      // NOTE: Backend addEMIPayment already creates the account transaction
+      // (updates balance + inserts into account_transactions). Only create it
+      // here for Electron/IDB fallback where backend was not involved.
+      if (!backendHandledTransaction && paymentForm.accountId && typeof db.createTransaction === 'function') {
         try {
           await db.createTransaction({
             account_id: paymentForm.accountId,

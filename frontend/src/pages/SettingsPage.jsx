@@ -969,7 +969,7 @@ export default function SettingsPage({ initialTab } = {}) {
       }
     }
     
-    setRoles(dbRoles || []);
+    setRoles([...new Map((dbRoles || []).map(r => [r.id, r])).values()]);
     setRolePermissions(buildPermissionsMap(dbRoles || []));
 
     // Load users
@@ -2152,7 +2152,7 @@ export default function SettingsPage({ initialTab } = {}) {
                   onClick={handleSaveUser} 
                   startIcon={<Save />} 
                   sx={{ bgcolor: '#10b981' }} 
-                  disabled={loading || !!(editingUser?.password && editingUser.password.length > 0 && editingUser.password.length < 6) || !editingUser?.name || !editingUser?.username || (!editingUser?.id && !editingUser?.password)}
+                  disabled={loading || !!(editingUser?.password && editingUser.password.length > 0 && editingUser.password.length < 6) || !(editingUser?.name || '').trim() || !(editingUser?.username || '').trim() || (!editingUser?.id && !editingUser?.password)}
                 >
                   {loading ? 'Saving...' : (editingUser?.isFirstAdmin ? 'Create Admin' : 'Save User')}
                 </Button>
