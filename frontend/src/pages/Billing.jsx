@@ -4335,12 +4335,12 @@ sx={{ width: 85 }}
       </Drawer>
 
       {/* SNACKBAR */}
-      <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={2500} 
-        onClose={() => setSnackbar(p => ({ ...p, open: false }))} 
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} 
-        sx={{ mb: 2, mr: 2, zIndex: 9999 }}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={2500}
+        onClose={() => setSnackbar(p => ({ ...p, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        sx={{ zIndex: 9999, mt: 8 }}
       >
         <Paper
           elevation={2}

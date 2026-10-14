@@ -1870,6 +1870,8 @@ const [copies, setCopies] = useState(1);
     }
 
     // Thaan: stock HAMESHA meters (Float) mein
+    // (isThaan declared here — BEFORE first use — to avoid TDZ ReferenceError)
+    const isThaan = (productForm.type === 'fabric' || productForm.type === 'cloth') && productForm.garment_mode === 'THAAN_FABRIC';
     if (isThaan && thaanData && thaanData.meters > 0) {
       finalStock = +thaanData.meters.toFixed(2);
     }
@@ -1888,7 +1890,6 @@ const [copies, setCopies] = useState(1);
     let unitWholesale = Number(productForm.wholesalePrice) || 0;
 
     // Garments: THAAN_FABRIC — prices per meter, stock in meters (Float)
-    const isThaan = (productForm.type === 'fabric' || productForm.type === 'cloth') && productForm.garment_mode === 'THAAN_FABRIC';
     if (isThaan && thaanData) {
       unitCost = Number(thaanData.costPerMeter) || 0;
       unitRetail = Number(thaanData.salePerMeter) || 0;

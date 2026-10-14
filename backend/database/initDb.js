@@ -218,6 +218,16 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'product_variants', '`stock_alert_quantity` DECIMAL(12,3) DEFAULT 5');
     await addColumnIfMissing(connection, 'product_variants', '`image_url` LONGTEXT');
     await addColumnIfMissing(connection, 'product_variants', '`description` LONGTEXT NULL');
+    // Bookshop bundles: tenant_id must be VARCHAR like every other table
+    // (early schema created it as INT; coerce existing 0 -> 'tenant_default')
+    try {
+      const [bcols] = await connection.query(`SHOW COLUMNS FROM \`bundles\` LIKE 'tenant_id'`);
+      if (bcols.length > 0 && /int/i.test(bcols[0].Type || '')) {
+        await connection.query(`ALTER TABLE \`bundles\` MODIFY COLUMN \`tenant_id\` VARCHAR(50) NOT NULL DEFAULT 'tenant_default'`);
+        await connection.query(`UPDATE \`bundles\` SET \`tenant_id\` = 'tenant_default' WHERE \`tenant_id\` = '0' OR \`tenant_id\` = ''`);
+        console.log('[InitDB] Fixed bundles.tenant_id -> VARCHAR(50)');
+      }
+    } catch (e) { /* bundles table may not exist yet */ }
     await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');
 
     await addColumnIfMissing(connection, 'product_serialized_items', '`product_variant_id` INT NULL');

@@ -794,10 +794,12 @@ const getLocalDateStr = (d = new Date()) => {
       });
     };
 
-    // Status filter
-    const filterByStatus = (arr, statusField) => {
+    // Status filter (normalize: missing/uppercase values treated like display does)
+    const filterByStatus = (arr, statusField, fallback = 'paid') => {
       if (statusFilter === 'all') return arr;
-      return arr.filter(item => item[statusField] === statusFilter);
+      return arr.filter(item =>
+        String(item[statusField] || fallback).toLowerCase() === String(statusFilter).toLowerCase()
+      );
     };
 
     // Payment mode filter

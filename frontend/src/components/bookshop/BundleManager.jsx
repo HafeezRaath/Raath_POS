@@ -40,8 +40,16 @@ export default function BundleManager({ open, onClose }) {
     setVariantSearch(q);
     if (q.length < 2) { setVariantResults([]); return; }
     try {
-      const r = await api.get('/products/variants', { params: { search: q } });
-      setVariantResults((r.data?.data || r.data || []).slice(0, 15));
+      const r = await api.get('/products/variants');
+      const all = r.data?.data || r.data || [];
+      const needle = q.toLowerCase();
+      const filtered = all.filter(v =>
+        String(v.product_name || '').toLowerCase().includes(needle) ||
+        String(v.variant_name || '').toLowerCase().includes(needle) ||
+        String(v.sku || '').toLowerCase().includes(needle) ||
+        String(v.barcode || '').toLowerCase().includes(needle)
+      );
+      setVariantResults(filtered.slice(0, 15));
     } catch (e) { setVariantResults([]); }
   };
 

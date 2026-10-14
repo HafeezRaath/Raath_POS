@@ -1266,7 +1266,7 @@ CREATE TABLE IF NOT EXISTS `account_daily_balances` (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `bundles` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `tenant_id` INT NOT NULL,
+  `tenant_id` VARCHAR(50) NOT NULL DEFAULT 'tenant_default',
   `name` VARCHAR(200) NOT NULL,
   `class_name` VARCHAR(100) NULL,
   `sku` VARCHAR(100) NULL,
