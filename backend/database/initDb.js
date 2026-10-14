@@ -197,6 +197,13 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'audit_logs', '`ip_address` VARCHAR(50)');
 
     await addColumnIfMissing(connection, 'products', '`expiry_date` DATE NULL');
+    // Vertical modules (Shoes/Garments/Pharmacy/Grocery): article number, season, rack location
+    await addColumnIfMissing(connection, 'products', '`article_no` VARCHAR(100) NULL');
+    await addColumnIfMissing(connection, 'products', '`season` VARCHAR(50) NULL');
+    await addColumnIfMissing(connection, 'products', '`rack_location` VARCHAR(150) NULL');
+    await addColumnIfMissing(connection, 'product_variants', '`article_no` VARCHAR(100) NULL');
+    await addColumnIfMissing(connection, 'product_variants', '`color` VARCHAR(80) NULL');
+    await addColumnIfMissing(connection, 'product_variants', '`size` VARCHAR(40) NULL');
     await addColumnIfMissing(connection, 'products', '`carton_qty` INT DEFAULT 0');
     await addColumnIfMissing(connection, 'products', '`boxes_per_carton` INT DEFAULT 0');
     await addColumnIfMissing(connection, 'products', '`pieces_per_box` INT DEFAULT 0');

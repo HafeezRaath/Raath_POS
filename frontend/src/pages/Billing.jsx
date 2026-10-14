@@ -27,6 +27,7 @@ import ThermalReceipt from '../components/receipt/ThermalReceipt';
 import { printReceiptDirect, getEffectiveReceiptSettings, getEffectiveShopProfile } from '../utils/receiptGenerator';
 import WeightCalculatorDialog from '../components/common/WeightCalculatorDialog';
 import RollCalculatorDialog from '../components/common/RollCalculatorDialog';
+import { ArticlePickerModal, SizeExchangeModal } from '../components/shoes/ShoePickModals';
 
 // ==================== HELPERS ====================
 // ==================== HELPERS ====================
@@ -1062,6 +1063,9 @@ export default function BillingPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [searchResults, setSearchResults] = useState([]);
+  // Shoes vertical: article picker + size exchange modals
+  const [articlePicker, setArticlePicker] = useState(null);
+  const [showExchangeModal, setShowExchangeModal] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState(today());
   const [billDiscount, setBillDiscount] = useState(0);
   const [billDiscountType, setBillDiscountType] = useState('amount');
@@ -1375,10 +1379,12 @@ useEffect(() => {
     const name    = norm(p.product_name || p.variant_name || p.name);
     const sku     = norm(p.sku || p.sku_code || p.code);
     const barcode = norm(p.barcode || p.bar_code);
+    const article = norm(p.article_no);
 
     if (barcode === q || sku === q) { starts.unshift(p); continue; }   // exact match pehle (scanner)
-    else if (name.startsWith(q) || sku.startsWith(q) || barcode.startsWith(q)) starts.push(p);
-    else if (name.includes(q) || sku.includes(q) || barcode.includes(q)) contains.push(p);
+    else if (article === q) { starts.unshift(p); continue; }          // article number exact
+    else if (name.startsWith(q) || sku.startsWith(q) || barcode.startsWith(q) || article.startsWith(q)) starts.push(p);
+    else if (name.includes(q) || sku.includes(q) || barcode.includes(q) || article.includes(q)) contains.push(p);
   }
 
   setSearchResults([...starts, ...contains].slice(0, 15));
@@ -1459,6 +1465,7 @@ useEffect(() => {
         originalPrice: basePrice,
         costPrice: product.purchase_price || product.cost_price || 0,
         wholesalePrice: product.wholesale_price || 0,
+        minPrice: Number(product.min_price) || 0, // bargaining lock (bottom rate)
         // Packaging & Tier Units
         boxesPerCarton,
         piecesPerBox,
@@ -1478,6 +1485,26 @@ useEffect(() => {
     setTimeout(() => searchRef.current?.focus(), 100);
     showSnackbar(`Added ${product.product_name}`, 'success');
   }, [cart, saleType, showCostPrice, showWholesalePrice, showSnackbar]);
+
+  // ---- SHOES: article search → color/size picker (scanner exact-match bypasses this) ----
+  const pickProduct = useCallback((p) => {
+    if (!p) return;
+    const isShoes = (p.product_type === 'shoes' || p.type === 'shoes');
+    const art = p.article_no;
+    if (isShoes && art) {
+      const sibs = products.filter(x =>
+        x.article_no && String(x.article_no).toLowerCase() === String(art).toLowerCase()
+      );
+      const list = sibs.length > 0 ? sibs : [p];
+      if (list.length > 1) {
+        setArticlePicker({ article: art, variants: list });
+        setSearchQuery('');
+        setSearchResults([]);
+        return;
+      }
+    }
+    addToCart(p, 0);
+  }, [products, addToCart]);
 
   // ---- 3-TIER PACKAGING & CONVERSION HANDLERS ----
   const handleSwitchSellUnit = useCallback((index, unitType) => {
@@ -1628,12 +1655,23 @@ useEffect(() => {
     setCart(updated);
   };
 
+  // Bargaining lock: bottom rate se neeche price nahi ja sakti
+  const clampToMinPrice = useCallback((item, price) => {
+    const minP = Number(item.minPrice) || 0;
+    if (minP > 0 && price < minP) {
+      showSnackbar(`Bottom rate Rs. ${minP} se kam price nahi ho sakta`, 'warning');
+      return minP;
+    }
+    return price;
+  }, [showSnackbar]);
+
   const handlePriceChange = (index, newPrice) => {
     const val = parseFloat(newPrice);
     if (isNaN(val) || val < 0) return;
     const updated = [...cart];
-    updated[index].price = val;
-    updated[index].total = updated[index].qty * val;
+    const clamped = clampToMinPrice(updated[index], val);
+    updated[index].price = clamped;
+    updated[index].total = updated[index].qty * clamped;
     setCart(updated);
   };
 
@@ -1659,10 +1697,17 @@ useEffect(() => {
       item.discountType = 'amount';
       const discountPercent = (discountAmount / totalBase) * 100;
       item.discount = discountPercent;
-      item.price = basePrice - (discountAmount / qty);
-      item.total = totalBase - discountAmount;
+      item.price = clampToMinPrice(item, basePrice - (discountAmount / qty));
+      item.total = qty * item.price;
+      item.discountAmount = totalBase - item.total;
     }
-    
+
+    // percent branch mein bhi lock lagao
+    if (type === 'percent') {
+      item.price = clampToMinPrice(item, item.price);
+      item.total = qty * item.price;
+    }
+
     setCart(updated);
   };
 
@@ -2743,7 +2788,7 @@ useEffect(() => {
         );
         if (exact) { addToCart(exact, 0); return; }                    // barcode scanner direct add
         const pick = searchResults[activeSearchIndex] || searchResults[0];
-        if (pick) addToCart(pick, 0);
+        if (pick) pickProduct(pick);
         return;
       }
       if (e.key === 'Escape') { setSearchQuery(''); setSearchResults([]); }
@@ -2774,7 +2819,7 @@ useEffect(() => {
           return (
             <ListItem
               key={o.id ?? i}
-              onMouseDown={(e) => { e.preventDefault(); if (!isOut) addToCart(o, 0); }}
+              onMouseDown={(e) => { e.preventDefault(); if (!isOut) pickProduct(o); }}
               onMouseEnter={() => setActiveSearchIndex(i)}
               sx={{
                 cursor: isOut ? 'not-allowed' : 'pointer',
@@ -2816,8 +2861,14 @@ useEffect(() => {
 
        {!isMobile && (
   <>
-    <Button variant="contained" sx={{ bgcolor: '#10b981', minWidth: 40, width: 40, height: 40, flexShrink: 0, px: 0 }} onClick={() => searchResults[0] && addToCart(searchResults[0], 0)}>
+    <Button variant="contained" sx={{ bgcolor: '#10b981', minWidth: 40, width: 40, height: 40, flexShrink: 0, px: 0 }} onClick={() => searchResults[0] && pickProduct(searchResults[0])}>
       <Add />
+    </Button>
+
+    <Button variant="outlined" size="small" onClick={() => setShowExchangeModal(true)}
+      sx={{ height: 40, flexShrink: 0, fontSize: '0.7rem', fontWeight: 'bold', borderColor: '#f59e0b', color: '#b45309' }}
+      title="Size Exchange (wapis +1 / naya -1)">
+      Exchange
     </Button>
 
     <FormControl size="small" sx={{ minWidth: 105, flexShrink: 0 }}>
@@ -3985,6 +4036,24 @@ sx={{ width: 85 }}
         onClose={() => setRollDialog({ open: false, item: null, index: null })}
         product={rollDialog.item}
         onApply={handleApplyRollDialog}
+      />
+
+      {/* Shoes: Article -> Color/Size picker */}
+      <ArticlePickerModal
+        open={!!articlePicker}
+        article={articlePicker?.article || ''}
+        variants={articlePicker?.variants || []}
+        onClose={() => setArticlePicker(null)}
+        onPick={(v) => { setArticlePicker(null); addToCart(v, 0); }}
+      />
+
+      {/* Shoes: Size Exchange (wapis +1 / naya -1) */}
+      <SizeExchangeModal
+        open={showExchangeModal}
+        onClose={() => setShowExchangeModal(false)}
+        products={products}
+        showSnackbar={showSnackbar}
+        onDone={() => loadData()}
       />
     </Box>
   );

@@ -34,6 +34,8 @@ import { useNavigate } from 'react-router-dom';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
 import { getDefaultProductType } from '../config/businessModules';
+import ShoeVariantMatrix from '../components/shoes/ShoeVariantMatrix';
+import { formatShoeStock } from '../utils/stockFormat';
 
 // ==================== CONSTANTS ====================
 const PRODUCT_TYPES = [
@@ -316,6 +318,11 @@ const [copies, setCopies] = useState(1);
   const shopBusinessType = String(currentUser?.business_type || 'retail').toLowerCase();
   const showBoxEntryCard = shopBusinessType === 'wholesale' || shopBusinessType === 'grocery' || isBoxEntry;
 
+  // Shoes vertical: Color x Size matrix se aane wale variants
+  const [shoeVariants, setShoeVariants] = useState([]);
+  const [shoeCartonInfo, setShoeCartonInfo] = useState(null);
+  const handleShoeVariants = useCallback((v, info) => { setShoeVariants(v); setShoeCartonInfo(info || null); }, []);
+
   const [variantDialog, setVariantDialog] = useState(false);
   const [variantParent, setVariantParent] = useState(null);
   const [variantForm, setVariantForm] = useState({
@@ -334,6 +341,7 @@ const [copies, setCopies] = useState(1);
     return {
     name: '', sku: '', type: defType, category_id: '', unit: defUnits[0] || 'Piece',
     costPrice: '', retailPrice: '', wholesalePrice: '', barcode: '',
+    article_no: '', season: '', rack_location: '', minSalePrice: '', discount: '',
     stock: '', minStock: '5', tax: '0', imeiList: '', fabricLength: '',
     weight: '', expiryDate: '', batchNumber: '', description: '',
     status: 'active', variant_name: 'Default',
@@ -430,7 +438,9 @@ const [copies, setCopies] = useState(1);
           is_box_product: meta.is_box_product || false,
           units_per_box: meta.units_per_box || 0,
           box_qty: meta.box_quantity || 0,
-          unit_price: meta.unit_price || 0
+          unit_price: meta.unit_price || 0,
+          pairs_per_carton: meta.pairs_per_carton || 0,
+          article_no: p.article_no || meta.article_no || ''
         };
       });
       
@@ -1267,7 +1277,8 @@ const [copies, setCopies] = useState(1);
     setProductForm({
       name: '', sku: '', type: defType, category_id: last.category_id || '',
       unit: defaultUnits[0] || 'Piece', costPrice: '', retailPrice: '', wholesalePrice: '',
-      barcode: '', stock: '', minStock: '5', tax: '0', imeiList: '', fabricLength: '',
+      barcode: '', article_no: '', season: '', rack_location: '', minSalePrice: '', discount: '',
+      stock: '', minStock: '5', tax: '0', imeiList: '', fabricLength: '',
       weight: '', expiryDate: '', batchNumber: '', description: '', status: 'active', 
       variant_name: 'Default',
       manufacturer: '', generic_name: '', supplier_name: '', shelf_rack: '', remarks: '',
@@ -1285,6 +1296,7 @@ const [copies, setCopies] = useState(1);
     });
     setImagePreview(null);
     setDialogProductType(defType);
+    setShoeVariants([]);
     setIsBoxEntry(false);
     setUnitsPerBox('');
     setBoxQuantity('');
@@ -1641,6 +1653,11 @@ const [copies, setCopies] = useState(1);
       meta.shoe_color = productForm.shoe_color || '';
       meta.shoe_brand = productForm.shoe_brand || '';
       meta.shoe_material = productForm.shoe_material || '';
+      meta.discount = productForm.discount || '';
+      if (shoeCartonInfo?.cartonMode && shoeCartonInfo.pairsPerCarton > 0) {
+        meta.pairs_per_carton = shoeCartonInfo.pairsPerCarton;
+        meta.carton_assortment = true;
+      }
     }
     if (productForm.type === 'bakery') {
       meta.bakery_ingredients = productForm.bakery_ingredients || '';
@@ -1717,7 +1734,10 @@ const [copies, setCopies] = useState(1);
       sale_price: unitRetail,
       retail_price: unitRetail,
       wholesale_price: unitWholesale,
-      min_price: unitRetail,
+      min_price: Number(productForm.minSalePrice) || unitRetail,
+      article_no: productForm.article_no || null,
+      season: productForm.season || null,
+      rack_location: productForm.rack_location || null,
       stock: finalStock,
       min_stock: Number(productForm.minStock) || 5,
       tax_type: 'inclusive',
@@ -1747,6 +1767,45 @@ const [copies, setCopies] = useState(1);
     };
     
     try {
+      // SHOES: Article + Color/Size matrix → 1 product + N variants (single POST)
+      if (!editingProduct && productForm.type === 'shoes' && shoeVariants.length > 0) {
+        if (!productForm.article_no || !productForm.article_no.trim()) {
+          setSnackbar({ open: true, message: 'Article Number zaroori hai', severity: 'warning' });
+          return;
+        }
+        const totalPairs = shoeVariants.reduce((s, v) => s + (Number(v.qty) || 0), 0);
+        const shoePayload = {
+          ...productData,
+          stock: totalPairs,
+          sku: shoeVariants[0].sku,
+          variants: shoeVariants.map(v => ({
+            variant_name: v.variant_name,
+            sku: v.sku,
+            barcode: v.barcode || v.sku,
+            color: v.color,
+            size: v.size,
+            article_no: productForm.article_no.trim(),
+            purchase_price: v.purchase_price,
+            retail_price: v.retail_price,
+            sale_price: v.sale_price,
+            minimum_retail_price: v.minimum_retail_price,
+            stock: v.qty,
+            current_stock: v.qty,
+            stock_alert_quantity: v.stock_alert_quantity,
+          })),
+        };
+        await db.addProduct(shoePayload);
+        setSnackbar({ open: true, message: `Article ${productForm.article_no}: ${shoeVariants.length} variants, ${totalPairs} pairs saved`, severity: 'success' });
+        localStorage.setItem('last_product_defaults', JSON.stringify({ type: 'shoes', category_id: productForm.category_id, unit: productForm.unit }));
+        await loadData();
+        setProductDialog(false);
+        setEditingProduct(null);
+        resetProductForm();
+        setIsBoxEntry(false);
+        setUnitsPerBox('');
+        setBoxQuantity('');
+        return;
+      }
       const existingVariant = await db.getVariantBySKU ? await db.getVariantBySKU(sku) : null;
       if (editingProduct) {
         await db.updateProduct(editingProduct.product_id || editingProduct.id, productData);
@@ -2476,6 +2535,10 @@ const [copies, setCopies] = useState(1);
                                       ({totalStock} {parent.base_unit || parent.unit || 'units'})
                                     </Typography>
                                   </Box>
+                                ) : (parent.product_type === 'shoes' || parent.type === 'shoes') && parent.pairs_per_carton > 0 ? (
+                                  <Typography fontWeight="bold" color={getStockColor(totalStock, parent.stock_alert_quantity)}>
+                                    {formatShoeStock(totalStock, parent.pairs_per_carton)}
+                                  </Typography>
                                 ) : (
                                   <Typography fontWeight="bold" color={getStockColor(totalStock, parent.stock_alert_quantity)}>
                                     {totalStock}
@@ -2558,6 +2621,15 @@ const [copies, setCopies] = useState(1);
                                       <Typography variant="caption" color="text.secondary">
                                         ({variant.current_stock || 0} {variant.base_unit || variant.unit || 'units'})
                                       </Typography>
+                                    </Box>
+                                  ) : (parent.product_type === 'shoes' || parent.type === 'shoes') ? (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography color={getStockColor(variant.current_stock, variant.stock_alert_quantity)}>
+                                        {variant.current_stock || 0} Pairs
+                                      </Typography>
+                                      {Number(variant.current_stock) <= 0 && (
+                                        <Chip size="small" color="error" label="Cut-Size" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 'bold' }} />
+                                      )}
                                     </Box>
                                   ) : (
                                     <Typography color={getStockColor(variant.current_stock, variant.stock_alert_quantity)}>
@@ -3404,26 +3476,58 @@ const [copies, setCopies] = useState(1);
               )}
 
               {dialogProductType === 'shoes' && (
+                <>
                 <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #cbd5e1', bgcolor: '#f8fafc' }}>
                   <Typography variant="subtitle2" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <Checkroom fontSize="small" sx={{ color: '#64748b' }} />
-                    Footwear & Shoes Details
+                    Article Details (Shoes Shop)
                   </Typography>
                   <Grid container spacing={2}>
                     <Grid item xs={6} sm={3}>
-                      <TextField fullWidth size="small" label="Size (UK / US / Euro)" name="shoe_size" value={productForm.shoe_size} onChange={handleProductChange} placeholder="40, 41, 42, 9, 10" />
+                      <TextField fullWidth size="small" label="Article Number *" name="article_no" value={productForm.article_no} onChange={handleProductChange} placeholder="ND-502" required />
                     </Grid>
                     <Grid item xs={6} sm={3}>
-                      <TextField fullWidth size="small" label="Color" name="shoe_color" value={productForm.shoe_color} onChange={handleProductChange} />
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Season</InputLabel>
+                        <Select name="season" value={productForm.season} onChange={handleProductChange} label="Season">
+                          <MenuItem value="">—</MenuItem>
+                          <MenuItem value="Summer">Summer</MenuItem>
+                          <MenuItem value="Winter">Winter</MenuItem>
+                          <MenuItem value="Wedding">Wedding</MenuItem>
+                          <MenuItem value="All-Season">All-Season</MenuItem>
+                        </Select>
+                      </FormControl>
                     </Grid>
                     <Grid item xs={6} sm={3}>
-                      <TextField fullWidth size="small" label="Brand" name="shoe_brand" value={productForm.shoe_brand} onChange={handleProductChange} placeholder="Nike, Service, Bata" />
+                      <TextField fullWidth size="small" label="Rack / Shelf Location" name="rack_location" value={productForm.rack_location} onChange={handleProductChange} placeholder="Rack B - Shelf 3" />
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <TextField fullWidth size="small" label="Brand" name="shoe_brand" value={productForm.shoe_brand} onChange={handleProductChange} placeholder="Bata, Service, Ndure" />
                     </Grid>
                     <Grid item xs={6} sm={3}>
                       <TextField fullWidth size="small" label="Material" name="shoe_material" value={productForm.shoe_material} onChange={handleProductChange} placeholder="Leather, Mesh, Rubber" />
                     </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <TextField fullWidth size="small" label="Minimum Sale Price (Bottom Rate)" name="minSalePrice" type="number" value={productForm.minSalePrice} onChange={handleProductChange} placeholder="0" helperText="Bargaining lock" />
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <TextField fullWidth size="small" label="Discount % / Flat" name="discount" value={productForm.discount} onChange={handleProductChange} placeholder="10% or 200" />
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <TextField fullWidth size="small" label="Size (UK / US / Euro)" name="shoe_size" value={productForm.shoe_size} onChange={handleProductChange} placeholder="40, 41, 42" />
+                    </Grid>
                   </Grid>
                 </Paper>
+                {!editingProduct && (
+                  <ShoeVariantMatrix
+                    articleNo={productForm.article_no}
+                    purchasePrice={productForm.costPrice}
+                    salePrice={productForm.retailPrice}
+                    minPrice={productForm.minSalePrice}
+                    onChange={handleShoeVariants}
+                  />
+                )}
+                </>
               )}
 
               {dialogProductType === 'bakery' && (

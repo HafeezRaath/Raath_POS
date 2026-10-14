@@ -238,6 +238,9 @@ CREATE TABLE IF NOT EXISTS `products` (
   `tax_rate` DECIMAL(5,2) DEFAULT 0,
   `is_serialized` TINYINT(1) DEFAULT 0,
   `description` TEXT,
+  `article_no` VARCHAR(100) NULL,
+  `season` VARCHAR(50) NULL,
+  `rack_location` VARCHAR(150) NULL,
   `status` VARCHAR(20) DEFAULT 'active',
   `image_url` LONGTEXT,
   `is_deleted` TINYINT(1) DEFAULT 0,
@@ -247,7 +250,8 @@ CREATE TABLE IF NOT EXISTS `products` (
   INDEX idx_prod_barcode (`barcode`),
   INDEX idx_prod_sku (`sku`),
   INDEX idx_prod_cat (`category_id`),
-  INDEX idx_prod_brand (`brand_id`)
+  INDEX idx_prod_brand (`brand_id`),
+  INDEX idx_prod_article (`article_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 17. Product Variants
@@ -263,6 +267,9 @@ CREATE TABLE IF NOT EXISTS `product_variants` (
   `minimum_retail_price` DECIMAL(15,2) DEFAULT 0,
   `stock_alert_quantity` DECIMAL(12,3) DEFAULT 5,
   `current_stock` DECIMAL(12,3) DEFAULT 0,
+  `article_no` VARCHAR(100) NULL,
+  `color` VARCHAR(80) NULL,
+  `size` VARCHAR(40) NULL,
   `image_url` LONGTEXT,
   `is_deleted` TINYINT(1) DEFAULT 0,
   `deleted_at` DATETIME NULL,

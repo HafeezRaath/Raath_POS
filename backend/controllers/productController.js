@@ -59,7 +59,8 @@ exports.createProduct = async (req, res, next) => {
       sku, barcode, purchase_price = 0, sale_price = 0, retail_price = 0,
       wholesale_price = 0, min_price = 0, stock = 0, min_stock = 5,
       tax_type = 'inclusive', tax_rate = 0, is_serialized = 0,
-      description = '', image_url = '', status = 'active', variants = []
+      description = '', image_url = '', status = 'active', variants = [],
+      article_no = null, season = null, rack_location = null
     } = req.body;
 
     if (!name || !name.trim()) {
@@ -74,14 +75,15 @@ exports.createProduct = async (req, res, next) => {
           tenant_id, name, brand_id, category_id, type, unit, sku, barcode,
           purchase_price, sale_price, retail_price, wholesale_price, min_price,
           stock, min_stock, tax_type, tax_rate, is_serialized, description,
-          image_url, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          image_url, status, article_no, season, rack_location
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       const [insRes] = await conn.query(insertSql, [
         tenantId, name.trim(), brand_id || null, category_id || null, type, unit,
         sku || null, barcode || null, purchase_price, sale_price, retail_price,
         wholesale_price, min_price, stock, min_stock, tax_type, tax_rate,
-        is_serialized ? 1 : 0, description, image_url, status
+        is_serialized ? 1 : 0, description, image_url, status,
+        article_no || null, season || null, rack_location || null
       ]);
 
       const productId = insRes.insertId;
@@ -94,8 +96,8 @@ exports.createProduct = async (req, res, next) => {
           const vSale = v.sale_price !== undefined ? v.sale_price : (v.retail_price !== undefined ? v.retail_price : (sale_price || retail_price));
           const vStock = v.stock !== undefined ? v.stock : (v.current_stock !== undefined ? v.current_stock : stock);
           const [vRes] = await conn.query(
-            `INSERT INTO product_variants (tenant_id, product_id, variant_name, name, sku, barcode, purchase_price, retail_price, sale_price, current_stock, stock)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO product_variants (tenant_id, product_id, variant_name, name, sku, barcode, purchase_price, retail_price, sale_price, current_stock, stock, article_no, color, size)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               tenantId,
               productId,
@@ -107,7 +109,10 @@ exports.createProduct = async (req, res, next) => {
               vSale,
               vSale,
               vStock,
-              vStock
+              vStock,
+              v.article_no || article_no || null,
+              v.color || null,
+              v.size || null
             ]
           );
           if (!defaultVariantId) defaultVariantId = vRes.insertId;
@@ -152,7 +157,7 @@ exports.updateProduct = async (req, res, next) => {
       name, brand_id, category_id, type, unit, sku, barcode,
       purchase_price, sale_price, retail_price, wholesale_price,
       min_price, stock, min_stock, tax_type, tax_rate, is_serialized,
-      description, image_url, status
+      description, image_url, status, article_no, season, rack_location
     } = req.body;
 
     const sql = `
@@ -176,7 +181,10 @@ exports.updateProduct = async (req, res, next) => {
         is_serialized = COALESCE(?, is_serialized),
         description = COALESCE(?, description),
         image_url = COALESCE(?, image_url),
-        status = COALESCE(?, status)
+        status = COALESCE(?, status),
+        article_no = COALESCE(?, article_no),
+        season = COALESCE(?, season),
+        rack_location = COALESCE(?, rack_location)
       WHERE tenant_id = ? AND id = ? AND is_deleted = 0
     `;
 
@@ -184,7 +192,8 @@ exports.updateProduct = async (req, res, next) => {
       name, brand_id, category_id, type, unit, sku, barcode,
       purchase_price, sale_price, retail_price, wholesale_price,
       min_price, stock, min_stock, tax_type, tax_rate, is_serialized,
-      description, image_url, status, tenantId, id
+      description, image_url, status, article_no, season, rack_location,
+      tenantId, id
     ]);
 
     const updated = await query('SELECT * FROM products WHERE tenant_id = ? AND id = ?', [tenantId, id]);
@@ -275,7 +284,12 @@ exports.getAllVariants = async (req, res, next) => {
         p.status,
         p.tax_type,
         p.tax_rate,
-        p.is_serialized
+        p.is_serialized,
+        COALESCE(pv.article_no, p.article_no) AS article_no,
+        pv.color AS variant_color,
+        pv.size AS variant_size,
+        p.season,
+        p.rack_location
       FROM products p
       LEFT JOIN product_variants pv ON pv.product_id = p.id AND COALESCE(pv.is_deleted, 0) = 0
       LEFT JOIN brands b ON p.brand_id = b.id
