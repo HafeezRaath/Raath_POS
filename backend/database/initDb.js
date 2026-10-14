@@ -299,13 +299,13 @@ async function initializeDatabase() {
           [table]
         );
         const colNames = allCols.map(c => c.COLUMN_NAME);
-        const candidates = ['name', 'sku', 'title', 'invoice_no', 'invoice_number', 'purchase_no', 'purchase_number', 'customer_name', 'supplier_name', 'company_name', 'description', 'notes'];
+        const candidates = ['name', 'sku', 'title', 'username', 'email', 'invoice_no', 'invoice_number', 'purchase_no', 'purchase_number', 'customer_name', 'supplier_name', 'company_name', 'description', 'notes'];
         const textCols = candidates.filter(c => colNames.includes(c));
         if (textCols.length === 0) {
           console.warn(`[InitDB] ${table}: no text columns for test filter — manual review needed, PK/AI skipped.`);
           return;
         }
-        const testFilter = textCols.map(c => `\`${c}\` LIKE 'QATEST-%' OR \`${c}\` LIKE 'DEMO-%'`).join(' OR ');
+        const testFilter = textCols.map(c => `(\`${c}\` LIKE 'QATEST-%' OR \`${c}\` LIKE 'QATEST %' OR \`${c}\` LIKE 'DEMO-%' OR \`${c}\` LIKE 'DEMO %')`).join(' OR ');
         const [doomed] = await connection.query(
           `SELECT id FROM \`${table}\` WHERE id = 0 AND (${testFilter})`
         );
