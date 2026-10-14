@@ -149,6 +149,7 @@ const AppRoutes = React.memo(function AppRoutes() {
         <Route path="/reports" element={<ProtectedRoute pageId="reports"><MainLayout><ReportsPage /></MainLayout></ProtectedRoute>} />
         <Route path="/history" element={<ProtectedRoute pageId="reports"><MainLayout><HistoryPage /></MainLayout></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute pageId="settings"><MainLayout><SettingsPage /></MainLayout></ProtectedRoute>} />
+        <Route path="/users" element={<ProtectedRoute pageId="users"><MainLayout><SettingsPage initialTab="users" /></MainLayout></ProtectedRoute>} />
         <Route path="/backup" element={<ProtectedRoute pageId="backup"><MainLayout><BackupPage /></MainLayout></ProtectedRoute>} />
 
         {/* CATCH ALL */}

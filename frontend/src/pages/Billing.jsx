@@ -1073,33 +1073,6 @@ export default function BillingPage() {
   const [articlePicker, setArticlePicker] = useState(null);
   const [uniformPicker, setUniformPicker] = useState(null);
   const [bundles, setBundles] = useState([]);
-
-  // BOOKSHOP: add class bundle line to cart
-  const addBundleToCart = useCallback((bundle) => {
-    const price = Number(bundle.bundle_price) || 0;
-    setCart(prev => [...prev, {
-      id: `bundle-${bundle.id}-${Date.now()}`,
-      bundleId: bundle.id,
-      is_bundle: true,
-      variantId: null,
-      productId: null,
-      name: `📚 ${bundle.name}`,
-      product_name: bundle.name,
-      sku: bundle.barcode || bundle.sku || '',
-      unit: 'set',
-      qty: 1,
-      price, total: price,
-      discount: 0, discountType: 'percent',
-      stock: 999,
-      isOfferItem: false, offerName: null,
-      originalPrice: price,
-      costPrice: 0,
-      minPrice: 0,
-      selectedSellUnit: 'set',
-    }]);
-    showSnackbar(`Bundle added: ${bundle.name}`, 'success');
-    setSearchQuery(''); setSearchResults([]);
-  }, [showSnackbar]);
   const [showExchangeModal, setShowExchangeModal] = useState(false);
   // Garments vertical: thaan meter modal
   const [thaanModal, setThaanModal] = useState({ open: false, product: null });
@@ -1303,6 +1276,33 @@ export default function BillingPage() {
   const showSnackbar = useCallback((message, severity = 'success') => {
     setSnackbar({ open: true, message, severity });
   }, []);
+
+  // BOOKSHOP: add class bundle line to cart (after showSnackbar — TDZ safe)
+  const addBundleToCart = useCallback((bundle) => {
+    const price = Number(bundle.bundle_price) || 0;
+    setCart(prev => [...prev, {
+      id: `bundle-${bundle.id}-${Date.now()}`,
+      bundleId: bundle.id,
+      is_bundle: true,
+      variantId: null,
+      productId: null,
+      name: `📚 ${bundle.name}`,
+      product_name: bundle.name,
+      sku: bundle.barcode || bundle.sku || '',
+      unit: 'set',
+      qty: 1,
+      price, total: price,
+      discount: 0, discountType: 'percent',
+      stock: 999,
+      isOfferItem: false, offerName: null,
+      originalPrice: price,
+      costPrice: 0,
+      minPrice: 0,
+      selectedSellUnit: 'set',
+    }]);
+    showSnackbar(`Bundle added: ${bundle.name}`, 'success');
+    setSearchQuery(''); setSearchResults([]);
+  }, [showSnackbar]);
 
   // ---- CHECK FBR STATUS ----
   useEffect(() => {

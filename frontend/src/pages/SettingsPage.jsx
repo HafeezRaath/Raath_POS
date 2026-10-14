@@ -318,12 +318,16 @@ const SettingCard = ({ title, children, icon, isMobile, expandedCards, toggleCar
 };
 
 // ==================== MAIN COMPONENT ====================
-export default function SettingsPage() {
+export default function SettingsPage({ initialTab } = {}) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof initialTab === 'number') return initialTab;
+    const idx = SETTINGS_TABS.findIndex(t => t.id === initialTab);
+    return idx >= 0 ? idx : 0;
+  });
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [hasChanges, setHasChanges] = useState(false);

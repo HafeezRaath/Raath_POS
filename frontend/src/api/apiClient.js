@@ -2,7 +2,9 @@
 //  src/api/apiClient.js - Centralized Backend API Client
 // ============================================================
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// Same-origin by default: the Hostinger Web App serves frontend + /api from one origin.
+// REACT_APP_API_URL override still wins when explicitly set at build time.
+const API_BASE = process.env.REACT_APP_API_URL || '/api';
 
 class ApiClient {
   constructor(baseUrl = API_BASE) {
