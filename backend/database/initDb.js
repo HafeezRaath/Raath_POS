@@ -333,7 +333,7 @@ async function initializeDatabase() {
       }
     };
     // Tables where the app INSERTs without id and expects insertId back
-    for (const t of ['customers', 'suppliers', 'expenses', 'product_variants', 'sales', 'purchases', 'accounts', 'account_transactions', 'emi_records', 'emi_payments', 'emi_schedule', 'work_orders', 'repairs']) {
+    for (const t of ['customers', 'suppliers', 'expenses', 'product_variants', 'sales', 'purchases', 'accounts', 'account_transactions', 'emi_records', 'emi_payments', 'emi_schedule', 'work_orders', 'repairs', 'users', 'roles']) {
       await repairTableId(t);
     }
     await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');
