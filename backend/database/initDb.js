@@ -230,26 +230,30 @@ async function initializeDatabase() {
     } catch (e) { /* bundles table may not exist yet */ }
     // Ensure products.id is AUTO_INCREMENT PRIMARY KEY (live DBs created from
     // older schemas may lack it, causing insertId=null and broken product saves)
+    // DIAGNOSTIC MODE (v18): log duplicate-id rows first, fix in a later step
+    // once we know what the id=0 rows are.
     try {
       const [idCols] = await connection.query(
         `SELECT EXTRA, COLUMN_KEY FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'id'`
       );
       if (idCols.length > 0 && !String(idCols[0].EXTRA || '').toLowerCase().includes('auto_increment')) {
-        // Step 1: make sure id is a key (MySQL error 1075 otherwise)
-        if (String(idCols[0].COLUMN_KEY || '').toUpperCase() !== 'PRI') {
-          try {
-            await connection.query(`ALTER TABLE \`products\` ADD PRIMARY KEY (\`id\`)`);
-            console.log('[InitDB] Added PRIMARY KEY on products.id');
-          } catch (pkErr) {
-            console.warn('[InitDB] ADD PRIMARY KEY skipped: ' + pkErr.message);
-          }
-        }
-        // Step 2: add AUTO_INCREMENT
-        await connection.query(`ALTER TABLE \`products\` MODIFY COLUMN \`id\` INT NOT NULL AUTO_INCREMENT`);
-        console.log('[InitDB] Fixed products.id -> AUTO_INCREMENT');
+        const [dupes] = await connection.query(
+          `SELECT id, COUNT(*) AS c FROM \`products\` GROUP BY id HAVING c > 1 ORDER BY c DESC LIMIT 10`
+        );
+        console.log('[InitDB] DIAG duplicate product ids: ' + JSON.stringify(dupes));
+        const [zeroRows] = await connection.query(
+          `SELECT id, tenant_id, name, sku, created_at FROM \`products\` WHERE id = 0 ORDER BY created_at LIMIT 20`
+        );
+        console.log('[InitDB] DIAG id=0 products: ' + JSON.stringify(zeroRows));
+        const [maxId] = await connection.query(`SELECT MAX(id) AS m, COUNT(*) AS c FROM \`products\``);
+        console.log('[InitDB] DIAG products max_id/count: ' + JSON.stringify(maxId));
+        const [zeroVariants] = await connection.query(
+          `SELECT COUNT(*) AS c FROM \`product_variants\` WHERE product_id = 0`
+        );
+        console.log('[InitDB] DIAG variants with product_id=0: ' + JSON.stringify(zeroVariants));
       }
     } catch (e) {
-      console.warn('[InitDB] products.id auto_increment check skipped: ' + e.message);
+      console.warn('[InitDB] products.id diagnostic skipped: ' + e.message);
     }
     await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');
 
