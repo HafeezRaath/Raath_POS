@@ -7,7 +7,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Button, Typography, Box, Chip, Grid, TextField, Alert,
-} from '@mui/material';
+} from '../ui/tailwind-mui';
 import db from '../../database/db';
 
 // ---------- 1) Article -> Color/Size picker ----------

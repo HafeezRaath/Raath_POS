@@ -28,6 +28,7 @@ import { printReceiptDirect, getEffectiveReceiptSettings, getEffectiveShopProfil
 import WeightCalculatorDialog from '../components/common/WeightCalculatorDialog';
 import RollCalculatorDialog from '../components/common/RollCalculatorDialog';
 import { ArticlePickerModal, SizeExchangeModal } from '../components/shoes/ShoePickModals';
+import ThaanMeterModal from '../components/garments/ThaanMeterModal';
 
 // ==================== HELPERS ====================
 // ==================== HELPERS ====================
@@ -1066,6 +1067,8 @@ export default function BillingPage() {
   // Shoes vertical: article picker + size exchange modals
   const [articlePicker, setArticlePicker] = useState(null);
   const [showExchangeModal, setShowExchangeModal] = useState(false);
+  // Garments vertical: thaan meter modal
+  const [thaanModal, setThaanModal] = useState({ open: false, product: null });
   const [invoiceDate, setInvoiceDate] = useState(today());
   const [billDiscount, setBillDiscount] = useState(0);
   const [billDiscountType, setBillDiscountType] = useState('amount');
@@ -1391,8 +1394,9 @@ useEffect(() => {
   setActiveSearchIndex(0);
 }, [searchQuery, products, selectedCategory]);
   // ---- ADD TO CART (WITH CARTON/BOX/PIECE & WEIGHT/ROLL AWARENESS) ----
-  const addToCart = useCallback((product, perDiscount = 0) => {
+  const addToCart = useCallback((product, perDiscount = 0, qtyOverride = null) => {
     const availableStock = Number(product.current_stock || 0);
+    const wantQty = qtyOverride != null ? Number(qtyOverride) : 1;
     if (availableStock <= 0) {
       showSnackbar(`${product.product_name} Out of Stock!`, 'error');
       return;
@@ -1435,7 +1439,7 @@ useEffect(() => {
     
     if (existingIndex >= 0) {
       const updated = [...cart];
-      const newQty = updated[existingIndex].qty + 1;
+      const newQty = +(updated[existingIndex].qty + wantQty).toFixed(3);
       if (newQty > availableStock) {
         showSnackbar(`Only ${availableStock} available!`, 'warning');
         return;
@@ -1453,9 +1457,9 @@ useEffect(() => {
         name: product.product_name || product.variant_name || 'Item',
         sku: product.sku || '',
         unit: product.unit || 'piece',
-        qty: 1,
+        qty: wantQty,
         price: finalPrice,
-        total: finalPrice,
+        total: finalPrice * wantQty,
         discount: discountPercent,
         discountType: 'percent',
         stock: availableStock,
@@ -1486,12 +1490,29 @@ useEffect(() => {
     showSnackbar(`Added ${product.product_name}`, 'success');
   }, [cart, saleType, showCostPrice, showWholesalePrice, showSnackbar]);
 
-  // ---- SHOES: article search → color/size picker (scanner exact-match bypasses this) ----
+  // Garment mode detection (meta.description JSON se)
+  const getGarmentMode = useCallback((p) => {
+    try {
+      const d = typeof p?.description === 'string' ? JSON.parse(p.description) : (p?.description || {});
+      return d.garment_mode || null;
+    } catch { return null; }
+  }, []);
+
+  // ---- SHOES + GARMENTS: article search → picker; thaan → meter modal (scanner exact-match bypasses) ----
   const pickProduct = useCallback((p) => {
     if (!p) return;
-    const isShoes = (p.product_type === 'shoes' || p.type === 'shoes');
+    const ptype = p.product_type || p.type;
+    const isShoes = (ptype === 'shoes');
+    const garmentMode = (ptype === 'fabric' || ptype === 'cloth') ? getGarmentMode(p) : null;
+    // Thaan: meter select modal
+    if (garmentMode === 'THAAN_FABRIC') {
+      setThaanModal({ open: true, product: p });
+      setSearchQuery('');
+      setSearchResults([]);
+      return;
+    }
     const art = p.article_no;
-    if (isShoes && art) {
+    if ((isShoes || garmentMode === 'READYMADE_STITCHED') && art) {
       const sibs = products.filter(x =>
         x.article_no && String(x.article_no).toLowerCase() === String(art).toLowerCase()
       );
@@ -1504,7 +1525,7 @@ useEffect(() => {
       }
     }
     addToCart(p, 0);
-  }, [products, addToCart]);
+  }, [products, addToCart, getGarmentMode]);
 
   // ---- 3-TIER PACKAGING & CONVERSION HANDLERS ----
   const handleSwitchSellUnit = useCallback((index, unitType) => {
@@ -4054,6 +4075,18 @@ sx={{ width: 85 }}
         products={products}
         showSnackbar={showSnackbar}
         onDone={() => loadData()}
+      />
+
+      {/* Garments: Thaan meter select */}
+      <ThaanMeterModal
+        open={thaanModal.open}
+        product={thaanModal.product}
+        onClose={() => setThaanModal({ open: false, product: null })}
+        onConfirm={(res) => {
+          setThaanModal({ open: false, product: null });
+          if (res?.error) { showSnackbar(res.error, 'warning'); return; }
+          if (res?.meters && thaanModal.product) addToCart(thaanModal.product, 0, res.meters);
+        }}
       />
     </Box>
   );

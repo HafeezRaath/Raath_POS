@@ -35,7 +35,9 @@ import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
 import { getDefaultProductType } from '../config/businessModules';
 import ShoeVariantMatrix from '../components/shoes/ShoeVariantMatrix';
-import { formatShoeStock } from '../utils/stockFormat';
+import ThaanFabricForm from '../components/garments/ThaanFabricForm';
+import ReadymadeMatrix from '../components/garments/ReadymadeMatrix';
+import { formatShoeStock, formatThaanStock, formatKurtaStock } from '../utils/stockFormat';
 
 // ==================== CONSTANTS ====================
 const PRODUCT_TYPES = [
@@ -109,7 +111,7 @@ const usePermissions = () => {
 };
 
 // ==================== MOBILE PRODUCT CARD ====================
-const MobileProductCard = ({ product, onEdit, onDelete, getTypeChip, getStockBadge, onAddVariant, onPrintBarcode, canEdit, canDelete, canAdd }) => {
+const MobileProductCard = ({ product, onEdit, onDelete, getTypeChip, getStockBadge, onAddVariant, onPrintBarcode, canEdit, canDelete, canAdd, renderParentStock }) => {
   const [expanded, setExpanded] = useState(false);
   const imageUrl = getProductImageUrl(product);
   const isBoxProduct = product.is_box_product || false;
@@ -158,22 +160,10 @@ const MobileProductCard = ({ product, onEdit, onDelete, getTypeChip, getStockBad
             </Box>
           </Box>
           <Box sx={{ textAlign: 'right', ml: 1 }}>
-            {product.is_box_product && product.units_per_box > 0 ? (
-              <Box>
-                <Typography variant="subtitle1" fontWeight="bold" color={Number(product.current_stock) <= 0 ? 'error.main' : 'success.main'}>
-                  {Math.floor((product.current_stock || 0) / product.units_per_box)} boxes
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  ({product.current_stock || 0} {product.base_unit || product.unit || 'units'})
-                </Typography>
-              </Box>
-            ) : (
-              <>
-                <Typography variant="subtitle1" fontWeight="bold" color={Number(product.current_stock) <= 0 ? 'error.main' : 'success.main'}>
-                  {product.current_stock || 0}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">{product.base_unit || product.unit}</Typography>
-              </>
+            {renderParentStock ? renderParentStock(product, Number(product.current_stock) || 0) : (
+              <Typography variant="subtitle1" fontWeight="bold">
+                {product.current_stock || 0}
+              </Typography>
             )}
           </Box>
         </Box>
@@ -322,6 +312,15 @@ const [copies, setCopies] = useState(1);
   const [shoeVariants, setShoeVariants] = useState([]);
   const [shoeCartonInfo, setShoeCartonInfo] = useState(null);
   const handleShoeVariants = useCallback((v, info) => { setShoeVariants(v); setShoeCartonInfo(info || null); }, []);
+  // Garments vertical: thaan + readymade
+  const [thaanData, setThaanData] = useState(null);
+  const handleThaanData = useCallback((d) => setThaanData(d), []);
+  const [readymadeVariants, setReadymadeVariants] = useState([]);
+  const [readymadeBoxInfo, setReadymadeBoxInfo] = useState(null);
+  const handleReadymadeVariants = useCallback((v, info) => { setReadymadeVariants(v); setReadymadeBoxInfo(info || null); }, []);
+  const handleThaanPrice = useCallback((field, val) => {
+    setProductForm(prev => ({ ...prev, [field]: val }));
+  }, []);
 
   const [variantDialog, setVariantDialog] = useState(false);
   const [variantParent, setVariantParent] = useState(null);
@@ -350,6 +349,7 @@ const [copies, setCopies] = useState(1);
     bakery_ingredients: '',
     min_order_qty: '', bulk_discount: '',
     fabric_type: '', fabric_color: '', fabric_size: '', stitch_type: '',
+    garment_mode: 'THAAN_FABRIC', thaan_color: '', thaanCostPerM: '', thaanSalePerM: '', thaanMinPerM: '',
     mobile_brand: '', mobile_model: '', mobile_storage: '', mobile_color: '',
     box_qty: '', packs_per_box: '', units_per_pack: '',
     image_url: '',
@@ -440,7 +440,10 @@ const [copies, setCopies] = useState(1);
           box_qty: meta.box_quantity || 0,
           unit_price: meta.unit_price || 0,
           pairs_per_carton: meta.pairs_per_carton || 0,
-          article_no: p.article_no || meta.article_no || ''
+          article_no: p.article_no || meta.article_no || '',
+          garment_mode: meta.garment_mode || '',
+          thaan_suit_meters: meta.thaan_suit_meters || 4,
+          rm_pieces_per_box: meta.pieces_per_box || 0
         };
       });
       
@@ -539,6 +542,45 @@ const [copies, setCopies] = useState(1);
   }
   return <Chip size="small" color="success" label={`In Stock (${s})`} sx={{ height: 18, fontSize: '0.55rem', fontWeight: 'bold' }} />;
 };
+
+  // Vertical stock display: shoes / garments (thaan, box suit, readymade)
+  const renderParentStock = (parent, totalStock) => {
+    const color = getStockColor(totalStock, parent.stock_alert_quantity);
+    const ptype = parent.product_type || parent.type;
+    if (parent.is_box_product && parent.units_per_box > 0) {
+      return (
+        <Box>
+          <Typography fontWeight="bold" color={color}>
+            {Math.floor(totalStock / parent.units_per_box)} boxes
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            ({totalStock} {parent.base_unit || parent.unit || 'units'})
+          </Typography>
+        </Box>
+      );
+    }
+    if (ptype === 'shoes' && parent.pairs_per_carton > 0) {
+      return <Typography fontWeight="bold" color={color}>{formatShoeStock(totalStock, parent.pairs_per_carton)}</Typography>;
+    }
+    if ((ptype === 'fabric' || ptype === 'cloth') && parent.garment_mode === 'THAAN_FABRIC') {
+      const fmt = formatThaanStock(totalStock, parent.thaan_suit_meters || 4);
+      return (
+        <Box>
+          <Typography fontWeight="bold" color={color}>{fmt.text}</Typography>
+          {fmt.isCutPiece && (
+            <Chip size="small" color="warning" label="Cut-Piece" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 'bold', mt: 0.5 }} />
+          )}
+        </Box>
+      );
+    }
+    if ((ptype === 'fabric' || ptype === 'cloth') && parent.garment_mode === 'BOX_SUIT') {
+      return <Typography fontWeight="bold" color={color}>{totalStock} Suits (Boxes)</Typography>;
+    }
+    if ((ptype === 'fabric' || ptype === 'cloth') && parent.garment_mode === 'READYMADE_STITCHED' && parent.rm_pieces_per_box > 0) {
+      return <Typography fontWeight="bold" color={color}>{formatKurtaStock(totalStock, parent.rm_pieces_per_box)}</Typography>;
+    }
+    return <Typography fontWeight="bold" color={color}>{totalStock}</Typography>;
+  };
 
   const getTypeChip = (type) => {
     const t = PRODUCT_TYPES.find(p => p.value === type);
@@ -1286,6 +1328,7 @@ const [copies, setCopies] = useState(1);
       bakery_ingredients: '',
       min_order_qty: '', bulk_discount: '',
       fabric_type: '', fabric_color: '', fabric_size: '', stitch_type: '',
+    garment_mode: 'THAAN_FABRIC', thaan_color: '', thaanCostPerM: '', thaanSalePerM: '', thaanMinPerM: '',
       mobile_brand: '', mobile_model: '', mobile_storage: '', mobile_color: '',
       box_qty: '', packs_per_box: '', units_per_pack: '',
       image_url: '',
@@ -1297,6 +1340,9 @@ const [copies, setCopies] = useState(1);
     setImagePreview(null);
     setDialogProductType(defType);
     setShoeVariants([]);
+    setThaanData(null);
+    setReadymadeVariants([]);
+    setReadymadeBoxInfo(null);
     setIsBoxEntry(false);
     setUnitsPerBox('');
     setBoxQuantity('');
@@ -1635,6 +1681,15 @@ const [copies, setCopies] = useState(1);
       meta.fabric_color = productForm.fabric_color || '';
       meta.fabric_size = productForm.fabric_size || '';
       meta.stitch_type = productForm.stitch_type || '';
+      meta.garment_mode = productForm.garment_mode || 'THAAN_FABRIC';
+      if (thaanData) {
+        meta.thaan_suit_meters = thaanData.suitMeters;
+        meta.thaan_color = thaanData.color || '';
+      }
+      if (readymadeBoxInfo?.boxMode && readymadeBoxInfo.piecesPerBox > 0) {
+        meta.pieces_per_box = readymadeBoxInfo.piecesPerBox;
+        meta.master_box = true;
+      }
     }
     if (productForm.type === 'grocery' || productForm.type === 'bakery') {
       meta.weight = Number(productForm.weight) || 0;
@@ -1705,6 +1760,11 @@ const [copies, setCopies] = useState(1);
       finalStock = Number(productForm.stock) || 0;
     }
 
+    // Thaan: stock HAMESHA meters (Float) mein
+    if (isThaan && thaanData && thaanData.meters > 0) {
+      finalStock = +thaanData.meters.toFixed(2);
+    }
+
     // Set variant name for box products
     let variantName = productForm.variant_name || 'Default';
     if (isBoxEntry && productForm.units_per_box && productForm.box_quantity) {
@@ -1715,6 +1775,14 @@ const [copies, setCopies] = useState(1);
     let unitCost = Number(productForm.costPrice) || 0;
     let unitRetail = Number(productForm.retailPrice) || 0;
     let unitWholesale = Number(productForm.wholesalePrice) || 0;
+
+    // Garments: THAAN_FABRIC — prices per meter, stock in meters (Float)
+    const isThaan = (productForm.type === 'fabric' || productForm.type === 'cloth') && productForm.garment_mode === 'THAAN_FABRIC';
+    if (isThaan && thaanData) {
+      unitCost = Number(thaanData.costPerMeter) || 0;
+      unitRetail = Number(thaanData.salePerMeter) || 0;
+      unitWholesale = unitRetail;
+    }
 
     if (isBoxEntry && meta.units_per_box > 0) {
       unitCost = unitCost / meta.units_per_box;
@@ -1727,14 +1795,14 @@ const [copies, setCopies] = useState(1);
       brand_id: productForm.brand_id || null,
       category_id: productForm.category_id ? String(productForm.category_id) : null,
       type: productForm.type,
-      unit: productForm.unit,
+      unit: isThaan ? 'meter' : productForm.unit,
       sku: sku || null,
       barcode: productForm.barcode || null,
       purchase_price: unitCost,
       sale_price: unitRetail,
       retail_price: unitRetail,
       wholesale_price: unitWholesale,
-      min_price: Number(productForm.minSalePrice) || unitRetail,
+      min_price: isThaan ? (Number(thaanData?.minPerMeter) || unitRetail) : (Number(productForm.minSalePrice) || unitRetail),
       article_no: productForm.article_no || null,
       season: productForm.season || null,
       rack_location: productForm.rack_location || null,
@@ -1797,6 +1865,46 @@ const [copies, setCopies] = useState(1);
         await db.addProduct(shoePayload);
         setSnackbar({ open: true, message: `Article ${productForm.article_no}: ${shoeVariants.length} variants, ${totalPairs} pairs saved`, severity: 'success' });
         localStorage.setItem('last_product_defaults', JSON.stringify({ type: 'shoes', category_id: productForm.category_id, unit: productForm.unit }));
+        await loadData();
+        setProductDialog(false);
+        setEditingProduct(null);
+        resetProductForm();
+        setIsBoxEntry(false);
+        setUnitsPerBox('');
+        setBoxQuantity('');
+        return;
+      }
+      // GARMENTS READYMADE: Article + Color/Size matrix → 1 product + N variants (single POST)
+      const isReadymade = (productForm.type === 'fabric' || productForm.type === 'cloth') && productForm.garment_mode === 'READYMADE_STITCHED';
+      if (!editingProduct && isReadymade && readymadeVariants.length > 0) {
+        if (!productForm.article_no || !productForm.article_no.trim()) {
+          setSnackbar({ open: true, message: 'Article Number zaroori hai', severity: 'warning' });
+          return;
+        }
+        const totalPcs = readymadeVariants.reduce((s, v) => s + (Number(v.qty) || 0), 0);
+        const rmPayload = {
+          ...productData,
+          stock: totalPcs,
+          sku: readymadeVariants[0].sku,
+          variants: readymadeVariants.map(v => ({
+            variant_name: v.variant_name,
+            sku: v.sku,
+            barcode: v.barcode || v.sku,
+            color: v.color,
+            size: v.size,
+            article_no: productForm.article_no.trim(),
+            purchase_price: v.purchase_price,
+            retail_price: v.retail_price,
+            sale_price: v.sale_price,
+            minimum_retail_price: v.minimum_retail_price,
+            stock: v.qty,
+            current_stock: v.qty,
+            stock_alert_quantity: v.stock_alert_quantity,
+          })),
+        };
+        await db.addProduct(rmPayload);
+        setSnackbar({ open: true, message: `Article ${productForm.article_no}: ${readymadeVariants.length} variants, ${totalPcs} pieces saved`, severity: 'success' });
+        localStorage.setItem('last_product_defaults', JSON.stringify({ type: 'fabric', category_id: productForm.category_id, unit: productForm.unit }));
         await loadData();
         setProductDialog(false);
         setEditingProduct(null);
@@ -2420,6 +2528,7 @@ const [copies, setCopies] = useState(1);
                       onPrintBarcode={handlePrintBarcode}
                       getTypeChip={getTypeChip}
                       getStockBadge={getStockBadge}
+                      renderParentStock={renderParentStock}
                       canEdit={can('inventory', 'edit')}
                       canDelete={can('inventory', 'delete')}
                       canAdd={can('inventory', 'add')}
@@ -2526,24 +2635,7 @@ const [copies, setCopies] = useState(1);
                             <TableCell>{parent.category_name || '-'}</TableCell>
                             <TableCell>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                {parent.is_box_product && parent.units_per_box > 0 ? (
-                                  <Box>
-                                    <Typography fontWeight="bold" color={getStockColor(totalStock, parent.stock_alert_quantity)}>
-                                      {Math.floor(totalStock / parent.units_per_box)} boxes
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                      ({totalStock} {parent.base_unit || parent.unit || 'units'})
-                                    </Typography>
-                                  </Box>
-                                ) : (parent.product_type === 'shoes' || parent.type === 'shoes') && parent.pairs_per_carton > 0 ? (
-                                  <Typography fontWeight="bold" color={getStockColor(totalStock, parent.stock_alert_quantity)}>
-                                    {formatShoeStock(totalStock, parent.pairs_per_carton)}
-                                  </Typography>
-                                ) : (
-                                  <Typography fontWeight="bold" color={getStockColor(totalStock, parent.stock_alert_quantity)}>
-                                    {totalStock}
-                                  </Typography>
-                                )}
+                                {renderParentStock(parent, totalStock)}
                                 {getStockBadge(totalStock, parent.stock_alert_quantity)}
                               </Box>
                             </TableCell>
@@ -2631,6 +2723,19 @@ const [copies, setCopies] = useState(1);
                                         <Chip size="small" color="error" label="Cut-Size" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 'bold' }} />
                                       )}
                                     </Box>
+                                  ) : parent.garment_mode === 'READYMADE_STITCHED' ? (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography color={getStockColor(variant.current_stock, variant.stock_alert_quantity)}>
+                                        {variant.current_stock || 0} Pcs
+                                      </Typography>
+                                      {Number(variant.current_stock) <= 0 && (
+                                        <Chip size="small" color="error" label="Cut-Size" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 'bold' }} />
+                                      )}
+                                    </Box>
+                                  ) : parent.garment_mode === 'THAAN_FABRIC' ? (
+                                    <Typography color={getStockColor(variant.current_stock, variant.stock_alert_quantity)}>
+                                      {variant.current_stock || 0} m
+                                    </Typography>
                                   ) : (
                                     <Typography color={getStockColor(variant.current_stock, variant.stock_alert_quantity)}>
                                       {variant.current_stock || 0}
@@ -3422,37 +3527,92 @@ const [copies, setCopies] = useState(1);
               )}
 
               {dialogProductType === 'fabric' && (
+                <>
                 <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #e9d5ff', bgcolor: '#faf5ff' }}>
                   <Typography variant="subtitle2" fontWeight="bold" color="#6b21a8" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <Straighten fontSize="small" sx={{ color: '#9333ea' }} />
-                    Fabric & Garment Specifications
+                    Garments — Product Type
                   </Typography>
+                  {/* Mode tabs */}
+                  <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                    {[
+                      { v: 'THAAN_FABRIC', l: 'Thaan / Fabric (meter)' },
+                      { v: 'BOX_SUIT', l: 'Box Suit (per box)' },
+                      { v: 'READYMADE_STITCHED', l: 'Readymade (sizes)' },
+                    ].map(m => (
+                      <Button key={m.v} size="small"
+                        variant={productForm.garment_mode === m.v ? 'contained' : 'outlined'}
+                        color="secondary"
+                        onClick={() => setProductForm(prev => ({ ...prev, garment_mode: m.v }))}>
+                        {m.l}
+                      </Button>
+                    ))}
+                  </Box>
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={4}>
-                      <TextField fullWidth size="small" label="Fabric Length (Meters)" name="fabricLength" type="number" value={productForm.fabricLength} onChange={handleProductChange} />
+                    <Grid item xs={6} sm={3}>
+                      <TextField fullWidth size="small" label="Article Number *" name="article_no" value={productForm.article_no} onChange={handleProductChange} placeholder="GR-104" />
                     </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <TextField fullWidth size="small" label="Fabric Type" name="fabric_type" value={productForm.fabric_type} onChange={handleProductChange} placeholder="Cotton, Lawn, Silk, Wool" />
+                    <Grid item xs={6} sm={3}>
+                      <TextField fullWidth size="small" label="Fabric / Material" name="fabric_type" value={productForm.fabric_type} onChange={handleProductChange} placeholder="Wash & Wear, Lawn, Boski" />
                     </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <TextField fullWidth size="small" label="Color / Shade" name="fabric_color" value={productForm.fabric_color} onChange={handleProductChange} />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField fullWidth size="small" label="Size (S, M, L, XL, Free Size)" name="fabric_size" value={productForm.fabric_size} onChange={handleProductChange} />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid item xs={6} sm={3}>
                       <FormControl fullWidth size="small">
-                        <InputLabel>Stitch Type</InputLabel>
-                        <Select name="stitch_type" value={productForm.stitch_type} onChange={handleProductChange} label="Stitch Type">
-                          <MenuItem value="">None</MenuItem>
-                          <MenuItem value="stitch">Stitched</MenuItem>
-                          <MenuItem value="unstitch">Unstitched</MenuItem>
-                          <MenuItem value="both">Both</MenuItem>
+                        <InputLabel>Season</InputLabel>
+                        <Select name="season" value={productForm.season} onChange={handleProductChange} label="Season">
+                          <MenuItem value="">—</MenuItem>
+                          <MenuItem value="Summer">Summer</MenuItem>
+                          <MenuItem value="Winter">Winter</MenuItem>
+                          <MenuItem value="Festive">Festive</MenuItem>
+                          <MenuItem value="All-Season">All-Season</MenuItem>
                         </Select>
                       </FormControl>
                     </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <TextField fullWidth size="small" label="Rack / Shelf Location" name="rack_location" value={productForm.rack_location} onChange={handleProductChange} placeholder="Rack A - Shelf 4" />
+                    </Grid>
+                    {productForm.garment_mode !== 'THAAN_FABRIC' && (
+                      <>
+                        <Grid item xs={6} sm={3}>
+                          <TextField fullWidth size="small" label="Color / Shade" name="fabric_color" value={productForm.fabric_color} onChange={handleProductChange} />
+                        </Grid>
+                        <Grid item xs={6} sm={3}>
+                          <TextField fullWidth size="small" label="Minimum Sale Price (bottom rate)" name="minSalePrice" type="number" value={productForm.minSalePrice} onChange={handleProductChange} />
+                        </Grid>
+                      </>
+                    )}
                   </Grid>
                 </Paper>
+
+                {productForm.garment_mode === 'THAAN_FABRIC' && !editingProduct && (
+                  <ThaanFabricForm
+                    color={productForm.thaan_color}
+                    onColorChange={(v) => setProductForm(prev => ({ ...prev, thaan_color: v }))}
+                    costPerMeter={productForm.thaanCostPerM}
+                    salePerMeter={productForm.thaanSalePerM}
+                    minPerMeter={productForm.thaanMinPerM}
+                    onPriceChange={handleThaanPrice}
+                    onChange={handleThaanData}
+                  />
+                )}
+
+                {productForm.garment_mode === 'READYMADE_STITCHED' && !editingProduct && (
+                  <ReadymadeMatrix
+                    articleNo={productForm.article_no}
+                    purchasePrice={productForm.costPrice}
+                    salePrice={productForm.retailPrice}
+                    minPrice={productForm.minSalePrice}
+                    onChange={handleReadymadeVariants}
+                  />
+                )}
+
+                {productForm.garment_mode === 'BOX_SUIT' && (
+                  <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #e9d5ff', bgcolor: '#faf5ff', mt: 2 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Box Suit: har box = 1 suit. Quantity neeche stock field mein boxes ki tadaad likhein.
+                    </Typography>
+                  </Paper>
+                )}
+                </>
               )}
 
               {dialogProductType === 'grocery' && (

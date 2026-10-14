@@ -7,8 +7,8 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Box, Paper, Typography, TextField, Button, Chip, Switch,
   FormControlLabel, Grid, IconButton, Tooltip, Divider, Alert,
-} from '@mui/material';
-import { Add, Delete, GridOn } from '@mui/icons-material';
+} from '../ui/tailwind-mui';
+import { Add, Delete } from '../ui/icons';
 import { applyCartonAssortment, formatShoeStock } from '../../utils/stockFormat';
 
 const SIZE_PRESETS = {
@@ -177,7 +177,6 @@ export default function ShoeVariantMatrix({
   return (
     <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #cbd5e1', bgcolor: '#f8fafc', mt: 2 }}>
       <Typography variant="subtitle2" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-        <GridOn fontSize="small" color="primary" />
         Color × Size Variant Matrix
       </Typography>
 
