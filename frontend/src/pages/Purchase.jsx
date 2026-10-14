@@ -731,6 +731,7 @@ export default function PurchasePage() {
     if (variant) {
       setCurrentItem(prev => ({
         ...prev,
+        product_id: variant.product_id || prev.product_id || null,
         product_variant_id: variant.id,
         product_name: variant.product_name || variant.name || '',
         sku: variant.sku || '',
@@ -784,6 +785,7 @@ export default function PurchasePage() {
         // IMPORTANT: State update async hota hai, isliye direct values use karo
         setCurrentItem(prev => ({
           ...prev,
+          product_id: matchedProduct.product_id || prev.product_id || null,
           product_variant_id: matchedProduct.id,
           product_name: matchedProduct.product_name || matchedProduct.name || '',
           sku: matchedProduct.sku || '',
@@ -810,13 +812,25 @@ export default function PurchasePage() {
     const subtotal = qty * price;
     const tax = subtotal * (Number(currentItem.tax_percentage) || 0) / 100;
     const total = subtotal + tax;
-    
+
+    // Resolve product_id from every available source (bulletproof)
+    const resolvedVariant = matchedProduct
+      || products.find(p => p.id == variantId)
+      || selectedVariant
+      || null;
+    const resolvedProductId = resolvedVariant?.product_id || currentItem.product_id || null;
+    const resolvedName = resolvedVariant?.product_name || resolvedVariant?.name || currentItem.product_name || '';
+    if (!resolvedProductId) {
+      setSnackbar({ open: true, message: 'Product ki ID nahi mili — dobara dropdown se select karein!', severity: 'error' });
+      return;
+    }
+
     setItems(prev => [...prev, {
       ...currentItem,
-      product_id: matchedProduct?.product_id || currentItem.product_id || null,
+      product_id: resolvedProductId,
       product_variant_id: variantId,
-      product_name: matchedProduct?.product_name || matchedProduct?.name || currentItem.product_name || '',
-      sku: matchedProduct?.sku || currentItem.sku || '',
+      product_name: resolvedName,
+      sku: resolvedVariant?.sku || currentItem.sku || '',
       quantity: qty,
       purchase_price: price,
       total: total,
