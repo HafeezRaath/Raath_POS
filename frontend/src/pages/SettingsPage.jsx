@@ -3647,6 +3647,10 @@ export default function SettingsPage({ initialTab } = {}) {
         anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }}
         sx={{ mb: isMobile ? 8 : 0 }}
       >
+        <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
 
       {/* DELETE CONFIRM DIALOG (replaces window.confirm which hangs browsers) */}
       <Dialog open={deleteConfirm.open} onClose={() => setDeleteConfirm({ open: false, type: null, id: null, role: null })} maxWidth="xs" fullWidth>
@@ -3663,10 +3667,6 @@ export default function SettingsPage({ initialTab } = {}) {
           <Button onClick={confirmDeleteDialog} color="error" variant="contained">Delete</Button>
         </DialogActions>
       </Dialog>
-        <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }
