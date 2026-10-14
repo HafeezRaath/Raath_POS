@@ -29,6 +29,7 @@ import { printReceiptDirect, getEffectiveReceiptSettings, getEffectiveShopProfil
 import WeightCalculatorDialog from '../components/common/WeightCalculatorDialog';
 import RollCalculatorDialog from '../components/common/RollCalculatorDialog';
 import { ArticlePickerModal, SizeExchangeModal } from '../components/shoes/ShoePickModals';
+import UniformSizePicker from '../components/bookshop/UniformSizePicker';
 import ThaanMeterModal from '../components/garments/ThaanMeterModal';
 import ImeiPickerModal from '../components/mobile/ImeiPickerModal';
 
@@ -1070,6 +1071,35 @@ export default function BillingPage() {
   const [searchResults, setSearchResults] = useState([]);
   // Shoes vertical: article picker + size exchange modals
   const [articlePicker, setArticlePicker] = useState(null);
+  const [uniformPicker, setUniformPicker] = useState(null);
+  const [bundles, setBundles] = useState([]);
+
+  // BOOKSHOP: add class bundle line to cart
+  const addBundleToCart = useCallback((bundle) => {
+    const price = Number(bundle.bundle_price) || 0;
+    setCart(prev => [...prev, {
+      id: `bundle-${bundle.id}-${Date.now()}`,
+      bundleId: bundle.id,
+      is_bundle: true,
+      variantId: null,
+      productId: null,
+      name: `📚 ${bundle.name}`,
+      product_name: bundle.name,
+      sku: bundle.barcode || bundle.sku || '',
+      unit: 'set',
+      qty: 1,
+      price, total: price,
+      discount: 0, discountType: 'percent',
+      stock: 999,
+      isOfferItem: false, offerName: null,
+      originalPrice: price,
+      costPrice: 0,
+      minPrice: 0,
+      selectedSellUnit: 'set',
+    }]);
+    showSnackbar(`Bundle added: ${bundle.name}`, 'success');
+    setSearchQuery(''); setSearchResults([]);
+  }, [showSnackbar]);
   const [showExchangeModal, setShowExchangeModal] = useState(false);
   // Garments vertical: thaan meter modal
   const [thaanModal, setThaanModal] = useState({ open: false, product: null });
@@ -1392,6 +1422,11 @@ export default function BillingPage() {
       setCategories(cats || []);
       setOffers(offs || []);
       setAccounts(accs || []);
+      // BOOKSHOP: class bundles for POS one-click scan
+      try {
+        const br = await api.get('/bundles?active=1');
+        setBundles(br.data?.data || []);
+      } catch (e) { /* bundles table may not exist yet */ }
     } catch (err) {
       console.error("Data loading failed:", err);
     }
@@ -1502,11 +1537,16 @@ useEffect(() => {
     try {
       meta = typeof product.metadata === 'string' ? JSON.parse(product.metadata) : (product.metadata || {});
     } catch (e) {}
+    // ProductsPage saves packaging into description JSON — merge as fallback
+    try {
+      const d = typeof product.description === 'string' ? JSON.parse(product.description) : (product.description || {});
+      meta = { ...d, ...meta };
+    } catch (e) {}
 
-    const boxesPerCarton = Number(product.boxes_per_carton || meta.packaging?.boxes_per_carton || 1);
-    const piecesPerBox = Number(product.pieces_per_box || meta.packaging?.pieces_per_box || 1);
-    const cartonPrice = Number(product.carton_price || meta.packaging?.carton_price || 0);
-    const boxPrice = Number(product.box_price || meta.packaging?.box_price || 0);
+    const boxesPerCarton = Number(product.boxes_per_carton || meta.boxes_per_carton || meta.packaging?.boxes_per_carton || 1);
+    const piecesPerBox = Number(product.pieces_per_box || meta.pieces_per_box || meta.units_per_box || meta.packaging?.pieces_per_box || 1);
+    const cartonPrice = Number(product.carton_price || meta.carton_price || meta.packaging?.carton_price || 0);
+    const boxPrice = Number(product.box_price || meta.box_price || meta.packaging?.box_price || 0);
     const hasPackaging = (boxesPerCarton > 1 || piecesPerBox > 1 || cartonPrice > 0 || boxPrice > 0);
 
     const isWeightItem = ['kg', 'gram', 'grams', 'g', 'loose'].includes(unit) ||
@@ -1626,6 +1666,33 @@ useEffect(() => {
       const list = sibs.length > 0 ? sibs : [p];
       if (list.length > 1) {
         setArticlePicker({ article: art, variants: list });
+        setSearchQuery('');
+        setSearchResults([]);
+        return;
+      }
+    }
+    // BOOKSHOP UNIFORM: School + Item -> size picker modal (stock per size badge)
+    const isUniform = (ptype === 'uniform');
+    if (isUniform) {
+      const pname = p.product_name || p.name;
+      const sibs = products.filter(x =>
+        (x.product_type || x.type) === 'uniform' &&
+        (x.product_name || x.name) === pname
+      );
+      const list = sibs.length > 0 ? sibs : [p];
+      if (list.length > 1) {
+        let school = '', itemName = '';
+        try {
+          const d = typeof list[0].description === 'string' ? JSON.parse(list[0].description) : (list[0].description || {});
+          school = d.school || ''; itemName = d.item || '';
+        } catch (e) {}
+        // variant_name format "Shirt - Size 24" -> fallback parse
+        if (!itemName) {
+          const vn = String(list[0].variant_name || '');
+          const m = vn.match(/^(.+?)\s*-\s*Size/i);
+          if (m) itemName = m[1];
+        }
+        setUniformPicker({ school: school || pname, item: itemName || '', variants: list });
         setSearchQuery('');
         setSearchResults([]);
         return;
@@ -2074,6 +2141,7 @@ useEffect(() => {
           : item.qty * multiplier;
 
         return {
+          is_bundle: !!item.is_bundle,
           product_variant_id: item.variantId,
           variant_id: item.variantId,
           product_id: item.productId,
@@ -2110,6 +2178,16 @@ useEffect(() => {
       }
 
       const saleId = result.id || result.lastInsertRowid;
+
+      // BOOKSHOP: bundle component stock deduction
+      const bundleLines = cart.filter(c => c.is_bundle && c.bundleId);
+      for (const bl of bundleLines) {
+        try {
+          await api.post('/bundles/deduct', { bundle_id: bl.bundleId, qty: Number(bl.qty) || 1 });
+        } catch (deductErr) {
+          console.error('[Bundle] deduct failed for', bl.bundleId, deductErr.message);
+        }
+      }
 
       // IMEI: serialized phones IN_STOCK -> SOLD (lifecycle + customer link)
       const serializedItems = cart.filter(c => c.isSerialized && c.deviceImeiId);
@@ -2340,6 +2418,7 @@ useEffect(() => {
           : item.qty * multiplier;
 
         return {
+          is_bundle: !!item.is_bundle,
           product_variant_id: item.variantId,
           variant_id: item.variantId,
           product_id: item.productId,
@@ -2376,6 +2455,14 @@ useEffect(() => {
       }
 
       const saleId = result.id || result.lastInsertRowid;
+
+      // BOOKSHOP: bundle component stock deduction (second sale flow)
+      try {
+        const bundleLines2 = cart.filter(c => c.is_bundle && c.bundleId);
+        for (const bl of bundleLines2) {
+          await api.post('/bundles/deduct', { bundle_id: bl.bundleId, qty: Number(bl.qty) || 1 });
+        }
+      } catch (deductErr) { console.error('[Bundle] deduct failed', deductErr.message); }
 
       // IMEI: serialized phones IN_STOCK -> SOLD (lifecycle + customer link)
       try {
@@ -2978,6 +3065,9 @@ useEffect(() => {
           return;
         }
         const norm = (v) => String(v ?? '').toLowerCase().trim();
+        // BOOKSHOP: bundle barcode scan -> one-click class set
+        const bundleHit = bundles.find(b => String(b.barcode || '').trim() !== '' && String(b.barcode).trim() === q);
+        if (bundleHit) { addBundleToCart(bundleHit); return; }
         const exact = products.find(p =>
           (p.barcode || p.bar_code || '').toString().trim() === q ||
           norm(p.sku || p.sku_code) === norm(q)
@@ -4299,6 +4389,16 @@ sx={{ width: 85 }}
         variants={articlePicker?.variants || []}
         onClose={() => setArticlePicker(null)}
         onPick={(v) => { setArticlePicker(null); addToCart(v, 0); }}
+      />
+
+      {/* Bookshop: Uniform -> Size picker */}
+      <UniformSizePicker
+        open={!!uniformPicker}
+        school={uniformPicker?.school || ''}
+        item={uniformPicker?.item || ''}
+        variants={uniformPicker?.variants || []}
+        onClose={() => setUniformPicker(null)}
+        onPick={(v) => { setUniformPicker(null); addToCart(v, 0); }}
       />
 
       {/* Shoes: Size Exchange (wapis +1 / naya -1) */}

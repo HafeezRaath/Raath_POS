@@ -30,7 +30,7 @@ const TENANT_TABLES = [
   'emi_documents', 'emi_guarantors', 'emi_payments', 'emi_penalty_rules',
   'emi_records', 'emi_reschedule_log', 'emi_schedule', 'emi_visit_log',
   'emis', 'expense_categories', 'expenses', 'fbr_invoices', 'general_ledger',
-  'offer_items', 'offers', 'payments', 'product_batches', 'product_serialized_items',
+  'offer_items', 'offers', 'payments', 'product_batches', 'bundle_items', 'bundles', 'product_serialized_items',
   'product_variants', 'products', 'purchase_items', 'purchase_order_items',
   'purchase_orders', 'purchase_return_items',
   'purchase_returns', 'purchases', 'sale_items', 'sale_return_items',
@@ -198,6 +198,7 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'product_variants', '`stock` DECIMAL(12,3) DEFAULT 0');
     await addColumnIfMissing(connection, 'product_variants', '`stock_alert_quantity` DECIMAL(12,3) DEFAULT 5');
     await addColumnIfMissing(connection, 'product_variants', '`image_url` LONGTEXT');
+    await addColumnIfMissing(connection, 'product_variants', '`description` LONGTEXT NULL');
     await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');
 
     await addColumnIfMissing(connection, 'product_serialized_items', '`product_variant_id` INT NULL');
@@ -259,6 +260,36 @@ async function initializeDatabase() {
         INDEX idx_pb_variant (\`variant_id\`),
         INDEX idx_pb_expiry (\`expiry_date\`),
         INDEX idx_pb_tenant (\`tenant_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // Bookshop: class bundles (idempotent)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`bundles\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`tenant_id\` VARCHAR(50) NOT NULL DEFAULT 'tenant_default',
+        \`name\` VARCHAR(200) NOT NULL,
+        \`class_name\` VARCHAR(100) NULL,
+        \`sku\` VARCHAR(100) NULL,
+        \`barcode\` VARCHAR(100) NULL,
+        \`bundle_price\` DECIMAL(15,2) NOT NULL DEFAULT 0,
+        \`is_active\` TINYINT(1) NOT NULL DEFAULT 1,
+        \`notes\` TEXT NULL,
+        \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        \`updated_at\` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_bundles_tenant (\`tenant_id\`),
+        INDEX idx_bundles_barcode (\`tenant_id\`, \`barcode\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`bundle_items\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`bundle_id\` INT NOT NULL,
+        \`product_variant_id\` INT NOT NULL,
+        \`qty\` INT NOT NULL DEFAULT 1,
+        \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_bi_bundle (\`bundle_id\`),
+        INDEX idx_bi_variant (\`product_variant_id\`)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 

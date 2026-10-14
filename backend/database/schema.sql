@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS `product_variants` (
   `color` VARCHAR(80) NULL,
   `size` VARCHAR(40) NULL,
   `image_url` LONGTEXT,
+  `description` LONGTEXT NULL,
   `is_deleted` TINYINT(1) DEFAULT 0,
   `deleted_at` DATETIME NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1478,3 +1479,32 @@ CREATE TABLE IF NOT EXISTS `supplier_credit_notes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ============================================================
+-- Bookshop: Class bundles (e.g. "Class 5 Complete Set")
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `bundles` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` INT NOT NULL,
+  `name` VARCHAR(200) NOT NULL,
+  `class_name` VARCHAR(100) NULL,
+  `sku` VARCHAR(100) NULL,
+  `barcode` VARCHAR(100) NULL,
+  `bundle_price` DECIMAL(15,2) NOT NULL DEFAULT 0,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `notes` TEXT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY `idx_bundles_tenant` (`tenant_id`),
+  UNIQUE KEY `uq_bundles_barcode_tenant` (`tenant_id`, `barcode`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `bundle_items` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `bundle_id` INT NOT NULL,
+  `product_variant_id` INT NOT NULL,
+  `qty` INT NOT NULL DEFAULT 1,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  KEY `idx_bi_bundle` (`bundle_id`),
+  KEY `idx_bi_variant` (`product_variant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

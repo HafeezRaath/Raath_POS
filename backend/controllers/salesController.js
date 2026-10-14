@@ -147,8 +147,9 @@ exports.createSale = async (req, res, next) => {
 
       // 2. Insert items & deduct inventory
       for (const item of rawItems) {
-        const prodId = item.product_id || item.productId || item.id;
-        const variantId = item.product_variant_id || item.variant_id || item.variantId || null;
+        const isBundle = !!(item.is_bundle || item.isBundle);
+        const prodId = isBundle ? null : (item.product_id || item.productId || item.id);
+        const variantId = isBundle ? null : (item.product_variant_id || item.variant_id || item.variantId || null);
         const qty = parseFloat(item.quantity !== undefined ? item.quantity : (item.qty || 1)) || 1;
         const deductQty = parseFloat(item.deduct_quantity !== undefined ? item.deduct_quantity : (item.deductQty !== undefined ? item.deductQty : qty)) || qty;
         const price = parseFloat(item.price !== undefined ? item.price : (item.unit_price || item.sale_price || 0)) || 0;

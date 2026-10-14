@@ -154,3 +154,43 @@ export function gramsToAmount(grams, pricePerKg) {
   if (g <= 0 || ppkg <= 0) return 0;
   return +((g / 1000) * ppkg).toFixed(0);
 }
+
+/**
+ * Stationery 3-level: stock stored as integer totalPieces (smallest unit).
+ * boxesPerCarton x piecesPerBox => unitsPerCarton.
+ * Display: "1 Carton | 7 Boxes | 17 Pencils (537 Total)" — no decimals.
+ */
+export function unitsPerCarton(boxesPerCarton, piecesPerBox) {
+  const bpc = Math.max(1, parseInt(boxesPerCarton) || 1);
+  const ppb = Math.max(1, parseInt(piecesPerBox) || 1);
+  return bpc * ppb;
+}
+
+/** Stock-in calculator: cartons + boxes + loose -> exact total pieces (Int) */
+export function stationeryToPieces(cartons, boxesPerCarton, piecesPerBox, boxes, loosePieces) {
+  const upc = unitsPerCarton(boxesPerCarton, piecesPerBox);
+  const ppb = Math.max(1, parseInt(piecesPerBox) || 1);
+  return (parseInt(cartons) || 0) * upc + (parseInt(boxes) || 0) * ppb + (parseInt(loosePieces) || 0);
+}
+
+/** Strict display: integer division + remainders. Returns breakdown object. */
+export function stationeryBreakdown(totalPieces, boxesPerCarton, piecesPerBox) {
+  const total = Math.max(0, parseInt(totalPieces) || 0);
+  const ppb = Math.max(1, parseInt(piecesPerBox) || 1);
+  const upc = unitsPerCarton(boxesPerCarton, piecesPerBox);
+  const cartons = Math.floor(total / upc);
+  const remAfterCartons = total % upc;
+  const boxes = Math.floor(remAfterCartons / ppb);
+  const loosePieces = remAfterCartons % ppb;
+  return { cartons, boxes, loosePieces, total, unitsPerCarton: upc };
+}
+
+/** "1 Carton | 7 Boxes | 17 Pencils (537 Total)" */
+export function formatStationeryStock(totalPieces, boxesPerCarton, piecesPerBox, pieceLabel = 'Pieces') {
+  const { cartons, boxes, loosePieces, total } = stationeryBreakdown(totalPieces, boxesPerCarton, piecesPerBox);
+  const parts = [];
+  if (cartons > 0) parts.push(`${cartons} Carton${cartons > 1 ? 's' : ''}`);
+  if (boxes > 0) parts.push(`${boxes} Box${boxes > 1 ? 'es' : ''}`);
+  if (loosePieces > 0 || parts.length === 0) parts.push(`${loosePieces} ${pieceLabel}`);
+  return `${parts.join(' | ')} (${total} Total)`;
+}

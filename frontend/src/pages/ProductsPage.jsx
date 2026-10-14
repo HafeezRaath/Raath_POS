@@ -23,7 +23,7 @@ import {
   MedicalServices, ShoppingBag, BakeryDining, Agriculture,
   Storefront, Devices, Medication, Branding, Label, Checkroom,
   Inventory2, AutoAwesome, Print, Settings, QrCodeScanner,
-  PictureAsPdf, LocalPrintshop
+  PictureAsPdf, LocalPrintshop, MenuBook
 } from '../components/ui/icons';
 import { createWorker } from 'tesseract.js';
 import * as XLSX from 'xlsx';
@@ -43,7 +43,10 @@ import BatchManager from '../components/grocery/BatchManager';
 import PharmacyModeForm from '../components/pharmacy/PharmacyModeForm';
 import BulkImeiForm from '../components/mobile/BulkImeiForm';
 import ImeiLookupModal from '../components/mobile/ImeiLookupModal';
-import { formatShoeStock, formatThaanStock, formatKurtaStock, formatLooseWeightStock, formatPharmacyStock } from '../utils/stockFormat';
+import { formatShoeStock, formatThaanStock, formatKurtaStock, formatLooseWeightStock, formatPharmacyStock, formatStationeryStock } from '../utils/stockFormat';
+import StationeryModeForm from '../components/bookshop/StationeryModeForm';
+import UniformSizeMatrix from '../components/bookshop/UniformSizeMatrix';
+import BundleManager from '../components/bookshop/BundleManager';
 
 // ==================== CONSTANTS ====================
 const PRODUCT_TYPES = [
@@ -55,6 +58,9 @@ const PRODUCT_TYPES = [
   { value: 'shoes', label: 'Shoes / Footwear', icon: <Checkroom fontSize="small" /> },
   { value: 'bakery', label: 'Bakery', icon: <BakeryDining fontSize="small" /> },
   { value: 'wholesale', label: 'Wholesale / Distributor', icon: <Storefront fontSize="small" /> },
+  { value: 'stationery', label: 'Stationery (Carton/Box/Piece)', icon: <Inventory fontSize="small" /> },
+  { value: 'uniform', label: 'School Uniform (Size Matrix)', icon: <Checkroom fontSize="small" /> },
+  { value: 'books', label: 'Books / Class Sets', icon: <MenuBook fontSize="small" /> },
 ];
 
 const UNITS_BY_TYPE = {
@@ -322,6 +328,18 @@ const [copies, setCopies] = useState(1);
   const [thaanData, setThaanData] = useState(null);
   const handleThaanData = useCallback((d) => setThaanData(d), []);
   const [readymadeVariants, setReadymadeVariants] = useState([]);
+  // Bookshop vertical: stationery 3-level + uniforms size matrix + bundles
+  const [stationeryData, setStationeryData] = useState(null);
+  const handleStationeryData = useCallback((d) => setStationeryData(d), []);
+  const [uniformSchool, setUniformSchool] = useState('');
+  const [uniformItem, setUniformItem] = useState('Shirt');
+  const [uniformVariants, setUniformVariants] = useState([]);
+  const [uniformTotalQty, setUniformTotalQty] = useState(0);
+  const handleUniformVariants = useCallback((v, total) => { setUniformVariants(v); setUniformTotalQty(total || 0); }, []);
+  const [bundleManagerOpen, setBundleManagerOpen] = useState(false);
+  const [bookClass, setBookClass] = useState('');
+  const [bookSubject, setBookSubject] = useState('');
+  const [bookPublisher, setBookPublisher] = useState('');
   const [readymadeBoxInfo, setReadymadeBoxInfo] = useState(null);
   const handleReadymadeVariants = useCallback((v, info) => { setReadymadeVariants(v); setReadymadeBoxInfo(info || null); }, []);
   const handleThaanPrice = useCallback((field, val) => {
@@ -465,7 +483,13 @@ const [copies, setCopies] = useState(1);
           strips_per_box: meta.strips_per_box || 0,
           units_per_strip: meta.units_per_strip || 0,
           cold_chain: !!meta.cold_chain,
-          rx_required: !!meta.rx_required
+          rx_required: !!meta.rx_required,
+          stationery_mode: meta.stationery_mode || '',
+          boxes_per_carton: meta.boxes_per_carton || 0,
+          pieces_per_box: meta.pieces_per_box || meta.units_per_box || 0,
+          book_class: meta.book_class || '',
+          book_subject: meta.book_subject || '',
+          book_publisher: meta.book_publisher || ''
         };
       });
       
@@ -583,6 +607,10 @@ const [copies, setCopies] = useState(1);
     }
     if (ptype === 'shoes' && parent.pairs_per_carton > 0) {
       return <Typography fontWeight="bold" color={color}>{formatShoeStock(totalStock, parent.pairs_per_carton)}</Typography>;
+    }
+    if (ptype === 'stationery' && (parent.boxes_per_carton > 0 || parent.pieces_per_box > 0)) {
+      const label = (parent.product_name || parent.name || 'Pcs').split(' ').slice(-1)[0] + 's';
+      return <Typography fontWeight="bold" color={color}>{formatStationeryStock(totalStock, parent.boxes_per_carton, parent.pieces_per_box, label)}</Typography>;
     }
     if ((ptype === 'fabric' || ptype === 'cloth') && parent.garment_mode === 'THAAN_FABRIC') {
       const fmt = formatThaanStock(totalStock, parent.thaan_suit_meters || 4);
@@ -1387,6 +1415,10 @@ const [copies, setCopies] = useState(1);
     setShoeVariants([]);
     setThaanData(null);
     setReadymadeVariants([]);
+    setStationeryData(null);
+    setUniformSchool(''); setUniformItem('Shirt');
+    setUniformVariants([]); setUniformTotalQty(0);
+    setBookClass(''); setBookSubject(''); setBookPublisher('');
     setReadymadeBoxInfo(null);
     setGroceryData(null);
     setBatchProduct(null);
@@ -2026,6 +2058,76 @@ const [copies, setCopies] = useState(1);
         setBoxQuantity('');
         return;
       }
+      // BOOKSHOP UNIFORM: School + Item + Size matrix → 1 product + N size variants (single POST)
+      if (!editingProduct && productForm.type === 'uniform' && uniformVariants.length > 0) {
+        if (!uniformSchool.trim()) {
+          setSnackbar({ open: true, message: 'School Name zaroori hai', severity: 'warning' });
+          return;
+        }
+        const uniPayload = {
+          ...productData,
+          name: `${uniformSchool.trim()} ${uniformItem}`,
+          stock: uniformTotalQty,
+          sku: uniformVariants[0].sku,
+          variants: uniformVariants.map(v => ({
+            variant_name: v.variant_name,
+            sku: v.sku,
+            barcode: v.barcode || v.sku,
+            size: v.size,
+            purchase_price: v.purchase_price,
+            retail_price: v.retail_price,
+            sale_price: v.sale_price,
+            minimum_retail_price: v.minimum_retail_price,
+            stock: v.quantity,
+            current_stock: v.quantity,
+            stock_alert_quantity: v.low_stock_threshold,
+            attributes: v.attributes,
+          })),
+        };
+        await db.addProduct(uniPayload);
+        setSnackbar({ open: true, message: `${uniformSchool} ${uniformItem}: ${uniformVariants.length} sizes, ${uniformTotalQty} pcs saved`, severity: 'success' });
+        await loadData();
+        setProductDialog(false);
+        setEditingProduct(null);
+        resetProductForm();
+        setUniformSchool(''); setUniformItem('Shirt');
+        setUniformVariants([]); setUniformTotalQty(0);
+        return;
+      }
+      // BOOKSHOP STATIONERY: 3-level packing → 1 product, stock in pieces, packaging meta
+      if (!editingProduct && productForm.type === 'stationery' && stationeryData) {
+        const sd = stationeryData;
+        meta.is_stationery = true;
+        meta.stationery_mode = 'THREE_LEVEL';
+        meta.boxes_per_carton = sd.boxesPerCarton;
+        meta.pieces_per_box = sd.piecesPerBox;
+        meta.units_per_box = sd.piecesPerBox;
+        meta.box_price = sd.boxPrice;
+        meta.carton_price = sd.cartonPrice;
+        meta.piece_price = sd.piecePrice;
+        meta.is_carton_product = sd.boxesPerCarton > 1;
+        meta.is_box_product = sd.piecesPerBox > 1;
+        productData.description = JSON.stringify(meta);
+        productData.stock = sd.stockPieces;
+        productData.unit = 'Piece';
+        if (sd.piecePrice > 0) productData.retail_price = sd.piecePrice;
+        await db.addProduct(productData);
+        setSnackbar({ open: true, message: `Stationery saved: ${formatStationeryStock(sd.stockPieces, sd.boxesPerCarton, sd.piecesPerBox, productData.name.split(' ').slice(-1)[0] || 'Pcs')}`, severity: 'success' });
+        await loadData();
+        setProductDialog(false);
+        setEditingProduct(null);
+        resetProductForm();
+        setStationeryData(null);
+        return;
+      }
+      // BOOKSHOP BOOKS: class/subject/publisher meta → standard product
+      if (productForm.type === 'books' && (bookClass || bookSubject || bookPublisher)) {
+        meta.is_book = true;
+        meta.book_class = bookClass;
+        meta.book_subject = bookSubject;
+        meta.book_publisher = bookPublisher;
+        productData.description = JSON.stringify(meta);
+      }
       // GROCERY PACKED: quick price variants → 1 product + N variants
       if (!editingProduct && isGroceryNew && groceryData.mode === 'PACKED_UNIT' && groceryData.quickVariants.length > 0) {
         const qv = groceryData.quickVariants;
@@ -2572,6 +2674,10 @@ const [copies, setCopies] = useState(1);
 </Button>
           <Button variant="outlined" size="small" startIcon={<Scale />} onClick={() => setUnitDialog(true)}>
             {isMobile ? 'Units' : 'Units'}
+          </Button>
+          <Button variant="outlined" size="small" startIcon={<MenuBook />} onClick={() => setBundleManagerOpen(true)}
+            sx={{ borderColor: '#7c3aed', color: '#7c3aed' }}>
+            {isMobile ? 'Bundles' : '📚 Bundles'}
           </Button>
           {can('inventory', 'add') && (
             <Button variant="contained" size="small" startIcon={<Add />} onClick={() => handleOpenProduct()}>
@@ -3959,6 +4065,70 @@ const [copies, setCopies] = useState(1);
                 </Grid>
               </Paper>
 
+              {/* ============ BOOKSHOP: STATIONERY 3-LEVEL ============ */}
+              {dialogProductType === 'stationery' && !editingProduct && (
+                <StationeryModeForm
+                  pieceLabel={productForm.name ? `${productForm.name.split(' ').slice(-1)[0]}s` : 'Pieces'}
+                  onChange={handleStationeryData}
+                />
+              )}
+
+              {/* ============ BOOKSHOP: UNIFORM SIZE MATRIX ============ */}
+              {dialogProductType === 'uniform' && !editingProduct && (
+                <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #7dd3fc', bgcolor: '#f0f9ff' }}>
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1.5 }}>
+                    🏫 School Uniform Setup
+                  </Typography>
+                  <Grid container spacing={2} sx={{ mb: 1.5 }}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField fullWidth size="small" label="School Name *" value={uniformSchool}
+                        onChange={(e) => setUniformSchool(e.target.value)} placeholder="The City School" />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Item</InputLabel>
+                        <Select value={uniformItem} onChange={(e) => setUniformItem(e.target.value)} label="Item">
+                          {['Shirt', 'Trouser', 'Blazer', 'Sweater', 'Tie', 'Belt', 'Socks', 'Frock', 'Dupatta', 'Cap'].map(i => (
+                            <MenuItem key={i} value={i}>{i}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </Grid>
+                  <UniformSizeMatrix
+                    schoolName={uniformSchool}
+                    itemName={uniformItem}
+                    purchasePrice={productForm.costPrice}
+                    salePrice={productForm.retailPrice}
+                    minPrice={productForm.minSalePrice}
+                    onChange={handleUniformVariants}
+                  />
+                </Paper>
+              )}
+
+              {/* ============ BOOKSHOP: BOOKS ============ */}
+              {dialogProductType === 'books' && (
+                <Paper sx={{ p: 2, borderRadius: 3, border: '1px solid #c4b5fd', bgcolor: '#faf5ff' }}>
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1.5 }}>
+                    📖 Book Details
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={4}>
+                      <TextField fullWidth size="small" label="Class" value={bookClass}
+                        onChange={(e) => setBookClass(e.target.value)} placeholder="Class 5" />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <TextField fullWidth size="small" label="Subject" value={bookSubject}
+                        onChange={(e) => setBookSubject(e.target.value)} placeholder="Mathematics" />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <TextField fullWidth size="small" label="Publisher" value={bookPublisher}
+                        onChange={(e) => setBookPublisher(e.target.value)} placeholder="Oxford" />
+                    </Grid>
+                  </Grid>
+                </Paper>
+              )}
+
             </Stack>
           </DialogContent>
 
@@ -4484,6 +4654,9 @@ const [copies, setCopies] = useState(1);
 
       {/* IMEI history lookup */}
       <ImeiLookupModal open={imeiLookupOpen} onClose={() => setImeiLookupOpen(false)} />
+
+      {/* Bookshop: class bundles */}
+      <BundleManager open={bundleManagerOpen} onClose={() => setBundleManagerOpen(false)} />
 
       {/* SNACKBAR */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }} sx={{ mb: isMobile ? 8 : 0 }}>

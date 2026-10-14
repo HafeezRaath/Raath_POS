@@ -95,9 +95,11 @@ exports.createProduct = async (req, res, next) => {
           const vBuy = v.purchase_price !== undefined ? v.purchase_price : purchase_price;
           const vSale = v.sale_price !== undefined ? v.sale_price : (v.retail_price !== undefined ? v.retail_price : (sale_price || retail_price));
           const vStock = v.stock !== undefined ? v.stock : (v.current_stock !== undefined ? v.current_stock : stock);
+          const vDesc = v.attributes ? JSON.stringify(v.attributes)
+            : (v.description ? (typeof v.description === 'string' ? v.description : JSON.stringify(v.description)) : null);
           const [vRes] = await conn.query(
-            `INSERT INTO product_variants (tenant_id, product_id, variant_name, name, sku, barcode, purchase_price, retail_price, sale_price, current_stock, stock, article_no, color, size)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO product_variants (tenant_id, product_id, variant_name, name, sku, barcode, purchase_price, retail_price, sale_price, current_stock, stock, article_no, color, size, description)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               tenantId,
               productId,
@@ -112,7 +114,8 @@ exports.createProduct = async (req, res, next) => {
               vStock,
               v.article_no || article_no || null,
               v.color || null,
-              v.size || null
+              v.size || null,
+              vDesc
             ]
           );
           if (!defaultVariantId) defaultVariantId = vRes.insertId;
