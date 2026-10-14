@@ -1198,8 +1198,18 @@ class DatabaseClient {
     };
   }
 
-  async adjustAccountBalance(id, delta) {
-    return this.query('UPDATE accounts SET current_balance = current_balance + ? WHERE id = ?', [delta, id]);
+  async adjustAccountBalance(data) {
+    // data: { account_id, new_balance, reason, date }
+    // Web mode: use backend API. Electron/IDB fallback: direct SQL.
+    if (!window?.electronAPI) {
+      const res = await api.post('/accounts/adjust', data);
+      return res.data;
+    }
+    const { account_id, new_balance } = data;
+    const rows = await this.query('SELECT current_balance FROM accounts WHERE id = ?', [account_id]);
+    const current = Number(rows?.[0]?.current_balance) || 0;
+    const delta = Number(new_balance) - current;
+    return this.query('UPDATE accounts SET current_balance = current_balance + ? WHERE id = ?', [delta, account_id]);
   }
 
   async deductFromAccount(id, amount) {

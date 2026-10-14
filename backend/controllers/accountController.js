@@ -196,3 +196,36 @@ exports.createTransaction = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.adjustBalance = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { account_id, new_balance, reason, date } = req.body;
+    if (!account_id) return res.status(400).json({ success: false, error: 'account_id required' });
+    const target = Number(new_balance);
+    if (!Number.isFinite(target)) return res.status(400).json({ success: false, error: 'Valid new_balance required' });
+
+    const [rows] = await query('SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, account_id]);
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Account not found' });
+    const current = Number(rows[0].current_balance) || 0;
+    const delta = target - current;
+    if (delta === 0) return res.json({ success: true, message: 'No change needed', data: { delta: 0 } });
+
+    const txType = delta > 0 ? 'credit' : 'debit';
+    const txAmount = Math.abs(delta);
+    const txDate = date || new Date().toISOString().slice(0, 10);
+
+    await transaction(async (conn) => {
+      await conn.query('UPDATE accounts SET current_balance = ? WHERE tenant_id = ? AND id = ?', [target, tenantId, account_id]);
+      await conn.query(
+        `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, date)
+         VALUES (?, ?, ?, ?, ?, ?, 'adjustment', ?)`,
+        [tenantId, account_id, txType, txAmount, target, reason || 'Manual balance adjustment', txDate]
+      );
+    });
+
+    res.json({ success: true, message: 'Balance adjusted!', data: { delta } });
+  } catch (error) {
+    next(error);
+  }
+};

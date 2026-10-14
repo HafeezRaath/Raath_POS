@@ -10,6 +10,7 @@ router.get('/', accountController.getAccounts);
 router.get('/transactions', accountController.getTransactions);
 router.post('/transactions', accountController.createTransaction);
 router.post('/transfer', accountController.transferFunds);
+router.post('/adjust', accountController.adjustBalance);
 router.get('/:id/transactions', accountController.getTransactions);
 router.get('/:id', accountController.getAccountById);
 router.post('/', accountController.createAccount);
