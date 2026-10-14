@@ -87,6 +87,9 @@ exports.createProduct = async (req, res, next) => {
       ]);
 
       const productId = insRes.insertId;
+      if (!productId) {
+        throw new Error('Product insert did not return an id (products.id may lack AUTO_INCREMENT).');
+      }
 
       // Handle variants or create default variant
       if (Array.isArray(variants) && variants.length > 0) {

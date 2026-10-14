@@ -228,6 +228,19 @@ async function initializeDatabase() {
         console.log('[InitDB] Fixed bundles.tenant_id -> VARCHAR(50)');
       }
     } catch (e) { /* bundles table may not exist yet */ }
+    // Ensure products.id is AUTO_INCREMENT (live DBs created from older
+    // schemas may lack it, causing insertId=null and broken product saves)
+    try {
+      const [idCols] = await connection.query(
+        `SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'id'`
+      );
+      if (idCols.length > 0 && !String(idCols[0].EXTRA || '').toLowerCase().includes('auto_increment')) {
+        await connection.query(`ALTER TABLE \`products\` MODIFY COLUMN \`id\` INT NOT NULL AUTO_INCREMENT`);
+        console.log('[InitDB] Fixed products.id -> AUTO_INCREMENT');
+      }
+    } catch (e) {
+      console.warn('[InitDB] products.id auto_increment check skipped: ' + e.message);
+    }
     await addColumnIfMissing(connection, 'product_variants', '`deleted_at` DATETIME NULL');
 
     await addColumnIfMissing(connection, 'product_serialized_items', '`product_variant_id` INT NULL');
