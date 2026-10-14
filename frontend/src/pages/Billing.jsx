@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { round2 } from '../utils/money';
 import {
   Box, Paper, Typography, TextField, Button, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, IconButton,
@@ -942,8 +943,8 @@ const SplitPaymentDialog = ({
   accounts, 
   grandTotal 
 }) => {
-  const allocated = Object.values(splitPayments).reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0);
-  const remaining = Math.max(0, grandTotal - allocated);
+  const allocated = round2(Object.values(splitPayments).reduce((sum, v) => sum + (parseFloat(v.amount) || 0), 0));
+  const remaining = Math.max(0, round2(grandTotal - allocated));
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -1917,21 +1918,21 @@ useEffect(() => {
     setCart(updated);
   };
 
-  // ---- CALCULATIONS ----
+  // ---- CALCULATIONS (expert-level: every step rounded to paisa) ----
   const calc = useMemo(() => {
-    const subtotal = cart.reduce((sum, item) => sum + (item.qty * (item.originalPrice || item.price)), 0);
-    const itemDiscount = cart.reduce((sum, item) => {
+    const subtotal = round2(cart.reduce((sum, item) => sum + (Number(item.qty) || 0) * (Number(item.originalPrice || item.price) || 0), 0));
+    const itemDiscount = round2(cart.reduce((sum, item) => {
       if (item.discountType === 'amount') {
-        return sum + (item.discountAmount || 0);
+        return sum + (Number(item.discountAmount) || 0);
       } else {
-        const base = item.qty * (item.originalPrice || item.price);
-        return sum + (base * (item.discount || 0) / 100);
+        const base = (Number(item.qty) || 0) * (Number(item.originalPrice || item.price) || 0);
+        return sum + (base * (Number(item.discount) || 0) / 100);
       }
-    }, 0);
+    }, 0));
     
-    const afterItemDisc = subtotal - itemDiscount;
-    const disc = billDiscountType === 'percent' ? (afterItemDisc * (Number(billDiscount) || 0) / 100) : (Number(billDiscount) || 0);
-    const afterBillDisc = Math.max(0, afterItemDisc - disc);
+    const afterItemDisc = round2(subtotal - itemDiscount);
+    const disc = billDiscountType === 'percent' ? round2(afterItemDisc * (Number(billDiscount) || 0) / 100) : round2(Number(billDiscount) || 0);
+    const afterBillDisc = Math.max(0, round2(afterItemDisc - disc));
     
     const fbrConfig = getFBRConfig();
     
@@ -1944,24 +1945,24 @@ useEffect(() => {
     
     setTaxPercent(effectiveTaxRate);
     
-    const tax = afterBillDisc * (effectiveTaxRate / 100);
-    const grandTotal = afterBillDisc + tax;
+    const tax = round2(afterBillDisc * (effectiveTaxRate / 100));
+    const grandTotal = round2(afterBillDisc + tax);
     
     // If not credit mode and paidAmount is empty, default to full payment (grandTotal)
     // If user explicitly entered a value, use that value. If credit mode and empty, default to 0 (due).
     let paid;
     if (paymentMode === 'split') {
-      const totalSplit = Object.values(splitPayments).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+      const totalSplit = round2(Object.values(splitPayments).reduce((s, p) => s + (parseFloat(p.amount) || 0), 0));
       paid = totalSplit;
     } else if (paidAmount === '') {
       paid = paymentMode === 'credit' ? 0 : grandTotal;
     } else {
       const parsed = Number(paidAmount);
-      paid = isNaN(parsed) ? 0 : parsed;
+      paid = isNaN(parsed) ? 0 : round2(parsed);
     }
     
-    const due = Math.max(0, grandTotal - paid);
-    const change = Math.max(0, paid - grandTotal);
+    const due = Math.max(0, round2(grandTotal - paid));
+    const change = Math.max(0, round2(paid - grandTotal));
     
     return {
       subtotal, itemDiscount, billDiscount: disc, tax, grandTotal,

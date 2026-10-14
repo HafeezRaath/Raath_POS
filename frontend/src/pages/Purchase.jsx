@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { round2 } from '../utils/money';
 import {
   Box, Paper, Typography, Button, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle,
@@ -852,11 +853,11 @@ export default function PurchasePage() {
   };
 
   const calculateTotals = useMemo(() => {
-    const subtotal = items.reduce((sum, item) => sum + (item.sub_total || 0), 0);
-    const discount = Number(purchaseForm.discount_amount) || 0;
-    const tax = Number(purchaseForm.tax_amount) || 0;
-    const shipping = Number(purchaseForm.shipping_charges) || 0;
-    const grandTotal = subtotal - discount + tax + shipping;
+    const subtotal = round2(items.reduce((sum, item) => sum + (Number(item.sub_total) || 0), 0));
+    const discount = round2(Number(purchaseForm.discount_amount) || 0);
+    const tax = round2(Number(purchaseForm.tax_amount) || 0);
+    const shipping = round2(Number(purchaseForm.shipping_charges) || 0);
+    const grandTotal = round2(subtotal - discount + tax + shipping);
     return { subtotal, discount, tax, shipping, grandTotal };
   }, [items, purchaseForm.discount_amount, purchaseForm.tax_amount, purchaseForm.shipping_charges]);
 
