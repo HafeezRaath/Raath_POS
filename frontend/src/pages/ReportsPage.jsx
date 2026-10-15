@@ -187,6 +187,7 @@ const MobileForecastCard = ({ item }) => {
             variant="contained" 
             startIcon={<Visibility />} 
             sx={{ flex: 1, bgcolor: '#10b981' }}
+            onClick={() => setExpanded(!expanded)}
           >
             View
           </Button>

@@ -270,7 +270,7 @@ const MobileTrialRow = React.memo(({ acc, expanded, onToggle }) => {
       <TableRow hover onClick={() => onToggle(acc.code)} sx={{ cursor: 'pointer' }}>
         <TableCell>
           <Stack direction="row" alignItems="center" spacing={1}>
-            <IconButton size="small">
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); onToggle(acc.code); }}>
               {isExpanded ? <KeyboardArrowUp fontSize="small" /> : <KeyboardArrowDown fontSize="small" />}
             </IconButton>
             <Box>
@@ -1681,7 +1681,7 @@ export default function AccountsPage() {
                         </Typography>
                       </Stack>
                       <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                        <Button size="small" startIcon={<Visibility />} sx={{ color: '#f59e0b' }}>View Statement</Button>
+                        <Button size="small" startIcon={<Visibility />} sx={{ color: '#f59e0b' }} onClick={(e) => { e.stopPropagation(); openStatement(acc); }}>View Statement</Button>
                       </Box>
                     </CardContent>
                   </Card>

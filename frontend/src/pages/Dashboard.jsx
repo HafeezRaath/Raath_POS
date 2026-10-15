@@ -706,6 +706,7 @@ export default function Dashboard() {
             size="sm" 
             variant="outline" 
             className="text-red-700 border-red-300 bg-white hover:bg-red-50 font-bold shrink-0 self-stretch sm:self-auto text-xs"
+            onClick={(e) => { e.stopPropagation(); navigate('/reports?tab=expiry'); }}
           >
             Open Expiry Report →
           </Button>

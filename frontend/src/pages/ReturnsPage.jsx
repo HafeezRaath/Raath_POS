@@ -759,6 +759,12 @@ export default function ReturnsPage() {
           <Button variant="outlined" size="small" startIcon={<FilterList />} onClick={() => setShowFilters(!showFilters)}>
             {isMobile ? 'Filters' : 'Toggle Filters'}
           </Button>
+          <Button variant="contained" size="small" startIcon={<KeyboardReturn />} sx={{ bgcolor: '#f59e0b', '&:hover': { bgcolor: '#d97706' } }} onClick={() => {
+            setShowFilters(true);
+            setTimeout(() => document.getElementById('returns-sale-search')?.focus(), 100);
+          }}>
+            New Return
+          </Button>
           <Button variant="contained" size="small" sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }} startIcon={<Refresh />} onClick={loadData}>
             {isMobile ? 'Sync' : 'Sync Tables'}
           </Button>
@@ -833,7 +839,7 @@ export default function ReturnsPage() {
               <TextField fullWidth size="small" type="date" label="To" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} InputLabelProps={{ shrink: true }} />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
-              <TextField fullWidth size="small" label="Search Invoice" placeholder="Search invoice..." value={searchInvoice} onChange={(e) => setSearchInvoice(e.target.value)} InputLabelProps={{ shrink: true }} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: '#10b981' }} /> }} />
+              <TextField id="returns-sale-search" fullWidth size="small" label="Search Invoice" placeholder="Search invoice... (then click Return on the sale)" value={searchInvoice} onChange={(e) => setSearchInvoice(e.target.value)} InputLabelProps={{ shrink: true }} InputProps={{ startAdornment: <Search sx={{ mr: 1, color: '#10b981' }} /> }} />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">

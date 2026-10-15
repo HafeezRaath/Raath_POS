@@ -697,7 +697,7 @@ export default function ExpensesPage() {
                     label="Search Expenses"
                     placeholder="Search expenses..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                     inputRef={searchRef}
                     InputLabelProps={{ shrink: true }}
                     InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'text.secondary', fontSize: 20 }} /> }}
@@ -722,7 +722,7 @@ export default function ExpensesPage() {
                 <Grid item xs={6} sm={4} md={2}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Category</InputLabel>
-                    <Select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} label="Category">
+                    <Select value={filterCategory} onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }} label="Category">
                       <MenuItem value="">All Categories</MenuItem>
                       {categories.map(c => (
                         <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
@@ -733,7 +733,7 @@ export default function ExpensesPage() {
                 <Grid item xs={6} sm={4} md={2}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Payment</InputLabel>
-                    <Select value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)} label="Payment">
+                    <Select value={filterPayment} onChange={(e) => { setFilterPayment(e.target.value); setPage(1); }} label="Payment">
                       <MenuItem value="">All Modes</MenuItem>
                       {EXPENSE_PAYMENT_MODES.map(m => (
                         <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>

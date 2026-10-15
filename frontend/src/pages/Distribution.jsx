@@ -132,6 +132,8 @@ export default function SalesmanDistributorModule() {
   const [pendingCommissions, setPendingCommissions] = useState([]);
   const [salesmanBalance, setSalesmanBalance] = useState({ balance: 0, total_debit: 0, total_credit: 0 });
   const [distributorBalance, setDistributorBalance] = useState({ balance: 0, total_debit: 0, total_credit: 0 });
+  const [repayDialog, setRepayDialog] = useState({ open: false, advanceId: null, amount: '' });
+  const [orderStatusDialog, setOrderStatusDialog] = useState({ open: false, orderId: null, status: 'pending' });
 
   // FIXED: Return item selection states (was completely missing)
   const [returnSaleItems, setReturnSaleItems] = useState([]);
@@ -1434,7 +1436,7 @@ export default function SalesmanDistributorModule() {
                                   <TableCell><Chip size="small" label={a.status} color={a.status === 'repaid' ? 'success' : 'warning'} sx={{ height: 18, fontSize: '0.5rem' }} /></TableCell>
                                   <TableCell align="center">
                                     {a.status !== 'repaid' && (
-                                      <Button size="small" variant="outlined" onClick={() => { const amt = prompt('Enter repayment amount:'); if (amt) handleRepayAdvance(a.id, parseFloat(amt)); }}>Repay</Button>
+                                      <Button size="small" variant="outlined" onClick={() => setRepayDialog({ open: true, advanceId: a.id, amount: '' })}>Repay</Button>
                                     )}
                                   </TableCell>
                                 </TableRow>
@@ -1630,12 +1632,7 @@ export default function SalesmanDistributorModule() {
                               }) : setReturnOrderItems([]);
                               setDistributorReturnDialog(true);
                             }}><Restore fontSize="small" /></IconButton></Tooltip>
-                            <Tooltip title="Update Status"><IconButton size="small" color="primary" onClick={() => {
-                              const newStatus = prompt('Enter new status (pending/processing/shipped/delivered/cancelled):');
-                              if (newStatus && ['pending','processing','shipped','delivered','cancelled'].includes(newStatus)) {
-                                db.updateDistributorOrderStatus(order.id, newStatus).then(() => { showSuccess('Status updated!'); loadDistributorData(); });
-                              } else if (newStatus) { showError('Invalid status'); }
-                            }}><Edit fontSize="small" /></IconButton></Tooltip>
+                            <Tooltip title="Update Status"><IconButton size="small" color="primary" onClick={() => setOrderStatusDialog({ open: true, orderId: order.id, status: order.status || 'pending' })}><Edit fontSize="small" /></IconButton></Tooltip>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -2396,6 +2393,43 @@ export default function SalesmanDistributorModule() {
         <DialogActions>
           <Button onClick={() => setSaleDetailDialog(false)}>Close</Button>
           <Button variant="outlined" startIcon={<Print />} onClick={() => window.print()}>Print</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* REPAY ADVANCE DIALOG (replaces native prompt) */}
+      <Dialog open={repayDialog.open} onClose={() => setRepayDialog({ open: false, advanceId: null, amount: '' })} maxWidth="xs" fullWidth>
+        <DialogTitle>Repay Advance</DialogTitle>
+        <DialogContent>
+          <TextField fullWidth label="Repayment Amount (Rs.)" type="number" value={repayDialog.amount}
+            onChange={(e) => setRepayDialog(p => ({ ...p, amount: e.target.value }))} sx={{ mt: 1 }} autoFocus />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRepayDialog({ open: false, advanceId: null, amount: '' })}>Cancel</Button>
+          <Button variant="contained" onClick={() => {
+            const amt = parseFloat(repayDialog.amount);
+            if (amt > 0) { handleRepayAdvance(repayDialog.advanceId, amt); setRepayDialog({ open: false, advanceId: null, amount: '' }); }
+          }} disabled={!(parseFloat(repayDialog.amount) > 0)}>Repay</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ORDER STATUS DIALOG (replaces native prompt) */}
+      <Dialog open={orderStatusDialog.open} onClose={() => setOrderStatusDialog({ open: false, orderId: null, status: 'pending' })} maxWidth="xs" fullWidth>
+        <DialogTitle>Update Order Status</DialogTitle>
+        <DialogContent>
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel>Status</InputLabel>
+            <Select value={orderStatusDialog.status} label="Status"
+              onChange={(e) => setOrderStatusDialog(p => ({ ...p, status: e.target.value }))}>
+              {['pending','processing','shipped','delivered','cancelled'].map(s => <MenuItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOrderStatusDialog({ open: false, orderId: null, status: 'pending' })}>Cancel</Button>
+          <Button variant="contained" onClick={() => {
+            db.updateDistributorOrderStatus(orderStatusDialog.orderId, orderStatusDialog.status).then(() => { showSuccess('Status updated!'); loadDistributorData(); });
+            setOrderStatusDialog({ open: false, orderId: null, status: 'pending' });
+          }}>Update</Button>
         </DialogActions>
       </Dialog>
 
