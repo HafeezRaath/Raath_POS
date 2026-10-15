@@ -398,7 +398,8 @@ exports.updateVariant = async (req, res, next) => {
     const { id } = req.params;
     const {
       name, variant_name, sku, barcode, purchase_price,
-      sale_price, retail_price, stock, current_stock
+      sale_price, retail_price, wholesale_price, minimum_retail_price,
+      stock, current_stock, stock_alert_quantity, image_url, description
     } = req.body;
 
     const actualName = variant_name || name;
@@ -408,14 +409,22 @@ exports.updateVariant = async (req, res, next) => {
     const sql = `
       UPDATE product_variants SET
         name = COALESCE(?, name),
+        variant_name = COALESCE(?, variant_name),
         sku = COALESCE(?, sku),
         barcode = COALESCE(?, barcode),
         purchase_price = COALESCE(?, purchase_price),
         sale_price = COALESCE(?, sale_price),
-        stock = COALESCE(?, stock)
+        retail_price = COALESCE(?, retail_price),
+        wholesale_price = COALESCE(?, wholesale_price),
+        minimum_retail_price = COALESCE(?, minimum_retail_price),
+        stock = COALESCE(?, stock),
+        current_stock = COALESCE(?, current_stock),
+        stock_alert_quantity = COALESCE(?, stock_alert_quantity),
+        image_url = COALESCE(?, image_url),
+        description = COALESCE(?, description)
       WHERE tenant_id = ? AND id = ? AND is_deleted = 0
     `;
-    await query(sql, [actualName, sku, barcode, purchase_price, actualPrice, actualStock, tenantId, id]);
+    await query(sql, [actualName, actualName, sku, barcode, purchase_price, actualPrice, retail_price, wholesale_price, minimum_retail_price, actualStock, actualStock, stock_alert_quantity, image_url, description, tenantId, id]);
     const updated = await query('SELECT * FROM product_variants WHERE tenant_id = ? AND id = ?', [tenantId, id]);
     res.json({ success: true, data: updated[0] });
   } catch (error) {
