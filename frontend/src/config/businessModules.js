@@ -6,16 +6,20 @@
 // ============================================================
 
 export const BUSINESS_TYPES = [
-  { value: 'retail', label: 'Retail Store' },
-  { value: 'wholesale', label: 'Wholesale' },
-  { value: 'restaurant', label: 'Restaurant / Cafe' },
-  { value: 'electronics', label: 'Electronics' },
-  { value: 'clothing', label: 'Clothing & Fashion' },
-  { value: 'shoes', label: 'Shoes' },
-  { value: 'mobile', label: 'Mobile Shop' },
-  { value: 'grocery', label: 'Grocery / Kirana' },
-  { value: 'pharmacy', label: 'Pharmacy / Medical' },
-  { value: 'other', label: 'Other' },
+  { value: 'mobile', label: 'Mobile Shop', icon: '📱' },
+  { value: 'electronics', label: 'Electronics', icon: '🔌' },
+  { value: 'clothing', label: 'Cloth Shop', icon: '👕' },
+  { value: 'garments', label: 'Garments', icon: '👔' },
+  { value: 'shoes', label: 'Shoes Shop', icon: '👞' },
+  { value: 'grocery', label: 'Grocery / Kirana', icon: '🛒' },
+  { value: 'pharmacy', label: 'Pharmacy / Medical', icon: '💊' },
+  { value: 'bakery', label: 'Bakery', icon: '🍰' },
+  { value: 'stationery', label: 'Stationery Shop', icon: '📚' },
+  { value: 'motorbike', label: 'Motorbike Spare Parts', icon: '🏍️' },
+  { value: 'wholesale', label: 'Wholesale', icon: '📦' },
+  { value: 'restaurant', label: 'Restaurant / Cafe', icon: '🍽️' },
+  { value: 'retail', label: 'Retail Store', icon: '🏪' },
+  { value: 'other', label: 'Other', icon: '🏬' },
 ];
 
 // Ye 3 modules business type ke hisaab se default ON/OFF hote hain.
@@ -33,10 +37,14 @@ export const BUSINESS_MODULE_DEFAULTS = {
   restaurant:  { emi: false, workorders: false, distribution: false },
   electronics: { emi: true,  workorders: true,  distribution: false },
   clothing:    { emi: false, workorders: false, distribution: false },
+  garments:    { emi: false, workorders: false, distribution: false },
   shoes:       { emi: false, workorders: false, distribution: false },
   mobile:      { emi: true,  workorders: true,  distribution: false },
   grocery:     { emi: false, workorders: false, distribution: false },
   pharmacy:    { emi: false, workorders: false, distribution: false },
+  bakery:      { emi: false, workorders: false, distribution: false },
+  stationery:  { emi: false, workorders: false, distribution: false },
+  motorbike:   { emi: false, workorders: true,  distribution: false },
   other:       { emi: false, workorders: false, distribution: false },
 };
 
@@ -48,6 +56,10 @@ export const DEFAULT_PRODUCT_TYPE_BY_BUSINESS = {
   pharmacy: 'medical',
   shoes: 'shoes',
   clothing: 'fabric',
+  garments: 'fabric',
+  bakery: 'bakery',
+  stationery: 'stationery',
+  motorbike: 'standard',
   electronics: 'standard',
   restaurant: 'standard',
   retail: 'standard',

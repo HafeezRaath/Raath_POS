@@ -18,6 +18,7 @@ import Modal from '../components/ui/Modal';
 import Alert from '../components/ui/Alert';
 import Badge from '../components/ui/Badge';
 import { useAuth } from '../AuthContext';
+import { BUSINESS_TYPES, BUSINESS_MODULE_DEFAULTS } from '../config/businessModules';
 import db from '../database/db';
 
 export default function LoginPage() {
@@ -25,6 +26,9 @@ export default function LoginPage() {
   const { login } = useAuth();
 
   const [form, setForm] = useState({ email: '', password: '' });
+  const [selectedBusinessType, setSelectedBusinessType] = useState(() => {
+    return localStorage.getItem('raath_selected_business_type') || '';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -120,6 +124,25 @@ export default function LoginPage() {
       return;
     }
 
+    // Save selected business type for module customization after login
+    if (selectedBusinessType) {
+      localStorage.setItem('raath_selected_business_type', selectedBusinessType);
+      // Apply module defaults for this business type (if user hasn't customized)
+      const alreadyCustomized = localStorage.getItem('raath_modules_customized');
+      if (!alreadyCustomized) {
+        const defaults = BUSINESS_MODULE_DEFAULTS[selectedBusinessType];
+        if (defaults) {
+          // Merge with existing page_visibility (preserve other settings)
+          let current = {};
+          try {
+            current = JSON.parse(localStorage.getItem('page_visibility') || '{}');
+          } catch (e) {}
+          const updated = { ...current, emi: defaults.emi, workorders: defaults.workorders, distribution: defaults.distribution };
+          localStorage.setItem('page_visibility', JSON.stringify(updated));
+        }
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -159,6 +182,37 @@ export default function LoginPage() {
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">RAATH POS</h2>
           <p className="text-xs text-slate-500 mt-1">Sign in to your point of sale management</p>
+        </div>
+
+        {/* Business Type Selector */}
+        <div className="mb-5">
+          <p className="text-xs font-bold text-slate-700 mb-2 text-center">Select Your Business Type</p>
+          <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto p-1">
+            {BUSINESS_TYPES.map((bt) => (
+              <button
+                key={bt.value}
+                type="button"
+                onClick={() => setSelectedBusinessType(bt.value)}
+                className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all ${
+                  selectedBusinessType === bt.value
+                    ? 'border-indigo-600 bg-indigo-50 shadow-md'
+                    : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-2xl mb-1">{bt.icon}</span>
+                <span className={`text-[10px] font-semibold text-center leading-tight ${
+                  selectedBusinessType === bt.value ? 'text-indigo-700' : 'text-slate-600'
+                }`}>
+                  {bt.label}
+                </span>
+              </button>
+            ))}
+          </div>
+          {selectedBusinessType && (
+            <p className="text-[11px] text-indigo-600 font-semibold text-center mt-2">
+              ✓ {BUSINESS_TYPES.find(b => b.value === selectedBusinessType)?.label} selected
+            </p>
+          )}
         </div>
 
         {error && (
