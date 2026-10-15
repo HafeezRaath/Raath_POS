@@ -88,7 +88,7 @@ const formatDate = (dateStr) => {
 };
 
 const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(amount || 0);
+  return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 2 }).format(amount || 0);
 };
 
 const getProductImageUrl = (product) => {
@@ -879,7 +879,7 @@ const [copies, setCopies] = useState(1);
           idx + 1,
           `${pName}${vName}`,
           qty.toLocaleString(),
-          `Rs. ${salePrice.toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+          `Rs. ${salePrice.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         ];
       });
 

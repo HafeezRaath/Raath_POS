@@ -26,7 +26,7 @@ import { printReceiptDirect, getEffectiveReceiptSettings, getEffectiveShopProfil
 
 // ==================== HELPERS ====================
 const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(amount || 0);
+  return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 2 }).format(amount || 0);
 };
 
 const formatDateTime = (dateStr) => {
