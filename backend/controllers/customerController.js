@@ -58,7 +58,7 @@ exports.updateCustomer = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    const { name, phone, email, address, city, cnic, credit_limit, status } = req.body;
+    const { name, phone, email, address, city, district, province, shop_name, customer_type, cnic, credit_limit, payment_terms, status, notes } = req.body;
 
     await query(
       `UPDATE customers SET
@@ -67,11 +67,17 @@ exports.updateCustomer = async (req, res, next) => {
         email = COALESCE(?, email),
         address = COALESCE(?, address),
         city = COALESCE(?, city),
+        district = COALESCE(?, district),
+        province = COALESCE(?, province),
+        shop_name = COALESCE(?, shop_name),
+        customer_type = COALESCE(?, customer_type),
         cnic = COALESCE(?, cnic),
         credit_limit = COALESCE(?, credit_limit),
-        status = COALESCE(?, status)
+        payment_terms = COALESCE(?, payment_terms),
+        status = COALESCE(?, status),
+        notes = COALESCE(?, notes)
        WHERE tenant_id = ? AND id = ? AND is_deleted = 0`,
-      [name, phone, email, address, city, cnic, credit_limit, status, tenantId, id]
+      [name, phone, email, address, city, district, province, shop_name, customer_type, cnic, credit_limit, payment_terms, status, notes, tenantId, id]
     );
 
     const updated = await query('SELECT * FROM customers WHERE tenant_id = ? AND id = ?', [tenantId, id]);
