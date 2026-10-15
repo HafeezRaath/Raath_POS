@@ -158,6 +158,25 @@ exports.payInstallment = async (req, res, next) => {
     const payAmt = parseFloat(amount) || 0;
     const penAmt = parseFloat(penalty_amount) || 0;
     const discAmt = parseFloat(discount_amount) || 0;
+
+    if (payAmt <= 0) {
+      return res.status(400).json({ success: false, error: 'Payment amount must be greater than zero' });
+    }
+
+    // M5 FIX: Validate payment doesn't exceed remaining + penalty
+    const [emiCheck] = await query('SELECT remaining_amount FROM emi_records WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    if (emiCheck.length === 0) {
+      return res.status(404).json({ success: false, error: 'EMI record not found' });
+    }
+    const remaining = parseFloat(emiCheck[0].remaining_amount) || 0;
+    const maxPayable = remaining + penAmt;
+    // Round to paisa for comparison
+    if (Math.round(payAmt * 100) > Math.round(maxPayable * 100)) {
+      return res.status(400).json({
+        success: false,
+        error: `Payment Rs.${payAmt.toFixed(2)} exceeds remaining Rs.${remaining.toFixed(2)} (+ Rs.${penAmt.toFixed(2)} penalty)`
+      });
+    }
     const receiptNo = 'EMIRCP-' + Date.now();
 
     await transaction(async (conn) => {
@@ -248,8 +267,44 @@ exports.deleteEMI = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    await query(`UPDATE emi_records SET is_deleted = 1, deleted_at = NOW() WHERE tenant_id = ? AND id = ?`, [tenantId, id]);
-    res.json({ success: true, message: 'EMI record deleted' });
+
+    // Get EMI details for reversal
+    const [emis] = await query('SELECT * FROM emi_records WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    if (emis.length === 0) {
+      return res.status(404).json({ success: false, error: 'EMI record not found' });
+    }
+    const emi = emis[0];
+
+    await query('START TRANSACTION');
+    try {
+      // 1. Reverse down payment account credit
+      if (emi.down_payment_account_id && emi.down_payment > 0) {
+        await query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [emi.down_payment, tenantId, emi.down_payment_account_id]);
+        await query(
+          `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
+           VALUES (?, ?, 'debit', ?, 'EMI deletion reversal (down payment)', 'emi', ?, CURDATE())`,
+          [tenantId, emi.down_payment_account_id, emi.down_payment, id]
+        );
+      }
+
+      // 2. Restore product stock if from inventory
+      if (emi.product_variant_id && (!emi.product_source || emi.product_source === 'inventory')) {
+        await query('UPDATE product_variants SET stock = stock + 1 WHERE tenant_id = ? AND id = ?', [tenantId, emi.product_variant_id]);
+      }
+      if (emi.product_id) {
+        await query('UPDATE products SET stock = stock + 1 WHERE tenant_id = ? AND id = ?', [tenantId, emi.product_id]);
+      }
+
+      // 3. Mark EMI as deleted (keep payments for audit trail)
+      await query(`UPDATE emi_records SET is_deleted = 1, deleted_at = NOW() WHERE tenant_id = ? AND id = ?`, [tenantId, id]);
+
+      await query('COMMIT');
+    } catch (txErr) {
+      await query('ROLLBACK');
+      throw txErr;
+    }
+
+    res.json({ success: true, message: 'EMI record deleted with reversal' });
   } catch (error) {
     next(error);
   }

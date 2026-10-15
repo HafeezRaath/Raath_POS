@@ -103,6 +103,25 @@ exports.createJob = async (req, res, next) => {
         );
       }
 
+      // H5 FIX: Credit advance_amount to default cash account (was invisible in Finance)
+      const advAmt = Number(advance_amount) || 0;
+      if (advAmt > 0) {
+        // Find default cash account
+        const [cashAccts] = await conn.query(
+          `SELECT id FROM accounts WHERE tenant_id = ? AND type = 'cash' AND is_deleted = 0 ORDER BY id ASC LIMIT 1`,
+          [tenantId]
+        );
+        if (cashAccts.length > 0) {
+          const cashId = cashAccts[0].id;
+          await conn.query(`UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?`, [advAmt, tenantId, cashId]);
+          await conn.query(
+            `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
+             VALUES (?, ?, 'credit', ?, 'Repair advance received', 'repair', ?, CURDATE())`,
+            [tenantId, cashId, advAmt, jr.insertId]
+          );
+        }
+      }
+
       return { id: jr.insertId, order_number: token, total_amount: totalAmount, parts_amount: partsAmount, commission_amount: commissionAmount };
     });
 

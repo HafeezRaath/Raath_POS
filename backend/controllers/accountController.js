@@ -126,6 +126,22 @@ exports.transferFunds = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Valid source, destination, and amount required' });
     }
 
+    // M1 FIX: Check source has sufficient balance (prevent negative)
+    const [srcAccts] = await query('SELECT current_balance, name FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, from_account_id]);
+    if (srcAccts.length === 0) {
+      return res.status(404).json({ success: false, error: 'Source account not found' });
+    }
+    const srcBalance = parseFloat(srcAccts[0].current_balance) || 0;
+    // Round to 2 decimals for comparison (paisa precision)
+    const roundedBalance = Math.round(srcBalance * 100) / 100;
+    const roundedAmount = Math.round(transferAmount * 100) / 100;
+    if (roundedAmount > roundedBalance) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Insufficient balance in ${srcAccts[0].name}. Available: Rs.${roundedBalance.toFixed(2)}, Requested: Rs.${roundedAmount.toFixed(2)}` 
+      });
+    }
+
     await transaction(async (conn) => {
       // 1. Deduct from source
       await conn.query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [transferAmount, tenantId, from_account_id]);
