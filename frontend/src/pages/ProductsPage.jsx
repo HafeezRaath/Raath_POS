@@ -3685,8 +3685,8 @@ const [copies, setCopies] = useState(1);
               </Paper>
               )}
 
-              {/* CARD 4: Pricing & Inventory — hidden when ADDING products of types with specialized pricing (their own forms own the price fields). Edit mode keeps it for all types. */}
-              {!(["imei", "fabric", "medical", "grocery", "shoes", "stationery"].includes(dialogProductType) && !editingProduct) && (
+              {/* CARD 4: Pricing & Inventory — hidden when ADDING products of types with specialized pricing (their own forms own the price fields). Edit mode keeps it for all types. Fabric: hidden ONLY for THAAN_FABRIC (Thaan section has its own per-meter price inputs); READYMADE_STITCHED and BOX_SUIT read CARD 4's fields on save, so it stays visible there. */}
+              {!((["imei", "medical", "grocery", "shoes", "stationery"].includes(dialogProductType) || (dialogProductType === "fabric" && productForm.garment_mode === "THAAN_FABRIC")) && !editingProduct) && (
               <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
                   <Typography variant="subtitle2" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
