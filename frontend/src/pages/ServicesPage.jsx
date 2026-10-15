@@ -2132,11 +2132,8 @@ export default function ServicesPage() {
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
         {activeTab === 'workorders' && (
           <>
-            <Button variant="contained" startIcon={<Add />} onClick={() => openModal('workorder')} sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, borderRadius: 2 }}>
-              New Repair Order
-            </Button>
-            <Button variant="contained" startIcon={<Add />} onClick={() => setJobCardOpen(true)} sx={{ bgcolor: '#7c3aed', '&:hover': { bgcolor: '#6d28d9' }, borderRadius: 2 }}>
-              🔧 Repair Job Card
+            <Button variant="contained" startIcon={<Add />} onClick={() => setJobCardOpen(true)} sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, borderRadius: 2 }}>
+              + New Repair Order
             </Button>
             <TextField size="small" placeholder="Search by model, IMEI, customer..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} sx={{ flex: 1, minWidth: 220, bgcolor: 'background.paper', borderRadius: 2 }} />
             <FormControl size="small" sx={{ minWidth: 150 }}>
