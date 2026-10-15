@@ -3789,9 +3789,9 @@ const [copies, setCopies] = useState(1);
               {/* CARD 5: Type-Specific Details */}
               {dialogProductType === 'imei' && (
                 <>
-                {!editingProduct && (
+                {!editingProduct ? (
                   <BulkImeiForm onDone={() => { loadData(); }} />
-                )}
+                ) : (
                 <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #bfdbfe', bgcolor: '#eff6ff', mt: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                     <Typography variant="subtitle2" fontWeight="bold" color="#1e40af" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -3830,6 +3830,7 @@ const [copies, setCopies] = useState(1);
                     </Grid>
                   </Grid>
                 </Paper>
+                )}
                 </>
               )}
 
