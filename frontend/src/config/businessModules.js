@@ -63,6 +63,29 @@ export const DEFAULT_PRODUCT_TYPE_BY_BUSINESS = {
   other: 'standard',
 };
 
+// Business type ke hisaab se kaunse product types dikhenge (Add Product dropdown)
+// Har shop ko sirf apne related product types milenge
+export const PRODUCT_TYPES_BY_BUSINESS = {
+  mobile: ['imei', 'standard'],
+  electronics: ['standard'],
+  clothing: ['fabric', 'standard'],
+  garments: ['fabric', 'uniform', 'standard'],
+  shoes: ['shoes', 'standard'],
+  grocery: ['grocery', 'standard'],
+  pharmacy: ['medical', 'standard'],
+  bakery: ['bakery', 'standard'],
+  stationery: ['stationery', 'books', 'uniform', 'standard'],
+  motorbike: ['standard'],
+  wholesale: ['wholesale', 'standard'],
+  retail: ['standard'],
+  other: ['standard', 'imei', 'fabric', 'grocery', 'medical', 'shoes', 'bakery', 'wholesale', 'stationery', 'uniform', 'books'],
+};
+
+export function getProductTypesForBusiness(businessType) {
+  const allowed = PRODUCT_TYPES_BY_BUSINESS[businessType];
+  return allowed || PRODUCT_TYPES_BY_BUSINESS['other'];
+}
+
 export function getBusinessTypeLabel(value) {
   const found = BUSINESS_TYPES.find(t => t.value === value);
   return found ? found.label : value;

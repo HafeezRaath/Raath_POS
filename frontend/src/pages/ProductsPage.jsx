@@ -34,7 +34,7 @@ import api from '../api/apiClient';
 import { useNavigate } from 'react-router-dom';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
-import { getDefaultProductType } from '../config/businessModules';
+import { getDefaultProductType, getProductTypesForBusiness } from '../config/businessModules';
 import ShoeVariantMatrix from '../components/shoes/ShoeVariantMatrix';
 import ThaanFabricForm from '../components/garments/ThaanFabricForm';
 import ReadymadeMatrix from '../components/garments/ReadymadeMatrix';
@@ -266,6 +266,13 @@ export default function InventoryPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
+
+  // Filter product types by selected business type (from login page)
+  const allowedProductTypes = React.useMemo(() => {
+    const businessType = localStorage.getItem('raath_selected_business_type') || 'other';
+    const allowed = getProductTypesForBusiness(businessType);
+    return PRODUCT_TYPES.filter(t => allowed.includes(t.value));
+  }, []);
   
   const [activeTab, setActiveTab] = useState(0);
 const [labelSize, setLabelSize] = useState('2x1');
@@ -2793,7 +2800,7 @@ const [copies, setCopies] = useState(1);
                     <InputLabel>Product Type</InputLabel>
                     <Select value={filterType} onChange={(e) => setFilterType(e.target.value)} label="Product Type">
                       <MenuItem value="">All Types</MenuItem>
-                      {PRODUCT_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+                      {allowedProductTypes.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
                     </Select>
                   </FormControl>
                 </Grid>
@@ -3458,7 +3465,7 @@ const [copies, setCopies] = useState(1);
                     <FormControl fullWidth size="small">
                       <InputLabel>Product Type</InputLabel>
                       <Select name="type" value={productForm.type} onChange={handleProductChange} label="Product Type">
-                        {PRODUCT_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+                        {allowedProductTypes.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
                       </Select>
                     </FormControl>
                   </Grid>

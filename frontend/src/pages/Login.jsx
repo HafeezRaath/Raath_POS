@@ -174,7 +174,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200/80 p-6 sm:p-8">
+      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden flex flex-col md:flex-row">
+        {/* LEFT: Login Form */}
+        <div className="w-full md:w-1/2 p-6 sm:p-8">
         {/* Logo & Header */}
         <div className="text-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white mx-auto mb-3 shadow-lg shadow-indigo-600/30">
@@ -182,37 +184,6 @@ export default function LoginPage() {
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">RAATH POS</h2>
           <p className="text-xs text-slate-500 mt-1">Sign in to your point of sale management</p>
-        </div>
-
-        {/* Business Type Selector */}
-        <div className="mb-5">
-          <p className="text-xs font-bold text-slate-700 mb-2 text-center">Select Your Business Type</p>
-          <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto p-1">
-            {BUSINESS_TYPES.map((bt) => (
-              <button
-                key={bt.value}
-                type="button"
-                onClick={() => setSelectedBusinessType(bt.value)}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all ${
-                  selectedBusinessType === bt.value
-                    ? 'border-indigo-600 bg-indigo-50 shadow-md'
-                    : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
-                }`}
-              >
-                <span className="text-2xl mb-1">{bt.icon}</span>
-                <span className={`text-[10px] font-semibold text-center leading-tight ${
-                  selectedBusinessType === bt.value ? 'text-indigo-700' : 'text-slate-600'
-                }`}>
-                  {bt.label}
-                </span>
-              </button>
-            ))}
-          </div>
-          {selectedBusinessType && (
-            <p className="text-[11px] text-indigo-600 font-semibold text-center mt-2">
-              ✓ {BUSINESS_TYPES.find(b => b.value === selectedBusinessType)?.label} selected
-            </p>
-          )}
         </div>
 
         {error && (
@@ -313,6 +284,51 @@ export default function LoginPage() {
           >
             Auto-Fill Credentials
           </Button>
+        </div>
+        </div>
+
+        {/* RIGHT: Business Type Selector */}
+        <div className="w-full md:w-1/2 p-6 sm:p-8 bg-gradient-to-br from-indigo-50 to-slate-100 border-t md:border-t-0 md:border-l border-slate-200">
+          <div className="text-center mb-4">
+            <h3 className="text-lg font-black text-slate-900">Select Your Business Type</h3>
+            <p className="text-xs text-slate-500 mt-1">Choose your shop type to see relevant features</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2.5 max-h-[400px] overflow-y-auto p-1">
+            {BUSINESS_TYPES.map((bt) => (
+              <button
+                key={bt.value}
+                type="button"
+                onClick={() => setSelectedBusinessType(bt.value)}
+                className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${
+                  selectedBusinessType === bt.value
+                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-lg scale-105'
+                    : 'border-slate-200 bg-white hover:border-indigo-400 hover:shadow-md'
+                }`}
+              >
+                <span className="text-3xl mb-1.5">{bt.icon}</span>
+                <span className={`text-[11px] font-bold text-center leading-tight ${
+                  selectedBusinessType === bt.value ? 'text-white' : 'text-slate-700'
+                }`}>
+                  {bt.label}
+                </span>
+              </button>
+            ))}
+          </div>
+          {selectedBusinessType && (
+            <div className="mt-4 p-3 bg-indigo-600 rounded-xl text-center">
+              <p className="text-sm font-bold text-white">
+                ✓ {BUSINESS_TYPES.find(b => b.value === selectedBusinessType)?.label}
+              </p>
+              <p className="text-[11px] text-indigo-200 mt-0.5">
+                Login ke baad sirf relevant features dikhenge
+              </p>
+            </div>
+          )}
+          {!selectedBusinessType && (
+            <p className="text-[11px] text-slate-400 text-center mt-4">
+              (Optional) Select karna zaroori nahi — sab features milenge
+            </p>
+          )}
         </div>
       </div>
 
