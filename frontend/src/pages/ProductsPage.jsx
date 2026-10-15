@@ -1818,7 +1818,7 @@ const [copies, setCopies] = useState(1);
     if (productForm.type === 'shoes') {
       meta.shoe_size = productForm.shoe_size || '';
       meta.shoe_color = productForm.shoe_color || '';
-      meta.shoe_brand = productForm.shoe_brand || '';
+      meta.shoe_brand = productForm.shoe_brand || productForm.brand || '';
       meta.shoe_material = productForm.shoe_material || '';
       meta.discount = productForm.discount || '';
       if (shoeCartonInfo?.cartonMode && shoeCartonInfo.pairsPerCarton > 0) {
@@ -3685,8 +3685,8 @@ const [copies, setCopies] = useState(1);
               </Paper>
               )}
 
-              {/* CARD 4: Pricing & Inventory — hidden only when ADDING a mobile/IMEI product (BulkImeiForm owns Cost/Sale Price in that flow). Edit mode + all other types keep it: Telemetry has no price fields, and ReadymadeMatrix reads CARD 4 prices. */}
-              {!(dialogProductType === 'imei' && !editingProduct) && (
+              {/* CARD 4: Pricing & Inventory — hidden when ADDING products of types with specialized pricing (their own forms own the price fields). Edit mode keeps it for all types. */}
+              {!(["imei", "fabric", "medical", "grocery", "shoes", "stationery"].includes(dialogProductType) && !editingProduct) && (
               <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
                   <Typography variant="subtitle2" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -3980,9 +3980,6 @@ const [copies, setCopies] = useState(1);
                     </Grid>
                     <Grid item xs={6} sm={3}>
                       <TextField fullWidth size="small" label="Rack / Shelf Location" name="rack_location" value={productForm.rack_location} onChange={handleProductChange} placeholder="Rack B - Shelf 3" />
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                      <TextField fullWidth size="small" label="Brand" name="shoe_brand" value={productForm.shoe_brand} onChange={handleProductChange} placeholder="Bata, Service, Ndure" />
                     </Grid>
                     <Grid item xs={6} sm={3}>
                       <TextField fullWidth size="small" label="Material" name="shoe_material" value={productForm.shoe_material} onChange={handleProductChange} placeholder="Leather, Mesh, Rubber" />
