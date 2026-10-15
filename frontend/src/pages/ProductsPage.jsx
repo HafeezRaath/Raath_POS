@@ -3685,7 +3685,8 @@ const [copies, setCopies] = useState(1);
               </Paper>
               )}
 
-              {/* CARD 4: Pricing & Inventory */}
+              {/* CARD 4: Pricing & Inventory — hidden for types with specialized pricing (imei, fabric) to avoid duplicates */}
+              {dialogProductType !== 'imei' && dialogProductType !== 'fabric' && (
               <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
                   <Typography variant="subtitle2" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -3785,6 +3786,7 @@ const [copies, setCopies] = useState(1);
                   </Grid>
                 </Grid>
               </Paper>
+              )}
 
               {/* CARD 5: Type-Specific Details */}
               {dialogProductType === 'imei' && (
