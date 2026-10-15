@@ -133,6 +133,15 @@ exports.createPurchase = async (req, res, next) => {
           'UPDATE products SET stock = stock + ?, purchase_price = ?, expiry_date = COALESCE(?, expiry_date) WHERE tenant_id = ? AND id = ?',
           [qty, unitCost, itemExpiry, tenantId, prodId]
         );
+
+        // Also update variant stock if variant specified (H1 fix: variant stock was drifting)
+        const variantId = it.product_variant_id || it.variant_id;
+        if (variantId) {
+          await conn.query(
+            'UPDATE product_variants SET stock = stock + ? WHERE tenant_id = ? AND id = ?',
+            [qty, tenantId, variantId]
+          );
+        }
       }
 
       // 3. Update Supplier balance & ledger if due
@@ -203,8 +212,50 @@ exports.deletePurchase = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    await query('UPDATE purchases SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
-    res.json({ success: true, message: 'Purchase deleted successfully' });
+
+    // Get purchase details for reversal
+    const [purchases] = await query('SELECT * FROM purchases WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    if (purchases.length === 0) {
+      return res.status(404).json({ success: false, error: 'Purchase not found' });
+    }
+    const purchase = purchases[0];
+    const [items] = await query('SELECT * FROM purchase_items WHERE tenant_id = ? AND purchase_id = ?', [tenantId, id]);
+
+    await query('START TRANSACTION');
+    try {
+      // 1. Reverse stock (deduct what was added)
+      for (const item of items) {
+        const qty = parseFloat(item.quantity) || 0;
+        if (item.product_id) {
+          await query('UPDATE products SET stock = GREATEST(0, stock - ?) WHERE tenant_id = ? AND id = ?', [qty, tenantId, item.product_id]);
+        }
+      }
+
+      // 2. Reverse supplier balance
+      if (purchase.supplier_id && purchase.due_amount > 0) {
+        await query('UPDATE suppliers SET balance = balance - ? WHERE tenant_id = ? AND id = ?', [purchase.due_amount, tenantId, purchase.supplier_id]);
+      }
+
+      // 3. Reverse account debit (if paid via account)
+      if (purchase.account_id && purchase.paid_amount > 0) {
+        await query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [purchase.paid_amount, tenantId, purchase.account_id]);
+        await query(
+          `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
+           VALUES (?, ?, 'credit', ?, 'Purchase deletion reversal', 'purchase', ?, CURDATE())`,
+          [tenantId, purchase.account_id, purchase.paid_amount, id]
+        );
+      }
+
+      // 4. Mark as deleted
+      await query('UPDATE purchases SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+
+      await query('COMMIT');
+    } catch (txErr) {
+      await query('ROLLBACK');
+      throw txErr;
+    }
+
+    res.json({ success: true, message: 'Purchase deleted successfully with reversal' });
   } catch (error) {
     next(error);
   }

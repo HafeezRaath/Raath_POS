@@ -84,8 +84,34 @@ exports.deleteExpense = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    await query('UPDATE expenses SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
-    res.json({ success: true, message: 'Expense deleted' });
+
+    // Get expense for account reversal
+    const [expenses] = await query('SELECT * FROM expenses WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    if (expenses.length === 0) {
+      return res.status(404).json({ success: false, error: 'Expense not found' });
+    }
+    const expense = expenses[0];
+
+    await query('START TRANSACTION');
+    try {
+      // Reverse account deduction (add back)
+      if (expense.account_id && expense.amount > 0) {
+        await query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [expense.amount, tenantId, expense.account_id]);
+        await query(
+          `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
+           VALUES (?, ?, 'credit', ?, 'Expense deletion reversal', 'expense', ?, CURDATE())`,
+          [tenantId, expense.account_id, expense.amount, id]
+        );
+      }
+
+      await query('UPDATE expenses SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+      await query('COMMIT');
+    } catch (txErr) {
+      await query('ROLLBACK');
+      throw txErr;
+    }
+
+    res.json({ success: true, message: 'Expense deleted with account reversal' });
   } catch (error) {
     next(error);
   }
