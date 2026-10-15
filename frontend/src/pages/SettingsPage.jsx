@@ -3130,39 +3130,28 @@ export default function SettingsPage({ initialTab } = {}) {
                         
                         {/* FBR Actions Row */}
                         <Stack direction="row" spacing={1} flexWrap="wrap">
-                          <Button 
-                            variant="outlined" 
-                            startIcon={<VerifiedUser />}
-                            onClick={() => {
-                              setSnackbar({ 
-                                open: true, 
-                                message: 'FBR integration test: Connection successful!', 
-                                severity: 'success' 
-                              });
-                            }}
-                          >
-                            Test Connection
-                          </Button>
-                          <Button 
-                            variant="outlined" 
-                            startIcon={<SyncIcon />}
-                            onClick={() => {
-                              setSnackbar({ 
-                                open: true, 
-                                message: 'Syncing with FBR...', 
-                                severity: 'info' 
-                              });
-                              setTimeout(() => {
-                                setSnackbar({ 
-                                  open: true, 
-                                  message: 'Sync completed successfully!', 
-                                  severity: 'success' 
-                                });
-                              }, 1500);
-                            }}
-                          >
-                            Sync Now
-                          </Button>
+                          <Tooltip title="FBR API credentials required — configure in FBR portal first">
+                            <span>
+                              <Button 
+                                variant="outlined" 
+                                startIcon={<VerifiedUser />}
+                                disabled
+                              >
+                                Test Connection
+                              </Button>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="FBR API credentials required — configure in FBR portal first">
+                            <span>
+                              <Button 
+                                variant="outlined" 
+                                startIcon={<SyncIcon />}
+                                disabled
+                              >
+                                Sync Now
+                              </Button>
+                            </span>
+                          </Tooltip>
                           <Button 
                             variant="outlined" 
                             color="error"
@@ -3507,13 +3496,27 @@ export default function SettingsPage({ initialTab } = {}) {
                   <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
                     <Typography variant="h6" fontWeight="bold" gutterBottom>Maintenance</Typography>
                     <Stack spacing={1.5}>
-                      <Button variant="outlined" fullWidth startIcon={<Storage />} onClick={() => setSnackbar({ open: true, message: 'Database optimized!', severity: 'success' })}>
+                      <Button variant="outlined" fullWidth startIcon={<Storage />} onClick={async () => {
+                        try {
+                          const res = await fetch('/api/database/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+                          const data = await res.json();
+                          setSnackbar({ open: true, message: data.message || 'Database optimized!', severity: data.success ? 'success' : 'error' });
+                        } catch (e) {
+                          setSnackbar({ open: true, message: 'Optimization failed: ' + e.message, severity: 'error' });
+                        }
+                      }}>
                         Optimize Database
                       </Button>
                       <Button variant="outlined" fullWidth startIcon={<Delete />} color="warning" 
                         onClick={async () => { 
-                          if (window.confirm('Delete all old deleted records? This frees up space.')) { 
-                            setSnackbar({ open: true, message: 'Old records purged!', severity: 'success' }); 
+                          if (window.confirm('Delete all soft-deleted records older than 90 days? This cannot be undone.')) { 
+                            try {
+                              const res = await fetch('/api/database/purge', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+                              const data = await res.json();
+                              setSnackbar({ open: true, message: data.message || 'Purge completed!', severity: data.success ? 'success' : 'error' });
+                            } catch (e) {
+                              setSnackbar({ open: true, message: 'Purge failed: ' + e.message, severity: 'error' });
+                            }
                           } 
                         }}
                       >

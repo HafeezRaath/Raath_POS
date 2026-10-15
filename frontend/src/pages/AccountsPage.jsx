@@ -1707,9 +1707,9 @@ export default function AccountsPage() {
             <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2, border: '1px solid #e5e7eb' }}>
               <Stack direction={isMobile ? 'column' : 'row'} spacing={2} alignItems={isMobile ? 'stretch' : 'center'}>
                 <FormControl fullWidth={isMobile} size="small" sx={{ minWidth: 200 }}>
-                  <InputLabel>Account Type</InputLabel>
-                  <Select value={ledgerFilterType} onChange={(e) => setLedgerFilterType(e.target.value)} label="Account Type">
-                    <MenuItem value="">All Types</MenuItem>
+                  <InputLabel>Payment Mode</InputLabel>
+                  <Select value={ledgerFilterType} onChange={(e) => setLedgerFilterType(e.target.value)} label="Payment Mode">
+                    <MenuItem value="">All Modes</MenuItem>
                     {ACCOUNT_TYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
                   </Select>
                 </FormControl>

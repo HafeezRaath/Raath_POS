@@ -1189,6 +1189,11 @@ export default function ReportsPage() {
     else if (activeTab === 7) loadExpiryReport();
   }, [activeTab]);
 
+  // Reload forecast when period changes (fixes dead PERIOD controls)
+  useEffect(() => {
+    if (activeTab === 0) loadForecasting();
+  }, [forecastPeriod]);
+
   useEffect(() => {
     if (activeTab === 1) loadSalesReport();
   }, [salesFrom, salesTo, salesPaymentMode]);
@@ -4008,25 +4013,7 @@ export default function ReportsPage() {
       {/* TAB CONTENT */}
       {renderTabContent()}
 
-      {/* ==================== ENTRY DIALOG ==================== */}
-      <EntryDialog
-        open={entryDialog.open}
-        onClose={() => setEntryDialog({ open: false, mode: 'add', data: null })}
-        onSave={handleEntrySave}
-        title={getEntryTitle()}
-        fields={getEntryFields()}
-        initialData={entryDialog.mode === 'edit' ? entryDialog.data : null}
-        isEdit={entryDialog.mode === 'edit'}
-      />
-
-      {/* ==================== CONFIRM DELETE DIALOG ==================== */}
-      <ConfirmDialog
-        open={confirmDialog.open}
-        onClose={() => setConfirmDialog({ open: false, data: null, type: '' })}
-        onConfirm={handleConfirmDelete}
-        title="Confirm Delete"
-        message={`Are you sure you want to delete this ${confirmDialog.type || 'item'}? This action cannot be undone.`}
-      />
+      {/* NOTE: EntryDialog and ConfirmDialog removed — were unreachable (never opened). Reports is read-only. */}
 
       {/* ==================== DETAIL DIALOG ==================== */}
       <Dialog open={detailDialog} onClose={() => setDetailDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>

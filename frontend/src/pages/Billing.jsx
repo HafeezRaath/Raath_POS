@@ -4255,7 +4255,7 @@ sx={{ width: 85 }}
                       <Typography variant="body2">Final:</Typography>
                       <Typography variant="h6" fontWeight="bold" color="#10b981">Rs. {Number(offer.final_total || 0).toLocaleString()}</Typography>
                     </Box>
-                    <Button fullWidth variant="contained" size="small" sx={{ mt: 1, bgcolor: '#10b981' }}>Add to Cart</Button>
+                    <Button fullWidth variant="contained" size="small" sx={{ mt: 1, bgcolor: '#10b981' }} onClick={() => applyOffer(offer)}>Add to Cart</Button>
                   </Paper>
                 </Grid>
               ))}

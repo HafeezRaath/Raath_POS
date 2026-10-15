@@ -1221,7 +1221,7 @@ export default function BackupPage() {
                       primary={<Typography variant="body2" fontWeight="bold">{file.name}</Typography>}
                       secondary={<Typography variant="caption">{formatDate(file.createdTime)} • {formatBytes(file.size)}</Typography>}
                     />
-                    <Button size="small" color="warning" variant="outlined">
+                    <Button size="small" color="warning" variant="outlined" onClick={() => handleRestoreFromDrive(file)} disabled={restoring}>
                       Restore
                     </Button>
                   </ListItem>
