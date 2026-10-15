@@ -52,8 +52,21 @@ export default function RepairJobCardModal({ open, onClose, onSaved }) {
 
   useEffect(() => {
     if (!open) return;
-    api.get('/services').then(r => setServices(r.data?.data || [])).catch(() => {});
-    api.get('/services/staff/list').then(r => setStaffList(r.data?.data || [])).catch(() => {});
+    // Load services - try multiple response formats
+    api.get('/services').then(r => {
+      const data = r.data?.data || r.data || [];
+      setServices(Array.isArray(data) ? data : []);
+    }).catch((err) => {
+      console.error('Failed to load services:', err);
+      setServices([]);
+    });
+    api.get('/services/staff/list').then(r => {
+      const data = r.data?.data || r.data || [];
+      setStaffList(Array.isArray(data) ? data : []);
+    }).catch((err) => {
+      console.error('Failed to load staff:', err);
+      setStaffList([]);
+    });
     api.get('/products/variants').then(r => setVariants(r.data?.data || r.data || [])).catch(() => {});
     setCreatedJob(null); setMsg(null);
   }, [open ]);
@@ -132,7 +145,9 @@ export default function RepairJobCardModal({ open, onClose, onSaved }) {
       setMsg({ t: 'success', m: `Job token ${job.order_number} created` });
       onSaved && onSaved(job);
     } catch (e) {
-      setMsg({ t: 'error', m: e.response?.data?.error || 'Save failed' });
+      const errMsg = e.response?.data?.error || e.response?.data?.message || e.message || 'Save failed';
+      setMsg({ t: 'error', m: `Save failed: ${errMsg}` });
+      console.error('Repair job save error:', e);
     } finally {
       setSaving(false);
     }
@@ -220,12 +235,22 @@ export default function RepairJobCardModal({ open, onClose, onSaved }) {
                   <option value="">— Select —</option>
                   {services.map(s => <option key={s.id} value={s.id}>{s.name} (Rs. {s.base_price})</option>)}
                 </TextField>
+                {services.length === 0 && (
+                  <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
+                    No services found. Add services in Services tab first.
+                  </Typography>
+                )}
               </Grid>
               <Grid item xs={6} sm={3}>
                 <TextField fullWidth size="small" select label="Technician" value={staffId} onChange={(e) => setStaffId(e.target.value)}>
                   <option value="">— Select —</option>
                   {staffList.map(s => <option key={s.id} value={s.id}>{s.name}{s.commission_rate ? ` (${s.commission_rate}%)` : ''}</option>)}
                 </TextField>
+                {staffList.length === 0 && (
+                  <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
+                    No staff found. Add technicians in Staff tab first.
+                  </Typography>
+                )}
               </Grid>
               <Grid item xs={6} sm={3}>
                 <TextField fullWidth size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
