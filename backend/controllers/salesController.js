@@ -344,17 +344,64 @@ exports.deleteSale = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    await query('UPDATE sales SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+
+    // Get sale details for reversal
+    const [sales] = await query('SELECT * FROM sales WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    if (sales.length === 0) {
+      return res.status(404).json({ success: false, error: 'Sale not found' });
+    }
+    const sale = sales[0];
+
+    // Get sale items for stock reversal
+    const [items] = await query('SELECT * FROM sale_items WHERE tenant_id = ? AND sale_id = ?', [tenantId, id]);
+
+    // Transactional reversal
+    await query('START TRANSACTION');
+    try {
+      // 1. Restore stock for each item (products + variants)
+      for (const item of items) {
+        const qty = parseFloat(item.quantity) || 0;
+        if (item.product_variant_id) {
+          await query('UPDATE product_variants SET stock = stock + ? WHERE tenant_id = ? AND id = ?', [qty, tenantId, item.product_variant_id]);
+        }
+        if (item.product_id) {
+          await query('UPDATE products SET stock = stock + ? WHERE tenant_id = ? AND id = ?', [qty, tenantId, item.product_id]);
+        }
+      }
+
+      // 2. Reverse account credit (if paid via account)
+      if (sale.account_id && sale.paid_amount > 0) {
+        await query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [sale.paid_amount, tenantId, sale.account_id]);
+        await query(
+          `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
+           VALUES (?, ?, 'debit', ?, 'Sale deletion reversal', 'sale', ?, CURDATE())`,
+          [tenantId, sale.account_id, sale.paid_amount, id]
+        );
+      }
+
+      // 3. Reverse customer balance (if customer sale with due)
+      if (sale.customer_id && sale.due_amount > 0) {
+        await query('UPDATE customers SET balance = balance - ? WHERE tenant_id = ? AND id = ?', [sale.due_amount, tenantId, sale.customer_id]);
+      }
+
+      // 4. Mark as deleted
+      await query('UPDATE sales SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+
+      await query('COMMIT');
+    } catch (txErr) {
+      await query('ROLLBACK');
+      throw txErr;
+    }
 
     const uName = req.user?.username || req.user?.name || 'Cashier';
     const uRole = req.user?.role || 'cashier';
     await query(
       `INSERT INTO audit_logs (tenant_id, user_id, user_name, user_role, action, table_name, record_id, details)
        VALUES (?, ?, ?, ?, 'SALE_DELETED', 'sales', ?, ?)`,
-      [tenantId, req.user?.id || null, uName, uRole, id, `Sale record #${id} was deleted by ${uName} (${uRole})`]
+      [tenantId, req.user?.id || null, uName, uRole, id, `Sale record #${id} was deleted by ${uName} (${uRole}) with stock/account reversal`]
     ).catch(() => {});
 
-    res.json({ success: true, message: 'Sale deleted successfully' });
+    res.json({ success: true, message: 'Sale deleted successfully with reversal' });
   } catch (error) {
     next(error);
   }

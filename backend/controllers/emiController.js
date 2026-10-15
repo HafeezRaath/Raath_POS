@@ -85,7 +85,9 @@ exports.createEMI = async (req, res, next) => {
     const dPayment = parseFloat(down_payment) || 0;
     const remaining = Math.max(0, tAmount - dPayment);
     const months = parseInt(total_months, 10) || 1;
-    const emiAmount = Math.round(remaining / months);
+    // Match frontend: Math.ceil for consistent EMI display (EMI.jsx)
+    // Last installment absorbs remainder: last = remaining - (months-1) * emiAmount
+    const emiAmount = months > 0 ? Math.ceil(remaining / months) : 0;
 
     const appNo = 'EMI-' + Date.now();
 
@@ -167,28 +169,50 @@ exports.payInstallment = async (req, res, next) => {
         [tenantId, id, payAmt, penAmt, discAmt, payAmt + penAmt - discAmt, payment_mode, payment_mode, account_id, receiptNo, notes]
       );
 
-      // 2. Update schedule: mark earliest pending installment as paid
+      // 2. Update schedule: handle partial vs full payment
       const [pendings] = await conn.query(
-        `SELECT id FROM emi_schedule WHERE tenant_id = ? AND emi_id = ? AND status = 'pending' ORDER BY installment_no ASC LIMIT 1`,
+        `SELECT id, amount_due, paid_amount FROM emi_schedule WHERE tenant_id = ? AND emi_id = ? AND status IN ('pending', 'partial') ORDER BY installment_no ASC LIMIT 1`,
         [tenantId, id]
       );
       if (pendings.length > 0) {
-        await conn.query(
-          `UPDATE emi_schedule SET status = 'paid', paid_amount = ?, paid_date = CURDATE() WHERE tenant_id = ? AND id = ?`,
-          [payAmt, tenantId, pendings[0].id]
-        );
+        const inst = pendings[0];
+        const dueAmount = parseFloat(inst.amount_due) || 0;
+        const alreadyPaid = parseFloat(inst.paid_amount) || 0;
+        const totalPaidForInst = alreadyPaid + payAmt;
+        // Total applied to this installment (including penalty/discount effect)
+        const netPayment = payAmt + penAmt - discAmt;
+        if (totalPaidForInst >= dueAmount) {
+          // Fully paid (or overpaid — cap at due amount)
+          await conn.query(
+            `UPDATE emi_schedule SET status = 'paid', paid_amount = ?, paid_date = CURDATE() WHERE tenant_id = ? AND id = ?`,
+            [dueAmount, tenantId, inst.id]
+          );
+        } else {
+          // Partial payment — mark as partial, keep installment open
+          await conn.query(
+            `UPDATE emi_schedule SET status = 'partial', paid_amount = ? WHERE tenant_id = ? AND id = ?`,
+            [totalPaidForInst, tenantId, inst.id]
+          );
+        }
       }
 
       // 3. Update emi_records remaining balance and paid months
+      // Net reduction: payment amount + discount (reduces owed) ; penalty increases owed but is collected now
+      // remaining reduces by (payAmt + discAmt), penalty is extra collected on top
+      const balanceReduction = payAmt + discAmt;
+      const [emiRows] = await conn.query(`SELECT remaining_amount, paid_installments, paid_months FROM emi_records WHERE tenant_id = ? AND id = ?`, [tenantId, id]);
+      const currentRemaining = emiRows.length > 0 ? parseFloat(emiRows[0].remaining_amount) || 0 : 0;
+      const newRemaining = Math.max(0, currentRemaining - balanceReduction);
+      const isFullyPaid = pendings.length > 0 && (parseFloat(pendings[0].paid_amount) || 0) + payAmt >= (parseFloat(pendings[0].amount_due) || 0);
       await conn.query(
         `UPDATE emi_records SET
-           remaining_amount = GREATEST(0, remaining_amount - ?),
-           paid_installments = paid_installments + 1,
-           paid_months = paid_months + 1,
+           remaining_amount = ?,
+           paid_installments = paid_installments + ?,
+           paid_months = paid_months + ?,
            last_payment_date = CURDATE(),
-           status = CASE WHEN remaining_amount - ? <= 0 THEN 'closed' ELSE 'active' END
+           status = CASE WHEN ? <= 0 THEN 'closed' ELSE 'active' END
          WHERE tenant_id = ? AND id = ?`,
-        [payAmt, payAmt, tenantId, id]
+        [newRemaining, isFullyPaid ? 1 : 0, isFullyPaid ? 1 : 0, newRemaining, tenantId, id]
       );
 
       // 4. Update account balance if account_id given
