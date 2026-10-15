@@ -178,6 +178,11 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'emi_records', '`source_mode` VARCHAR(20) DEFAULT \'inventory\'');
     await addColumnIfMissing(connection, 'emi_records', '`device_imei_id` INT NULL');
     await addColumnIfMissing(connection, 'emi_records', '`cost_price` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_records', '`interest_type` VARCHAR(20) DEFAULT \'percentage\'');
+    await addColumnIfMissing(connection, 'emi_records', '`fixed_interest_per_month` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_records', '`product_source` VARCHAR(20) DEFAULT \'inventory\'');
+    await addColumnIfMissing(connection, 'emi_records', '`source_name` VARCHAR(255) DEFAULT \'\'');
+    await addColumnIfMissing(connection, 'emi_records', '`source_purchase_price` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'emi_records', '`interest_amount` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'emi_records', '`total_payable` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'emi_records', '`monthly_target` DECIMAL(15,2) DEFAULT 0');

@@ -75,6 +75,8 @@ exports.createEMI = async (req, res, next) => {
       customer_id, customer_name, product_name = '', product_sku = '',
       product_variant_id = null, product_id = null, sale_id = null,
       total_amount, down_payment = 0, total_months = 1, interest_rate = 0,
+      interest_type = 'percentage', fixed_interest_per_month = 0,
+      product_source = 'inventory', source_name = '', source_purchase_price = 0,
       start_date = new Date().toISOString().slice(0, 10), salesman_id = null,
       shop_location = '', notes = '', guarantors = []
     } = req.body;
@@ -95,9 +97,9 @@ exports.createEMI = async (req, res, next) => {
     const emiId = await transaction(async (conn) => {
       const [ins] = await conn.query(
         `INSERT INTO emi_records 
-         (tenant_id, application_no, customer_id, customer_name, product_variant_id, product_id, sale_id, product_name, product_sku, total_amount, down_payment, remaining_amount, emi_amount, interest_rate, total_months, total_installments, start_date, next_due_date, salesman_id, shop_location, notes, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-        [tenantId, appNo, customer_id, customer_name, product_variant_id, product_id, sale_id, product_name, product_sku, tAmount, dPayment, remaining, emiAmount, interest_rate, months, months, start_date, nextDueDate, salesman_id, shop_location, notes]
+         (tenant_id, application_no, customer_id, customer_name, product_variant_id, product_id, sale_id, product_name, product_sku, total_amount, down_payment, remaining_amount, emi_amount, interest_rate, interest_type, fixed_interest_per_month, total_months, total_installments, start_date, next_due_date, salesman_id, shop_location, notes, product_source, source_name, source_purchase_price, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+        [tenantId, appNo, customer_id, customer_name, product_variant_id, product_id, sale_id, product_name, product_sku, tAmount, dPayment, remaining, emiAmount, interest_rate, interest_type, fixed_interest_per_month, months, months, start_date, nextDueDate, salesman_id, shop_location, notes, product_source, source_name, source_purchase_price]
       );
 
       const id = ins.insertId;

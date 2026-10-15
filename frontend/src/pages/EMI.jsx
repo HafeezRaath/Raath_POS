@@ -388,7 +388,9 @@ export default function EMI() {
     productName: '', productSKU: '', totalAmount: 0, downPayment: 0,
     downPaymentMode: 'cash',
     downPaymentAccountId: '',
-    interestRate: 0, months: 12, customerId: '',
+    interestRate: 0, interestType: 'percentage', fixedInterestPerMonth: 0,
+    months: 12, customerId: '',
+    productSource: 'inventory', sourceName: '', sourcePurchasePrice: 0,
     shopLocation: '', notes: '', agreementSigned: false
   });
 
@@ -847,11 +849,15 @@ export default function EMI() {
     const months = Number(calc.months || 12);
 
     // Flat Surcharge / Markup (Standard in Pakistani retail installment businesses)
-    // Formula: Total Interest = Total Amount * (Rate / 100)
-    // Total Amount with Interest = Total Amount + Total Interest
-    // Net Remaining after Down Payment = Total Amount with Interest - Down Payment
-    // Monthly EMI = Net Remaining / Months
-    const totalInterest = round2(Number(calc.totalAmount || 0) * (interestRate / 100));
+    // Two modes: percentage OR fixed amount per month
+    // Percentage: Total Interest = Total Amount * (Rate / 100)
+    // Fixed: Total Interest = Fixed Per Month * Months (e.g. Rs.2000 × 12)
+    let totalInterest;
+    if (calc.interestType === 'fixed') {
+      totalInterest = round2(Number(calc.fixedInterestPerMonth || 0) * months);
+    } else {
+      totalInterest = round2(Number(calc.totalAmount || 0) * (interestRate / 100));
+    }
     const totalWithInterest = round2(Number(calc.totalAmount || 0) + totalInterest);
     const remainingPayable = Math.max(0, round2(totalWithInterest - Number(calc.downPayment || 0)));
     const emiAmount = months > 0 ? Math.ceil(remainingPayable / months) : 0;
@@ -1059,7 +1065,12 @@ export default function EMI() {
       remaining_amount: calculatedMetrics.totalPayable,
       emi_amount: calculatedMetrics.emiAmount,
       interest_rate: Number(calc.interestRate),
+      interest_type: calc.interestType || 'percentage',
+      fixed_interest_per_month: Number(calc.fixedInterestPerMonth || 0),
       total_months: Number(calc.months),
+      product_source: calc.productSource || 'inventory',
+      source_name: calc.sourceName || '',
+      source_purchase_price: Number(calc.sourcePurchasePrice || 0),
       paid_months: 0,
       start_date: startDate,
       next_due_date: nextDate.toISOString().split('T')[0],
@@ -3574,10 +3585,53 @@ export default function EMI() {
               </li>
             )}
             renderInput={(params) => (
-              <TextField {...params} label="Select Product from Inventory *" placeholder="Search product by name or SKU..." />
+              <TextField {...params} label="Select Product from Inventory" placeholder="Search product by name or SKU... (optional if sourced from outside)" />
             )}
           />
 
+          {/* Product Source: Inventory vs Outside */}
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1, mb: 1 }}>
+            <Typography variant="body2" fontWeight="bold">Product Source:</Typography>
+            <Button
+              size="small"
+              variant={calc.productSource === 'inventory' ? 'contained' : 'outlined'}
+              onClick={() => setCalc({ ...calc, productSource: 'inventory' })}
+            >
+              My Inventory
+            </Button>
+            <Button
+              size="small"
+              variant={calc.productSource === 'outside' ? 'contained' : 'outlined'}
+              onClick={() => setCalc({ ...calc, productSource: 'outside' })}
+            >
+              From Outside
+            </Button>
+          </Box>
+          {calc.productSource === 'outside' && (
+            <Grid container spacing={2} sx={{ mb: 1 }}>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Source Name *"
+                  placeholder="e.g. Hall Road Supplier"
+                  value={calc.sourceName || ''}
+                  onChange={(e) => setCalc({ ...calc, sourceName: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Purchase Price (Rs.) *"
+                  placeholder="Price you paid to source"
+                  value={calc.sourcePurchasePrice || ''}
+                  onChange={(e) => setCalc({ ...calc, sourcePurchasePrice: Number(e.target.value) })}
+                />
+              </Grid>
+            </Grid>
+          )}
           <TextField 
             fullWidth 
             size="small" 
@@ -3680,7 +3734,27 @@ export default function EMI() {
           )}
 
           <Grid container spacing={isMobile ? 1 : 2}>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Typography variant="body2" fontWeight="bold">Interest Type:</Typography>
+                <Button
+                  size="small"
+                  variant={calc.interestType === 'percentage' ? 'contained' : 'outlined'}
+                  onClick={() => setCalc({ ...calc, interestType: 'percentage' })}
+                >
+                  % Percentage
+                </Button>
+                <Button
+                  size="small"
+                  variant={calc.interestType === 'fixed' ? 'contained' : 'outlined'}
+                  onClick={() => setCalc({ ...calc, interestType: 'fixed' })}
+                >
+                  Fixed / Month
+                </Button>
+              </Box>
+            </Grid>
             <Grid item xs={6}>
+              {calc.interestType === 'percentage' ? (
               <TextField 
                 fullWidth 
                 size="small" 
@@ -3689,6 +3763,17 @@ export default function EMI() {
                 value={calc.interestRate || ''} 
                 onChange={(e) => setCalc({ ...calc, interestRate: Number(e.target.value) })} 
               />
+              ) : (
+              <TextField 
+                fullWidth 
+                size="small" 
+                type="number" 
+                label="Fixed Interest / Month (Rs.)" 
+                placeholder="e.g. 2000"
+                value={calc.fixedInterestPerMonth || ''} 
+                onChange={(e) => setCalc({ ...calc, fixedInterestPerMonth: Number(e.target.value) })} 
+              />
+              )}
             </Grid>
             <Grid item xs={6}>
               <TextField 
