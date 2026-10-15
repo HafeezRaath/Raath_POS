@@ -26,7 +26,6 @@ const STEPS = ['Account Info', 'Business Details', 'Review'];
 const BUSINESS_TYPES = [
   { value: 'retail', label: 'Retail Store' },
   { value: 'wholesale', label: 'Wholesale' },
-  { value: 'restaurant', label: 'Restaurant / Cafe' },
   { value: 'electronics', label: 'Electronics' },
   { value: 'clothing', label: 'Clothing & Fashion' },
   { value: 'shoes', label: 'Shoes' },

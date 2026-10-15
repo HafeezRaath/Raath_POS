@@ -17,7 +17,6 @@ export const BUSINESS_TYPES = [
   { value: 'stationery', label: 'Stationery Shop', icon: '📚' },
   { value: 'motorbike', label: 'Motorbike Spare Parts', icon: '🏍️' },
   { value: 'wholesale', label: 'Wholesale', icon: '📦' },
-  { value: 'restaurant', label: 'Restaurant / Cafe', icon: '🍽️' },
   { value: 'retail', label: 'Retail Store', icon: '🏪' },
   { value: 'other', label: 'Other', icon: '🏬' },
 ];
@@ -34,7 +33,6 @@ export const TOGGLEABLE_MODULES = [
 export const BUSINESS_MODULE_DEFAULTS = {
   retail:      { emi: false, workorders: false, distribution: false },
   wholesale:   { emi: false, workorders: false, distribution: true },
-  restaurant:  { emi: false, workorders: false, distribution: false },
   electronics: { emi: true,  workorders: true,  distribution: false },
   clothing:    { emi: false, workorders: false, distribution: false },
   garments:    { emi: false, workorders: false, distribution: false },
@@ -61,7 +59,6 @@ export const DEFAULT_PRODUCT_TYPE_BY_BUSINESS = {
   stationery: 'stationery',
   motorbike: 'standard',
   electronics: 'standard',
-  restaurant: 'standard',
   retail: 'standard',
   other: 'standard',
 };
