@@ -6,8 +6,9 @@ const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 const DRIVE_FOLDER_NAME = 'Raath_POS_Backups';
 const DRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 
-// Default OAuth Client ID (can be overridden by user in settings)
-export const DEFAULT_CLIENT_ID = '382109489201-8b3q2t3h1b3q1j5t1p5j1.apps.googleusercontent.com';
+// No fake default — user MUST configure their own OAuth Client ID from Google Cloud Console.
+// Using a placeholder ID causes "Error 401: invalid_client" from Google.
+export const DEFAULT_CLIENT_ID = '';
 
 let tokenClient = null;
 let scriptLoadingPromise = null;
@@ -45,6 +46,14 @@ export function loadGoogleIdentityScript() {
  * Request Google Drive Access Token via OAuth2 Popup
  */
 export async function requestGoogleDriveToken(clientId = DEFAULT_CLIENT_ID) {
+  // Validate client ID before attempting OAuth — prevents cryptic Google errors
+  const cid = (clientId || '').trim();
+  if (!cid || !cid.endsWith('.apps.googleusercontent.com')) {
+    throw new Error(
+      'Google Drive setup incomplete. Please configure a valid OAuth Client ID in Settings → Google Drive → Client ID Settings. ' +
+      'Get one free from Google Cloud Console (console.cloud.google.com → APIs & Services → Credentials → Create OAuth 2.0 Client ID).'
+    );
+  }
   await loadGoogleIdentityScript();
 
   if (!window.google?.accounts?.oauth2) {

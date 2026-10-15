@@ -236,7 +236,13 @@ export default function BackupPage() {
   const handleConnectGoogleDrive = async () => {
     setLoadingDrive(true);
     try {
-      const clientId = clientIdInput.trim() || DEFAULT_CLIENT_ID;
+      const clientId = clientIdInput.trim();
+      // Block connection attempt with no/invalid client ID — show setup guidance instead
+      if (!clientId || !clientId.endsWith('.apps.googleusercontent.com')) {
+        setShowGdriveConfig(true);
+        showSnackbar('Pehle apna Google OAuth Client ID set karein (neeche steps dekhein)', 'warning');
+        return;
+      }
       localStorage.setItem('raath_gdrive_client_id', clientId);
       const auth = await requestGoogleDriveToken(clientId);
       setGdriveAuth(auth);
@@ -264,8 +270,10 @@ export default function BackupPage() {
     const cid = clientIdInput.trim();
     if (!cid) {
       localStorage.removeItem('raath_gdrive_client_id');
-      setClientIdInput(DEFAULT_CLIENT_ID);
-      showSnackbar('Reset to default Google Client ID', 'info');
+      setClientIdInput('');
+      showSnackbar('Client ID cleared — apna OAuth Client ID set karein', 'info');
+    } else if (!cid.endsWith('.apps.googleusercontent.com')) {
+      showSnackbar('Invalid Client ID format. Sahi format: xxxx.apps.googleusercontent.com', 'error');
     } else {
       localStorage.setItem('raath_gdrive_client_id', cid);
       showSnackbar('Saved custom Client ID. Please reconnect.', 'success');
@@ -632,15 +640,30 @@ export default function BackupPage() {
               <Collapse in={showGdriveConfig}>
                 <Paper variant="outlined" sx={{ p: 1.5, mb: 2, bgcolor: 'grey.50' }}>
                   <Typography variant="caption" fontWeight="bold" display="block" gutterBottom>
-                    Google OAuth Client ID (Optional Customization)
+                    Google OAuth Client ID (Required for Drive Backup)
                   </Typography>
+                  {!clientIdInput.trim() && (
+                    <Alert severity="info" sx={{ mb: 1.5, fontSize: '0.75rem' }}>
+                      <Typography variant="caption" fontWeight="bold" display="block" gutterBottom>
+                        Setup (ek dafa, 2 minute — FREE):
+                      </Typography>
+                      <Typography variant="caption" component="div">
+                        1. <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>console.cloud.google.com</a> kholein<br />
+                        2. APIs &amp; Services → Credentials → <b>Create Credentials → OAuth client ID</b><br />
+                        3. Application type: <b>Web application</b><br />
+                        4. Authorized JavaScript origins mein add karein:<br />
+                        &nbsp;&nbsp;<code>https://pos.raathdeveloper.com</code><br />
+                        5. Client ID copy karke neeche paste karein → Save
+                      </Typography>
+                    </Alert>
+                  )}
                   <TextField 
                     fullWidth 
                     size="small" 
                     value={clientIdInput} 
                     onChange={(e) => setClientIdInput(e.target.value)}
-                    placeholder="Enter your Google Cloud Client ID"
-                    helperText="Default ID works out of the box. Only change if using your own GCP project."
+                    placeholder="xxxx.apps.googleusercontent.com"
+                    helperText="Apne Google Cloud project ka OAuth 2.0 Client ID yahan paste karein."
                     sx={{ mb: 1 }}
                   />
                   <Stack direction="row" spacing={1}>
@@ -648,11 +671,11 @@ export default function BackupPage() {
                       Save Client ID
                     </Button>
                     <Button size="small" variant="outlined" onClick={() => {
-                      setClientIdInput(DEFAULT_CLIENT_ID);
+                      setClientIdInput('');
                       localStorage.removeItem('raath_gdrive_client_id');
-                      showSnackbar('Reset to default client ID', 'info');
+                      showSnackbar('Client ID cleared — apna OAuth Client ID set karein', 'info');
                     }}>
-                      Reset Default
+                      Clear
                     </Button>
                   </Stack>
                 </Paper>
