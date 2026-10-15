@@ -60,7 +60,7 @@ const formatCurrency = (amount) => {
     style: 'currency', 
     currency: 'PKR', 
     minimumFractionDigits: 2,
-    maximumFractionDigits: 0 
+    maximumFractionDigits: 2 
   }).format(amount || 0);
 };
 
