@@ -1349,14 +1349,20 @@ export default function BillingPage() {
   }, []);
 
   // ---- SAVE FBR MODE ----
+  // Note: FBR API not configured — toggle is visual only, no crash
   const toggleFBRMode = () => {
-    const newMode = !fbrMode;
-    setFbrMode(newMode);
-    localStorage.setItem('fbr_mode', String(newMode));
-    showSnackbar(
-      newMode ? 'FBR Mode: ON - Real Tax & QR' : 'FBR Mode: OFF - 0% Tax (Demo)',
-      newMode ? 'success' : 'warning'
-    );
+    try {
+      const newMode = !fbrMode;
+      setFbrMode(newMode);
+      localStorage.setItem('fbr_mode', String(newMode));
+      showSnackbar(
+        newMode ? 'FBR Mode: ON - Real Tax & QR' : 'FBR Mode: OFF - 0% Tax (Demo)',
+        newMode ? 'success' : 'warning'
+      );
+    } catch (err) {
+      console.error('FBR toggle error:', err);
+      // Don't crash the app — just log
+    }
   };
 
   // ---- LOAD ----

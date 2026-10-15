@@ -171,12 +171,12 @@ exports.payInstallment = async (req, res, next) => {
 
       // 2. Update schedule: handle partial vs full payment
       const [pendings] = await conn.query(
-        `SELECT id, amount_due, paid_amount FROM emi_schedule WHERE tenant_id = ? AND emi_id = ? AND status IN ('pending', 'partial') ORDER BY installment_no ASC LIMIT 1`,
+        `SELECT id, planned_amount, paid_amount FROM emi_schedule WHERE tenant_id = ? AND emi_id = ? AND status IN ('pending', 'partial') ORDER BY installment_no ASC LIMIT 1`,
         [tenantId, id]
       );
       if (pendings.length > 0) {
         const inst = pendings[0];
-        const dueAmount = parseFloat(inst.amount_due) || 0;
+        const dueAmount = parseFloat(inst.planned_amount) || 0;
         const alreadyPaid = parseFloat(inst.paid_amount) || 0;
         const totalPaidForInst = alreadyPaid + payAmt;
         // Total applied to this installment (including penalty/discount effect)
@@ -203,7 +203,7 @@ exports.payInstallment = async (req, res, next) => {
       const [emiRows] = await conn.query(`SELECT remaining_amount, paid_installments, paid_months FROM emi_records WHERE tenant_id = ? AND id = ?`, [tenantId, id]);
       const currentRemaining = emiRows.length > 0 ? parseFloat(emiRows[0].remaining_amount) || 0 : 0;
       const newRemaining = Math.max(0, currentRemaining - balanceReduction);
-      const isFullyPaid = pendings.length > 0 && (parseFloat(pendings[0].paid_amount) || 0) + payAmt >= (parseFloat(pendings[0].amount_due) || 0);
+      const isFullyPaid = pendings.length > 0 && (parseFloat(pendings[0].paid_amount) || 0) + payAmt >= (parseFloat(pendings[0].planned_amount) || 0);
       await conn.query(
         `UPDATE emi_records SET
            remaining_amount = ?,

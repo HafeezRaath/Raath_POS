@@ -174,6 +174,7 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'work_orders', '`commission_percent` DECIMAL(5,2) DEFAULT 0');
     // Staff table: tenant scoping (getStaff filters by tenant_id)
     await addColumnIfMissing(connection, 'staff', '`tenant_id` VARCHAR(100) DEFAULT \'tenant_default\'');
+    await addColumnIfMissing(connection, 'staff', '`base_salary` DECIMAL(15,2) DEFAULT 0');
     // Advanced EMI columns
     await addColumnIfMissing(connection, 'emi_records', '`source_mode` VARCHAR(20) DEFAULT \'inventory\'');
     await addColumnIfMissing(connection, 'emi_records', '`device_imei_id` INT NULL');
