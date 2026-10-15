@@ -134,7 +134,10 @@ export default function RepairJobCardModal({ open, onClose, onSaved }) {
         notes,
         parts: parts.map(p => ({ product_variant_id: p.product_variant_id, qty: p.qty })),
       });
-      const job = res.data?.data;
+      const job = res.data?.data || res.data;
+      if (!job || !job.id) {
+        throw new Error('Server se job data nahi aaya — dobara try karein');
+      }
       // upload photos
       for (const [kind, b64] of [['before', photoBefore], ['after', photoAfter]]) {
         if (b64) {
