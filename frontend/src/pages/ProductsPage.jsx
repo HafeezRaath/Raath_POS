@@ -3685,8 +3685,8 @@ const [copies, setCopies] = useState(1);
               </Paper>
               )}
 
-              {/* CARD 4: Pricing & Inventory — hidden for types with specialized pricing (imei, fabric) to avoid duplicates */}
-              {dialogProductType !== 'imei' && dialogProductType !== 'fabric' && (
+              {/* CARD 4: Pricing & Inventory — hidden only when ADDING a mobile/IMEI product (BulkImeiForm owns Cost/Sale Price in that flow). Edit mode + all other types keep it: Telemetry has no price fields, and ReadymadeMatrix reads CARD 4 prices. */}
+              {!(dialogProductType === 'imei' && !editingProduct) && (
               <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
                   <Typography variant="subtitle2" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
