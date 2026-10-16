@@ -876,6 +876,13 @@ export default function PurchasePage() {
     const totals = calculateTotals;
     const paidAmount = Math.min(Number(purchaseForm.paid_amount) || 0, totals.grandTotal);
     
+    // FIX: Get account_id from payment_mode for backend to debit the correct account
+    let purchaseAccountId = null;
+    if (paidAmount > 0 && purchaseForm.payment_mode !== 'credit') {
+      const acc = paymentAccounts.find(a => a.type === purchaseForm.payment_mode);
+      if (acc) purchaseAccountId = acc.id;
+    }
+    
     // Balance validation for non-credit payments (only on new purchases)
     if (!editingPurchase && paidAmount > 0 && purchaseForm.payment_mode !== 'credit') {
       const acc = paymentAccounts.find(a => a.type === purchaseForm.payment_mode);
@@ -921,6 +928,7 @@ export default function PurchasePage() {
       paid_amount: paidAmount,
       payment_status: paymentStatus,
       payment_mode: purchaseForm.payment_mode,
+      account_id: purchaseAccountId,
       notes: purchaseForm.notes,
       items: items.map(item => ({
         product_id: item.product_id || null,
