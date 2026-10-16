@@ -321,6 +321,7 @@ const [copies, setCopies] = useState(1);
   const [loosePieces, setLoosePieces] = useState('');
   const [cartonPrice, setCartonPrice] = useState('');
   const [boxPrice, setBoxPrice] = useState('');
+  const [boxCostPrice, setBoxCostPrice] = useState('');
 
   // Box/Carton toggle sirf Wholesale ya Mart (Grocery/Kirana) business type wali shops mein dikhega.
   // Pehle se save ki hui box-product entry edit karte waqt card phir bhi visible rahega taake data orphan na ho.
@@ -1729,32 +1730,26 @@ const [copies, setCopies] = useState(1);
     
     // ====== CARTON > BOX > PIECE ENTRY HANDLING ======
     if (isBoxEntry) {
-      const c = Number(cartonQuantity) || 0;
-      const bpC = Number(boxesPerCarton) || 0;
       const ppB = Number(unitsPerBox) || 0;
       const b = Number(boxQuantity) || 0;
-      const p = Number(loosePieces) || 0;
+      const boxCost = Number(boxCostPrice) || 0;
+      const boxSale = Number(boxPrice) || 0;
 
       meta.is_box_product = true;
-      meta.is_carton_product = c > 0 || bpC > 0;
-      meta.boxes_per_carton = bpC;
       meta.units_per_box = ppB;
       meta.pieces_per_box = ppB;
-      meta.carton_quantity = c;
       meta.box_quantity = b;
-      meta.loose_pieces = p;
-      meta.carton_price = Number(cartonPrice) || (ppB > 0 && bpC > 0 ? (retail * ppB * bpC) : 0);
-      meta.box_price = Number(boxPrice) || (ppB > 0 ? (retail * ppB) : 0);
-      meta.piece_price = retail;
-
-      let calcTotalStock = 0;
-      if (bpC > 0 && ppB > 0) {
-        calcTotalStock = (c * bpC * ppB) + (b * ppB) + p;
-      } else if (ppB > 0) {
-        calcTotalStock = (b * ppB) + p;
-      } else {
-        calcTotalStock = p || Number(productForm.stock) || 0;
+      meta.box_cost_price = boxCost;
+      meta.box_price = boxSale;
+      // Auto per-unit prices from box prices
+      if (ppB > 0) {
+        if (boxCost > 0) productForm.costPrice = (boxCost / ppB).toFixed(2);
+        if (boxSale > 0) productForm.retailPrice = (boxSale / ppB).toFixed(2);
       }
+      meta.piece_price = Number(productForm.retailPrice) || retail;
+
+      // Simple: boxes × units per box = total units
+      const calcTotalStock = (b * ppB) || Number(productForm.stock) || 0;
       productForm.stock = calcTotalStock.toString();
     } else {
       meta.is_box_product = false;
@@ -3527,10 +3522,10 @@ const [copies, setCopies] = useState(1);
                     </Box>
                     <Box>
                       <Typography variant="subtitle2" fontWeight="bold" color={isBoxEntry ? '#065f46' : 'text.primary'}>
-                        Carton &gt; Box &gt; Piece Packaging Hierarchy
+                        Box Packaging
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Carton, Box aur Piece stock entry &amp; piece-selling auto-break mode
+                        Box mein units — box cost/sale se per-unit auto-calculate
                       </Typography>
                     </Box>
                   </Box>
@@ -3544,7 +3539,7 @@ const [copies, setCopies] = useState(1);
                     }
                     label={
                       <Typography variant="caption" fontWeight="bold" sx={{ color: isBoxEntry ? '#059669' : '#64748b', ml: 0.5 }}>
-                        {isBoxEntry ? 'PACKAGING HIERARCHY ON' : 'SINGLE PIECE MODE'}
+                        {isBoxEntry ? 'BOX MODE ON' : 'UNIT MODE'}
                       </Typography>
                     }
                   />
@@ -3553,16 +3548,16 @@ const [copies, setCopies] = useState(1);
                 {isBoxEntry && (
                   <Box sx={{ mt: 2.5, pt: 2, borderTop: '1px dashed #a7f3d0' }}>
                     <Grid container spacing={2}>
-                      {/* Tier 1: Multipliers */}
                       <Grid item xs={12} sm={6}>
                         <TextField
                           fullWidth
                           size="small"
-                          label="Boxes per Carton (Ctn → Box)"
+                          label="Units per Box *"
                           type="number"
-                          value={boxesPerCarton}
-                          onChange={handleBoxesPerCartonChange}
-                          helperText="Ek Carton mein kitne Boxes hain (e.g., 10)"
+                          value={unitsPerBox}
+                          onChange={handleUnitsPerBoxChange}
+                          helperText="Ek Box mein kitne Units hain (e.g., 10)"
+                          required={isBoxEntry}
                           placeholder="10"
                         />
                       </Grid>
@@ -3570,81 +3565,38 @@ const [copies, setCopies] = useState(1);
                         <TextField
                           fullWidth
                           size="small"
-                          label="Pieces per Box (Box → Pcs) *"
-                          type="number"
-                          value={unitsPerBox}
-                          onChange={handleUnitsPerBoxChange}
-                          helperText="Ek Box mein kitne Pieces hain (e.g., 12)"
-                          required={isBoxEntry}
-                          placeholder="12"
-                        />
-                      </Grid>
-
-                      {/* Tier 2: Current Inventory Breakdown */}
-                      <Grid item xs={12} sm={4}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Cartons Stock"
-                          type="number"
-                          value={cartonQuantity}
-                          onChange={handleCartonQuantityChange}
-                          helperText="Dukaan/Godam mein kitne Cartons hain"
-                          placeholder="5"
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={4}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Loose Boxes Stock"
+                          label="Number of Boxes"
                           type="number"
                           value={boxQuantity}
                           onChange={handleBoxQuantityChange}
-                          helperText="Khulay boxes kitne hain"
-                          placeholder="2"
+                          helperText="Kitne Boxes hain"
+                          placeholder="5"
                         />
                       </Grid>
-                      <Grid item xs={12} sm={4}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Loose Pieces Stock"
-                          type="number"
-                          value={loosePieces}
-                          onChange={handleLoosePiecesChange}
-                          helperText="Khulay azaad pieces kitne hain"
-                          placeholder="6"
-                        />
-                      </Grid>
-
-                      {/* Tier 3: Prices for Box & Carton */}
                       <Grid item xs={12} sm={6}>
                         <TextField
                           fullWidth
                           size="small"
-                          label="Box Selling Price (Rs.)"
+                          label="Box Cost Price (Rs.)"
+                          type="number"
+                          value={boxCostPrice}
+                          onChange={(e) => setBoxCostPrice(e.target.value)}
+                          helperText={unitsPerBox ? `Per unit: Rs. ${(Number(boxCostPrice) / Number(unitsPerBox)).toFixed(2)}` : '1 Box ki cost'}
+                          placeholder="1000"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Box Sale Price (Rs.)"
                           type="number"
                           value={boxPrice}
                           onChange={(e) => setBoxPrice(e.target.value)}
-                          helperText={unitsPerBox && productForm.retailPrice ? `Standard: Rs. ${Number(productForm.retailPrice) * Number(unitsPerBox)}` : '1 Box ki retail qeemat'}
-                          placeholder={unitsPerBox && productForm.retailPrice ? String(Number(productForm.retailPrice) * Number(unitsPerBox)) : '1200'}
+                          helperText={unitsPerBox ? `Per unit: Rs. ${(Number(boxPrice) / Number(unitsPerBox)).toFixed(2)}` : '1 Box ki sale price'}
+                          placeholder="1200"
                         />
                       </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          label="Carton Selling Price (Rs.)"
-                          type="number"
-                          value={cartonPrice}
-                          onChange={(e) => setCartonPrice(e.target.value)}
-                          helperText={boxesPerCarton && unitsPerBox && productForm.retailPrice ? `Standard: Rs. ${Number(productForm.retailPrice) * Number(unitsPerBox) * Number(boxesPerCarton)}` : '1 Carton ki wholesale/retail qeemat'}
-                          placeholder={boxesPerCarton && unitsPerBox && productForm.retailPrice ? String(Number(productForm.retailPrice) * Number(unitsPerBox) * Number(boxesPerCarton)) : '12000'}
-                        />
-                      </Grid>
-
-                      {/* Formula & Summary Live Calculation Card */}
                       <Grid item xs={12}>
                         <Box sx={{ 
                           p: 2, 
@@ -3653,39 +3605,17 @@ const [copies, setCopies] = useState(1);
                           border: '1px solid #a7f3d0',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'space-between',
-                          flexWrap: 'wrap',
-                          gap: 1.5
+                          gap: 1
                         }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <CheckCircle sx={{ color: '#10b981', fontSize: 24 }} />
-                            <Box>
-                              <Typography variant="body2" fontWeight="bold" color="#065f46">
-                                Total Converted Stock: {Number(productForm.stock) || 0} Pieces
-                              </Typography>
-                              <Typography variant="caption" color="#047857" sx={{ display: 'block' }}>
-                                Calculation: {Number(cartonQuantity) || 0} Ctn (×{Number(boxesPerCarton) || 0} box ×{Number(unitsPerBox) || 0} pcs) + {Number(boxQuantity) || 0} Box (×{Number(unitsPerBox) || 0} pcs) + {Number(loosePieces) || 0} Loose = {Number(productForm.stock) || 0} Pieces
-                              </Typography>
-                            </Box>
+                          <CheckCircle sx={{ color: '#10b981', fontSize: 24 }} />
+                          <Box>
+                            <Typography variant="body2" fontWeight="bold" color="#065f46">
+                              Total Stock: {Number(boxQuantity) * Number(unitsPerBox) || 0} Units
+                            </Typography>
+                            <Typography variant="caption" color="#047857" sx={{ display: 'block' }}>
+                              {Number(boxQuantity) || 0} Boxes × {Number(unitsPerBox) || 0} Units = {Number(boxQuantity) * Number(unitsPerBox) || 0} Units
+                            </Typography>
                           </Box>
-                          <Stack direction="row" spacing={1} flexWrap="wrap">
-                            {Number(boxesPerCarton) > 0 && Number(unitsPerBox) > 0 && (
-                              <Chip 
-                                size="small" 
-                                color="success"
-                                label={`1 Ctn = ${Number(boxesPerCarton) * Number(unitsPerBox)} Pcs`}
-                                sx={{ fontWeight: 'bold' }}
-                              />
-                            )}
-                            {Number(unitsPerBox) > 0 && (
-                              <Chip 
-                                size="small" 
-                                color="primary"
-                                label={`1 Box = ${unitsPerBox} Pcs`}
-                                sx={{ fontWeight: 'bold' }}
-                              />
-                            )}
-                          </Stack>
                         </Box>
                       </Grid>
                     </Grid>
