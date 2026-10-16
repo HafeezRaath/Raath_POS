@@ -16,11 +16,19 @@ export default function ImeiLookupModal({ open, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  // buyback form state
+  const [bbOpen, setBbOpen] = useState(false);
+  const [bbPurchase, setBbPurchase] = useState('');
+  const [bbSale, setBbSale] = useState('');
+  const [bbSeller, setBbSeller] = useState('');
+  const [bbNotes, setBbNotes] = useState('');
+  const [bbSaving, setBbSaving] = useState(false);
+  const [bbMsg, setBbMsg] = useState(null);
 
   const search = async () => {
     const clean = q.replace(/\D/g, '');
     if (!clean) return;
-    setLoading(true); setErr(''); setData(null);
+    setLoading(true); setErr(''); setData(null); setBbOpen(false); setBbMsg(null);
     try {
       const r = await api.get(`/imei/lookup/${clean}`);
       setData(r.data?.data);
@@ -28,6 +36,33 @@ export default function ImeiLookupModal({ open, onClose }) {
       setErr(e.response?.data?.error || 'IMEI not found');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const doBuyback = async () => {
+    const d = data?.device;
+    if (!d) return;
+    if (!Number(bbPurchase) || Number(bbPurchase) <= 0) {
+      setBbMsg({ t: 'error', m: 'Purchase price lazmi hai' });
+      return;
+    }
+    setBbSaving(true); setBbMsg(null);
+    try {
+      const r = await api.post(`/imei/${d.id}/buyback`, {
+        purchase_price: Number(bbPurchase),
+        sale_price: Number(bbSale) || 0,
+        seller_name: bbSeller.trim(),
+        notes: bbNotes.trim(),
+        action: 'BUYBACK',
+      });
+      setBbMsg({ t: 'success', m: r.data?.message || 'Buyback ho gaya — mobile wapis stock mein' });
+      setBbOpen(false);
+      setBbPurchase(''); setBbSale(''); setBbSeller(''); setBbNotes('');
+      await search(); // refresh timeline
+    } catch (e) {
+      setBbMsg({ t: 'error', m: e.response?.data?.error || 'Buyback failed' });
+    } finally {
+      setBbSaving(false);
     }
   };
 
@@ -80,6 +115,48 @@ export default function ImeiLookupModal({ open, onClose }) {
             </Grid>
 
             <Divider sx={{ my: 1.5 }} />
+
+            {/* BUYBACK — sold/returned mobile wapis kharido */}
+            {(d.status === 'SOLD' || d.status === 'RETURNED') && (
+              <Box sx={{ mb: 1.5, p: 1.5, bgcolor: '#fffbeb', borderRadius: 2, border: '1px solid #fde68a' }}>
+                {!bbOpen ? (
+                  <Button fullWidth variant="contained" color="warning" onClick={() => { setBbOpen(true); setBbPurchase(String(d.purchase_price || '')); setBbSale(String(d.sale_price || '')); }}>
+                    ↩ Buyback — Ye Mobile Wapis Kharido
+                  </Button>
+                ) : (
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1 }}>Buyback Details</Typography>
+                    <Grid container spacing={1}>
+                      <Grid item xs={6}>
+                        <TextField fullWidth size="small" label="Purchase Price (Rs) *" type="number"
+                          value={bbPurchase} onChange={(e) => setBbPurchase(e.target.value)} />
+                      </Grid>
+                      <Grid item xs={6}>
+                        <TextField fullWidth size="small" label="New Sale Price (Rs)" type="number"
+                          value={bbSale} onChange={(e) => setBbSale(e.target.value)} />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <TextField fullWidth size="small" label="Seller Name" value={bbSeller}
+                          onChange={(e) => setBbSeller(e.target.value)} placeholder="Jis se wapis kharida" />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <TextField fullWidth size="small" label="Notes" value={bbNotes}
+                          onChange={(e) => setBbNotes(e.target.value)} />
+                      </Grid>
+                    </Grid>
+                    {bbMsg && <Alert severity={bbMsg.t} sx={{ mt: 1 }}>{bbMsg.m}</Alert>}
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+                      <Button variant="outlined" onClick={() => setBbOpen(false)}>Cancel</Button>
+                      <Button variant="contained" color="warning" onClick={doBuyback} disabled={bbSaving}>
+                        {bbSaving ? 'Saving...' : 'Confirm Buyback'}
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
+                {bbMsg && !bbOpen && <Alert severity={bbMsg.t} sx={{ mt: 1 }}>{bbMsg.m}</Alert>}
+              </Box>
+            )}
+
             <Typography variant="caption" fontWeight="bold">LIFECYCLE TIMELINE</Typography>
             <Box sx={{ mt: 1 }}>
               {(data.history || []).map((h, i) => (

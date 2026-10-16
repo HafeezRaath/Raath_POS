@@ -22,6 +22,7 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
   const [salePrice, setSalePrice] = useState('');
   const [warrantyMonths, setWarrantyMonths] = useState('12');
   const [notes, setNotes] = useState('');
+  const [sellerName, setSellerName] = useState('');
   // scan list
   const [scanInput, setScanInput] = useState('');
   const [imeis, setImeis] = useState([]);
@@ -59,10 +60,12 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
         purchase_price: Number(purchasePrice) || 0,
         sale_price: Number(salePrice) || 0,
         warranty_months: Number(warrantyMonths) || 0,
-        notes, imeis,
+        notes: sellerName.trim() ? `Seller: ${sellerName.trim()}${notes.trim() ? ' | ' + notes.trim() : ''}` : notes,
+        imeis,
       });
       setMsg({ t: 'success', m: res.data?.message || `${imeis.length} units added` });
       setImeis([]);
+      setSellerName('');
       onDone && onDone(res.data);
     } catch (e) {
       setMsg({ t: 'error', m: e.response?.data?.error || 'Save failed' });
@@ -111,6 +114,9 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
         </Grid>
         <Grid item xs={4} sm={2}>
           <TextField fullWidth size="small" label="Warranty (mo)" type="number" value={warrantyMonths} onChange={(e) => setWarrantyMonths(e.target.value)} />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <TextField fullWidth size="small" label="Seller Name (optional)" value={sellerName} onChange={(e) => setSellerName(e.target.value)} placeholder="Used phone bechne wala" />
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />

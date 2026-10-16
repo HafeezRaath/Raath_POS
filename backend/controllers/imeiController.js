@@ -208,7 +208,7 @@ exports.buybackImei = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    const { purchase_price = 0, sale_price = 0, notes = '', action = 'BUYBACK' } = req.body;
+    const { purchase_price = 0, sale_price = 0, notes = '', action = 'BUYBACK', seller_name = '' } = req.body;
     const rows = await query(`SELECT * FROM device_imei WHERE tenant_id = ? AND id = ? AND is_deleted = 0`, [tenantId, id]);
     if (rows.length === 0) return res.status(404).json({ success: false, error: 'IMEI not found' });
     const d = rows[0];
@@ -217,13 +217,14 @@ exports.buybackImei = async (req, res, next) => {
     }
     await transaction(async (conn) => {
       await conn.query(
-        `UPDATE device_imei SET status = 'IN_STOCK', purchase_price = ?, sale_price = ?, sale_id = NULL WHERE id = ?`,
+        `UPDATE device_imei SET status = 'IN_STOCK', purchase_price = ?, sale_price = ?, sale_id = NULL, customer_id = NULL, customer_name = NULL WHERE id = ?`,
         [purchase_price || d.purchase_price, sale_price || d.sale_price, id]
       );
+      const bbNotes = [seller_name ? `Seller: ${seller_name}` : '', notes].filter(Boolean).join(' | ') || null;
       await conn.query(
-        `INSERT INTO device_imei_history (tenant_id, device_imei_id, action, from_status, to_status, ref_type, amount, user_id, notes)
-         VALUES (?, ?, ?, ?, 'IN_STOCK', 'buyback', ?, ?, ?)`,
-        [tenantId, id, action, d.status, purchase_price, req.user?.id || null, notes]
+        `INSERT INTO device_imei_history (tenant_id, device_imei_id, action, from_status, to_status, ref_type, amount, customer_name, user_id, notes)
+         VALUES (?, ?, ?, ?, 'IN_STOCK', 'buyback', ?, ?, ?, ?)`,
+        [tenantId, id, action, d.status, purchase_price, seller_name || null, req.user?.id || null, bbNotes]
       );
       if (d.product_variant_id) {
         await conn.query(
