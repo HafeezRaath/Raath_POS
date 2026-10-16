@@ -2692,10 +2692,12 @@ const [copies, setCopies] = useState(1);
           <Button variant="outlined" size="small" startIcon={<Scale />} onClick={() => setUnitDialog(true)}>
             {isMobile ? 'Units' : 'Units'}
           </Button>
+          {(shopBusinessType === 'stationery' || shopBusinessType === 'bookshop') && (
           <Button variant="outlined" size="small" startIcon={<MenuBook />} onClick={() => setBundleManagerOpen(true)}
             sx={{ borderColor: '#7c3aed', color: '#7c3aed' }}>
             {isMobile ? 'Bundles' : '📚 Bundles'}
           </Button>
+          )}
           {can('inventory', 'add') && (
             <Button variant="contained" size="small" startIcon={<Add />} onClick={() => handleOpenProduct()}>
               {isMobile ? 'Product' : 'Add Product'}
