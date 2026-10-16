@@ -133,23 +133,30 @@ exports.lookupImei = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const imei = String(req.params.imei || '').replace(/\D/g, '');
+    const steps = [];
+    const t0 = Date.now();
     const rows = await query(
       `SELECT * FROM device_imei WHERE tenant_id = ? AND (imei1 = ? OR imei2 = ?) AND is_deleted = 0 LIMIT 1`,
       [tenantId, imei, imei]
     );
+    steps.push(['find', Date.now() - t0, rows.length]);
     if (rows.length === 0) {
       return res.status(404).json({ success: false, error: 'IMEI not found in system', debug_tenant: tenantId });
     }
     const device = rows[0];
+    const t1 = Date.now();
     const history = await query(
       `SELECT * FROM device_imei_history WHERE tenant_id = ? AND device_imei_id = ? ORDER BY id ASC`,
       [tenantId, device.id]
     );
+    steps.push(['history', Date.now() - t1, history.length]);
+    const t2 = Date.now();
     const repairs = await query(
       `SELECT id, order_number, problem_description, status, total_amount, created_at
        FROM work_orders WHERE tenant_id = ? AND imei = ? AND is_deleted = 0 ORDER BY id DESC`,
       [tenantId, imei]
     );
+    steps.push(['repairs', Date.now() - t2, repairs.length]);
     let warranty = null;
     if (device.warranty_months > 0 && device.warranty_start) {
       const start = new Date(device.warranty_start);
@@ -162,7 +169,8 @@ exports.lookupImei = async (req, res, next) => {
         active: end >= new Date(),
       };
     }
-    res.json({ success: true, data: { device, history, repairs, warranty } });
+    steps.push(['total', Date.now() - t0, 0]);
+    res.json({ success: true, data: { device, history, repairs, warranty }, debug_steps: steps, debug_tenant: tenantId });
   } catch (error) {
     next(error);
   }

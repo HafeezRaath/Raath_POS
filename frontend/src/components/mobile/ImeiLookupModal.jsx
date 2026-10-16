@@ -32,6 +32,12 @@ export default function ImeiLookupModal({ open, onClose }) {
     try {
       const r = await api.get(`/imei/lookup/${clean}`);
       setData(r.data?.data);
+      // v64 temporary: surface backend diagnostics
+      if (r.data?.debug_steps) {
+        setErr(`DBG steps: ${JSON.stringify(r.data.debug_steps)} tenant=${r.data.debug_tenant || '?'}`);
+      } else if (!r.data?.data) {
+        setErr(`DBG raw: ${JSON.stringify(r.data).slice(0, 300)}`);
+      }
     } catch (e) {
       const t = e.response?.data?.debug_tenant ? ` (tenant: ${e.response.data.debug_tenant})` : '';
       setErr((e.response?.data?.error || 'IMEI not found') + t);
