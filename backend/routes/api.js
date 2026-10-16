@@ -51,9 +51,20 @@ router.get('/health', async (req, res) => {
   try {
     const byTenant = await query(`SELECT tenant_id, status, COUNT(*) AS c FROM device_imei GROUP BY tenant_id, status`);
     const probes = await query(`SELECT id, imei1, status, tenant_id FROM device_imei WHERE imei1 IN ('356938035643809','356938035643805')`);
-    out.debug_imei = { by_tenant: byTenant, probes, build: 'v60' };
+    // v61: simulate the EXACT lookup + picker queries with tenant_default
+    let simLookup = null, simLookupErr = null;
+    try {
+      const r = await query(`SELECT id FROM device_imei WHERE tenant_id = ? AND (imei1 = ? OR imei2 = ?) AND is_deleted = 0 LIMIT 1`, ['tenant_default', '356938035643809', '356938035643809']);
+      simLookup = { found: r.length, ids: r.map(x => x.id) };
+    } catch (e) { simLookupErr = e.message; }
+    let simPicker = null, simPickerErr = null;
+    try {
+      const r = await query(`SELECT id, imei1 FROM device_imei WHERE tenant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0 ORDER BY id DESC LIMIT 100`, ['tenant_default']);
+      simPicker = { found: r.length, imeis: r.map(x => x.imei1) };
+    } catch (e) { simPickerErr = e.message; }
+    out.debug_imei = { by_tenant: byTenant, probes, sim_lookup: simLookup, sim_lookup_err: simLookupErr, sim_picker: simPicker, sim_picker_err: simPickerErr, build: 'v61' };
   } catch (e) {
-    out.debug_imei = { error: e.message, build: 'v60' };
+    out.debug_imei = { error: e.message, build: 'v61' };
   }
   res.json(out);
 });
