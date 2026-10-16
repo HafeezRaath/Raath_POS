@@ -328,7 +328,7 @@ export default function PurchasePage() {
   const [purchaseForm, setPurchaseForm] = useState({
     supplier_id: '', supplier_name: '', purchase_no: `PUR-${Date.now()}`,
     supplier_invoice_no: '', purchase_date: new Date().toISOString().split('T')[0],
-    due_date: '', status: 'received', discount_amount: '0', tax_amount: '0',
+    due_date: '', status: 'received', discount_amount: '0', discount_type: 'fixed', tax_amount: '0',
     shipping_charges: '0', notes: '', paid_amount: '0', payment_mode: 'cash',
     payment_status: 'due'
   });
@@ -854,12 +854,15 @@ export default function PurchasePage() {
 
   const calculateTotals = useMemo(() => {
     const subtotal = round2(items.reduce((sum, item) => sum + (Number(item.sub_total) || 0), 0));
-    const discount = round2(Number(purchaseForm.discount_amount) || 0);
+    const discountInput = Number(purchaseForm.discount_amount) || 0;
+    const discount = purchaseForm.discount_type === 'percent' 
+      ? round2(subtotal * discountInput / 100) 
+      : round2(discountInput);
     const tax = round2(Number(purchaseForm.tax_amount) || 0);
     const shipping = round2(Number(purchaseForm.shipping_charges) || 0);
     const grandTotal = round2(subtotal - discount + tax + shipping);
     return { subtotal, discount, tax, shipping, grandTotal };
-  }, [items, purchaseForm.discount_amount, purchaseForm.tax_amount, purchaseForm.shipping_charges]);
+  }, [items, purchaseForm.discount_amount, purchaseForm.discount_type, purchaseForm.tax_amount, purchaseForm.shipping_charges]);
 
   const handleSavePurchase = async () => {
     if (savingPurchase) return;  // FIX: Agar already save ho raha hai toh block karo
@@ -3116,14 +3119,25 @@ const handleProcessReturn = async () => {
                   <Grid item xs={6}>
                     <Typography variant="body2">Discount:</Typography>
                   </Grid>
-                  <Grid item xs={6} sx={{ textAlign: 'right' }}>
+                  <Grid item xs={6} sx={{ textAlign: 'right', display: 'flex', gap: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
                     <TextField 
                       size="small" 
                       type="number" 
                       value={purchaseForm.discount_amount} 
                       onChange={(e) => setPurchaseForm(prev => ({ ...prev, discount_amount: e.target.value }))}
-                      sx={{ width: 100 }}
+                      sx={{ width: 80 }}
                     />
+                    <TextField
+                      size="small"
+                      select
+                      value={purchaseForm.discount_type || 'fixed'}
+                      onChange={(e) => setPurchaseForm(prev => ({ ...prev, discount_type: e.target.value }))}
+                      sx={{ width: 90 }}
+                      SelectProps={{ native: true }}
+                    >
+                      <option value="fixed">Rs.</option>
+                      <option value="percent">%</option>
+                    </TextField>
                   </Grid>
                   <Grid item xs={6}>
                     <Typography variant="body2">Tax:</Typography>
