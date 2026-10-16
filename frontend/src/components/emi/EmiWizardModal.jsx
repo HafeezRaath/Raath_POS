@@ -55,8 +55,8 @@ export default function EmiWizardModal({ open, onClose, onCreated }) {
     if (!open) return;
     setStep(0); setMsg(null);
     api.get('/products/variants').then(r => setVariants(r.data?.data || r.data || [])).catch(() => {});
-    api.get('/customers').then(r => setCustomers(r.data?.data || [])).catch(() => {});
-    api.get('/emi/guarantors').then(r => setGuarantors(r.data?.data || [])).catch(() => {});
+    api.get('/customers').then(r => setCustomers(r.data || [])).catch(() => {});
+    api.get('/emi/guarantors').then(r => setGuarantors(r.data || [])).catch(() => {});
   }, [open ]);
 
   // ---- finance math (live) ----
@@ -154,7 +154,7 @@ export default function EmiWizardModal({ open, onClose, onCreated }) {
         new_guarantor: guarantorMode === 'new' ? newG : null,
       });
       setMsg({ t: 'success', m: r.data?.message || 'EMI created' });
-      onCreated && onCreated(r.data?.data);
+      onCreated && onCreated(r.data);
       setTimeout(() => { reset(); onClose(); }, 1200);
     } catch (e) {
       setMsg({ t: 'error', m: e.response?.data?.error || 'Create failed' });

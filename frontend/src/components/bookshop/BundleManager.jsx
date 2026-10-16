@@ -30,7 +30,7 @@ export default function BundleManager({ open, onClose }) {
   const load = useCallback(async () => {
     try {
       const r = await api.get('/bundles');
-      setBundles(r.data?.data || []);
+      setBundles(r.data || []);
     } catch (e) { /* silent */ }
   }, []);
 

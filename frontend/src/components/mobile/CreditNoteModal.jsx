@@ -23,7 +23,7 @@ export default function CreditNoteModal({ open, onClose, supplier, onApplied }) 
     if (open && supplier) {
       setMsg(null); setAmount(''); setReason(''); setNoteNo('');
       api.get('/credit-notes', { supplier_id: supplier.id })
-        .then(r => setHistory(r.data?.data || []))
+        .then(r => setHistory(r.data || []))
         .catch(() => setHistory([]));
     }
   }, [open, supplier]);

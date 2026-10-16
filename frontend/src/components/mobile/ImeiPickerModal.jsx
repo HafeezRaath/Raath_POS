@@ -14,18 +14,15 @@ export default function ImeiPickerModal({ open, onClose, onSelect }) {
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(false);
   const [tenant, setTenant] = useState('');
-  const [loadErr, setLoadErr] = useState('');
 
   const load = async (search = '') => {
-    setLoading(true); setLoadErr('');
+    setLoading(true);
     try {
       const r = await api.get('/imei/picker', { search });
-      setUnits(r.data?.data || []);
-      setTenant(r.data?.debug_tenant || '');
-      if (!r.data?.data) setLoadErr(`DBG raw: ${JSON.stringify(r.data).slice(0, 200)}`);
+      setUnits(r.data || []);
+      setTenant(r.debug_tenant || '');
     } catch (e) {
       setUnits([]);
-      setLoadErr(`DBG err: ${e.response?.status || '?'} ${e.response?.data?.error || e.message || ''}`.slice(0, 200));
     } finally {
       setLoading(false);
     }
@@ -47,7 +44,7 @@ export default function ImeiPickerModal({ open, onClose, onSelect }) {
         </Box>
         {loading && <Typography variant="caption" sx={{ mt: 1 }}>Loading...</Typography>}
         {!loading && units.length === 0 && (
-          <Alert severity="info" sx={{ mt: 1.5 }}>Koi IN_STOCK unit nahi mili.{tenant ? ` (tenant: ${tenant})` : ''}{loadErr ? ` ${loadErr}` : ''}</Alert>
+          <Alert severity="info" sx={{ mt: 1.5 }}>Koi IN_STOCK unit nahi mili.{tenant ? ` (tenant: ${tenant})` : ''}</Alert>
         )}
         <List dense sx={{ mt: 1, maxHeight: 320, overflow: 'auto' }}>
           {units.map(u => (

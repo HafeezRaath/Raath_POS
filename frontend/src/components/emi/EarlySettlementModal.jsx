@@ -20,7 +20,7 @@ export default function EarlySettlementModal({ open, onClose, emi, onSettled }) 
   useEffect(() => {
     if (open && emi) {
       setDiscount(''); setNotes(''); setMsg(null); setDetail(null);
-      api.get(`/emi/${emi.id}`).then(r => setDetail(r.data?.data)).catch(() => {});
+      api.get(`/emi/${emi.id}`).then(r => setDetail(r.data)).catch(() => {});
     }
   }, [open, emi]);
 
@@ -48,7 +48,7 @@ export default function EarlySettlementModal({ open, onClose, emi, onSettled }) 
         notes,
       });
       setMsg({ t: 'success', m: r.data?.message });
-      onSettled && onSettled(r.data?.data);
+      onSettled && onSettled(r.data);
       setTimeout(onClose, 1500);
     } catch (e) {
       setMsg({ t: 'error', m: e.response?.data?.error || 'Settlement failed' });

@@ -1146,7 +1146,7 @@ export default function BillingPage() {
   const handleImeiScan = useCallback(async (imeiDigits) => {
     try {
       const r = await api.get(`/imei/lookup/${imeiDigits}`);
-      const d = r.data?.data?.device;
+      const d = r.data?.device;
       if (!d) { showSnackbar('IMEI system mein nahi mila', 'error'); return; }
       if (d.status !== 'IN_STOCK') {
         showSnackbar(`Ye IMEI ${d.status} hai — sale nahi ho sakta`, 'error');
@@ -1432,7 +1432,7 @@ export default function BillingPage() {
       // BOOKSHOP: class bundles for POS one-click scan
       try {
         const br = await api.get('/bundles?active=1');
-        setBundles(br.data?.data || []);
+        setBundles(br.data || []);
       } catch (e) { /* bundles table may not exist yet */ }
     } catch (err) {
       console.error("Data loading failed:", err);

@@ -16,7 +16,7 @@ export default function EmiCollectionDashboard({ onCollect }) {
     setLoading(true);
     try {
       const r = await api.get('/emi/collection-dashboard');
-      setData(r.data?.data);
+      setData(r.data);
     } catch (e) {
       setData(null);
     } finally {
