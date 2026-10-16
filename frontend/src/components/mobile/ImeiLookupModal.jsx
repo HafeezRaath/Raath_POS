@@ -24,6 +24,15 @@ export default function ImeiLookupModal({ open, onClose }) {
   const [bbNotes, setBbNotes] = useState('');
   const [bbSaving, setBbSaving] = useState(false);
   const [bbMsg, setBbMsg] = useState(null);
+  // v59 diagnostics: tenant visibility
+  const [dbg, setDbg] = useState(null);
+
+  const loadDbg = async () => {
+    try {
+      const r = await api.get('/debug/imei-tenants');
+      setDbg(r.data?.data || null);
+    } catch (e) { setDbg({ error: e.message }); }
+  };
 
   const search = async () => {
     const clean = q.replace(/\D/g, '');
@@ -84,6 +93,15 @@ export default function ImeiLookupModal({ open, onClose }) {
         </Box>
 
         {err && <Alert severity="error" sx={{ mt: 1.5 }}>{err}</Alert>}
+
+        <Box sx={{ mt: 1 }}>
+          <Button size="small" variant="text" onClick={loadDbg}>🔧 Debug: tenant check</Button>
+          {dbg && (
+            <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', bgcolor: '#f8fafc', p: 1, borderRadius: 1, mt: 0.5 }}>
+              {JSON.stringify(dbg, null, 1)}
+            </Typography>
+          )}
+        </Box>
 
         {d && (
           <Box sx={{ mt: 2 }}>

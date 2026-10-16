@@ -145,4 +145,21 @@ router.use('/repairs', repairRoutes);
 router.use('/payroll', payrollRoutes);
 router.use('/credit-notes', creditNoteRoutes);
 
+// Temporary diagnostics (v59): tenant + IMEI visibility debugging
+const { verifyToken } = require('../middleware/auth');
+router.get('/debug/whoami', verifyToken, (req, res) => {
+  res.json({ success: true, data: {
+    tenant_id: req.tenant_id || 'tenant_default',
+    user_id: req.user?.id || null,
+    username: req.user?.username || null,
+  }});
+});
+router.get('/debug/imei-tenants', verifyToken, async (req, res, next) => {
+  try {
+    const rows = await query(`SELECT tenant_id, status, COUNT(*) AS c FROM device_imei GROUP BY tenant_id, status`);
+    const mine = await query(`SELECT id, imei1, status, tenant_id FROM device_imei WHERE imei1 IN ('356938035643809','356938035643805')`);
+    res.json({ success: true, data: { by_tenant: rows, probes: mine, my_tenant: req.tenant_id || 'tenant_default' } });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;
