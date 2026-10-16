@@ -40,13 +40,22 @@ const payrollRoutes = require('./payrollRoutes');
 const creditNoteRoutes = require('./creditNoteRoutes');
 
 // API Health Check
-router.get('/health', (req, res) => {
-  res.json({
+router.get('/health', async (req, res) => {
+  const out = {
     status: 'online',
     system: 'RAATH POS Backend',
     database: 'MySQL',
     timestamp: new Date().toISOString()
-  });
+  };
+  // v60 temporary diagnostics: IMEI tenant visibility (no auth needed)
+  try {
+    const byTenant = await query(`SELECT tenant_id, status, COUNT(*) AS c FROM device_imei GROUP BY tenant_id, status`);
+    const probes = await query(`SELECT id, imei1, status, tenant_id FROM device_imei WHERE imei1 IN ('356938035643809','356938035643805')`);
+    out.debug_imei = { by_tenant: byTenant, probes, build: 'v60' };
+  } catch (e) {
+    out.debug_imei = { error: e.message, build: 'v60' };
+  }
+  res.json(out);
 });
 
 // Global Tenant & Auth resolution for all API endpoints
