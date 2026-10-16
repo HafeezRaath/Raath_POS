@@ -17,7 +17,7 @@ export default function ImeiPickerModal({ open, onClose, onSelect }) {
   const load = async (search = '') => {
     setLoading(true);
     try {
-      const r = await api.get('/imei/picker', { params: { search } });
+      const r = await api.get('/imei/picker', { search });
       setUnits(r.data?.data || []);
     } catch (e) {
       setUnits([]);

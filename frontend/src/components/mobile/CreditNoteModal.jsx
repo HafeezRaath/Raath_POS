@@ -22,7 +22,7 @@ export default function CreditNoteModal({ open, onClose, supplier, onApplied }) 
   useEffect(() => {
     if (open && supplier) {
       setMsg(null); setAmount(''); setReason(''); setNoteNo('');
-      api.get('/credit-notes', { params: { supplier_id: supplier.id } })
+      api.get('/credit-notes', { supplier_id: supplier.id })
         .then(r => setHistory(r.data?.data || []))
         .catch(() => setHistory([]));
     }
@@ -40,7 +40,7 @@ export default function CreditNoteModal({ open, onClose, supplier, onApplied }) 
       });
       setMsg({ t: 'success', m: r.data?.message });
       onApplied && onApplied();
-      const h = await api.get('/credit-notes', { params: { supplier_id: supplier.id } });
+      const h = await api.get('/credit-notes', { supplier_id: supplier.id });
       setHistory(h.data?.data || []);
       setAmount(''); setReason(''); setNoteNo('');
     } catch (e) {
@@ -56,7 +56,7 @@ export default function CreditNoteModal({ open, onClose, supplier, onApplied }) 
       const r = await api.put(`/credit-notes/${id}/void`);
       setMsg({ t: 'success', m: r.data?.message });
       onApplied && onApplied();
-      const h = await api.get('/credit-notes', { params: { supplier_id: supplier.id } });
+      const h = await api.get('/credit-notes', { supplier_id: supplier.id });
       setHistory(h.data?.data || []);
     } catch (e) {
       setMsg({ t: 'error', m: e.response?.data?.error || 'Failed' });

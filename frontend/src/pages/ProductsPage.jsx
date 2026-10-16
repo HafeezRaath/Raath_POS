@@ -3799,7 +3799,7 @@ const [copies, setCopies] = useState(1);
               {dialogProductType === 'imei' && (
                 <>
                 {!editingProduct ? (
-                  <BulkImeiForm onDone={() => { loadData(); }} />
+                  <BulkImeiForm productName={productForm.name || ''} onDone={() => { loadData(); }} />
                 ) : (
                 <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #bfdbfe', bgcolor: '#eff6ff', mt: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
@@ -4182,6 +4182,11 @@ const [copies, setCopies] = useState(1);
               >
                 Cancel
               </Button>
+              {(!editingProduct && dialogProductType === 'imei') ? (
+                <Typography variant="caption" sx={{ color: '#1e40af', fontWeight: 'bold', alignSelf: 'center', px: 1 }}>
+                  📱 IMEI product "Bulk IMEI Scan Mode" se save hoga — neeche "Save Units to Stock" dabao
+                </Typography>
+              ) : (
               <Button 
                 fullWidth={isMobile} 
                 type="submit" 
@@ -4198,6 +4203,7 @@ const [copies, setCopies] = useState(1);
               >
                 {editingProduct ? 'Update Product' : 'Save Product'}
               </Button>
+              )}
             </Box>
           </DialogActions>
         </form>

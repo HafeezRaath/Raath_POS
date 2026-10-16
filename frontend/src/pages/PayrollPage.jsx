@@ -21,8 +21,8 @@ export default function PayrollPage() {
   const load = useCallback(async () => {
     try {
       const [s, p] = await Promise.all([
-        api.get('/payroll/labor-summary', { params: { month } }),
-        api.get('/payroll', { params: { month } }),
+        api.get('/payroll/labor-summary', { month }),
+        api.get('/payroll', { month }),
       ]);
       setSummary(s.data?.data || []);
       setSlips(p.data?.data || []);

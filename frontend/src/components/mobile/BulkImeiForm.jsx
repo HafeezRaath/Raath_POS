@@ -10,7 +10,7 @@ import {
 import { Add, Delete, QrCodeScanner } from '../ui/icons';
 import api from '../../api/apiClient';
 
-export default function BulkImeiForm({ productId = null, productVariantId = null, onDone }) {
+export default function BulkImeiForm({ productId = null, productVariantId = null, productName = '', onDone }) {
   // common specs
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
@@ -55,7 +55,7 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
     try {
       const res = await api.post('/imei/bulk', {
         product_id: productId, product_variant_id: productVariantId,
-        product_name: `${brand} ${model}`.trim(),
+        product_name: productName.trim() || `${brand} ${model}`.trim(),
         brand, model, ram, rom, color, condition_type: conditionType,
         purchase_price: Number(purchasePrice) || 0,
         sale_price: Number(salePrice) || 0,
