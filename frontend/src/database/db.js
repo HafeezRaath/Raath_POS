@@ -1152,7 +1152,7 @@ class DatabaseClient {
   }
 
   async getLedger(filters = {}) {
-    return this.query('SELECT * FROM general_ledger ORDER BY id DESC');
+    return this.query('SELECT * FROM account_transactions ORDER BY id DESC');
   }
 
   async getGeneralLedger(filters = {}) {

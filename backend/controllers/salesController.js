@@ -195,7 +195,7 @@ exports.createSale = async (req, res, next) => {
 
         await conn.query(
           `INSERT INTO customer_ledger (tenant_id, customer_id, description, debit, credit, balance, reference_type, reference_id)
-           VALUES (?, ?, ?, ?, 0, (SELECT current_balance FROM customers WHERE tenant_id = ? AND id = ?), 'sale', ?)`,
+           VALUES (?, ?, ?, ?, 0, (SELECT current_balance FROM customers WHERE tenant_id = ? AND id = ? LIMIT 1), 'sale', ?)`,
           [tenantId, customerId, `Invoice #${invNum}`, dueAmount, tenantId, customerId, saleId]
         );
       }
@@ -215,7 +215,7 @@ exports.createSale = async (req, res, next) => {
 
             await conn.query(
               `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-               VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'sale', ?, CURDATE())`,
+               VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ? LIMIT 1), ?, 'sale', ?, CURDATE())`,
               [tenantId, spAccId, spAmt, tenantId, spAccId, `Sale: ${invNum} - (${spLabel}: Rs. ${spAmt})`, saleId]
             );
           }
@@ -231,7 +231,7 @@ exports.createSale = async (req, res, next) => {
 
           await conn.query(
             `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-             VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'sale', ?, CURDATE())`,
+             VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ? LIMIT 1), ?, 'sale', ?, CURDATE())`,
             [tenantId, accountId, actualCredit, tenantId, accountId, `Sale: ${invNum} - ${customerName}`, saleId]
           );
         }
