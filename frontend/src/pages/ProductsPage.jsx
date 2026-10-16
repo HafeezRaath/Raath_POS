@@ -325,7 +325,7 @@ const [copies, setCopies] = useState(1);
   // Box/Carton toggle sirf Wholesale ya Mart (Grocery/Kirana) business type wali shops mein dikhega.
   // Pehle se save ki hui box-product entry edit karte waqt card phir bhi visible rahega taake data orphan na ho.
   const shopBusinessType = String(currentUser?.business_type || 'retail').toLowerCase();
-  const showBoxEntryCard = shopBusinessType === 'wholesale' || shopBusinessType === 'grocery' || isBoxEntry;
+  const showBoxEntryCard = true; // Always show — user requested Unit/Box toggle for Standard products too
 
   // Shoes vertical: Color x Size matrix se aane wale variants
   const [shoeVariants, setShoeVariants] = useState([]);

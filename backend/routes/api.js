@@ -45,7 +45,7 @@ router.get('/health', (req, res) => {
     status: 'online',
     system: 'RAATH POS Backend',
     database: 'MySQL',
-    version: 'v65',
+    version: 'v67',
     timestamp: new Date().toISOString()
   });
 });
