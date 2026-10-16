@@ -350,6 +350,8 @@ export default function PurchasePage() {
   const [paymentMode, setPaymentMode] = useState('cash');
   const [paymentAccounts, setPaymentAccounts] = useState([]);
   const [selectedPaymentAccount, setSelectedPaymentAccount] = useState(null);
+  // Split payment: multiple accounts
+  const [splitPayments, setSplitPayments] = useState([{ accountId: '', amount: '' }]);
 
   // Return Dialog
   const [returnDialog, setReturnDialog] = useState(false);
@@ -877,17 +879,33 @@ export default function PurchasePage() {
     setSavingPurchase(true);
 
     const totals = calculateTotals;
-    const paidAmount = Math.min(Number(purchaseForm.paid_amount) || 0, totals.grandTotal);
+    // Split payment: sum from splitPayments, else use paid_amount field
+    let paidAmount = 0;
+    let splitList = null;
+    if (purchaseForm.payment_mode === 'split') {
+      splitList = splitPayments.filter(sp => sp.accountId && Number(sp.amount) > 0).map(sp => ({
+        account_id: sp.accountId,
+        amount: Number(sp.amount)
+      }));
+      paidAmount = Math.min(splitList.reduce((s, sp) => s + sp.amount, 0), totals.grandTotal);
+      if (splitList.length === 0) {
+        setSnackbar({ open: true, message: 'Add at least one account with amount for split payment', severity: 'warning' });
+        setSavingPurchase(false);
+        return;
+      }
+    } else {
+      paidAmount = Math.min(Number(purchaseForm.paid_amount) || 0, totals.grandTotal);
+    }
     
     // FIX: Get account_id from payment_mode for backend to debit the correct account
     let purchaseAccountId = null;
-    if (paidAmount > 0 && purchaseForm.payment_mode !== 'credit') {
+    if (paidAmount > 0 && purchaseForm.payment_mode !== 'credit' && purchaseForm.payment_mode !== 'split') {
       const acc = paymentAccounts.find(a => a.type === purchaseForm.payment_mode);
       if (acc) purchaseAccountId = acc.id;
     }
     
     // Balance validation for non-credit payments (only on new purchases)
-    if (!editingPurchase && paidAmount > 0 && purchaseForm.payment_mode !== 'credit') {
+    if (!editingPurchase && paidAmount > 0 && purchaseForm.payment_mode !== 'credit' && purchaseForm.payment_mode !== 'split') {
       const acc = paymentAccounts.find(a => a.type === purchaseForm.payment_mode);
       if (!acc) {
         setSnackbar({ open: true, message: 'No active account found for ' + purchaseForm.payment_mode.toUpperCase(), severity: 'error' });
@@ -932,6 +950,7 @@ export default function PurchasePage() {
       payment_status: paymentStatus,
       payment_mode: purchaseForm.payment_mode,
       account_id: purchaseAccountId,
+      split_payments: splitList,
       notes: purchaseForm.notes,
       items: items.map(item => ({
         product_id: item.product_id || null,
@@ -3198,11 +3217,63 @@ const handleProcessReturn = async () => {
                         <MenuItem value="easypaisa"> EasyPaisa</MenuItem>
                         <MenuItem value="jazzcash"> JazzCash</MenuItem>
                         <MenuItem value="cheque"> Cheque</MenuItem>
+                        <MenuItem value="split"> Split</MenuItem>
                         <MenuItem value="credit"> Credit</MenuItem>
                       </Select>
                     </FormControl>
                   </Grid>
-                  {selectedPaymentAccount && purchaseForm.payment_mode !== 'credit' && (
+                  {/* Split Payment UI */}
+                  {purchaseForm.payment_mode === 'split' && (
+                    <Grid item xs={12}>
+                      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1, bgcolor: '#f0fdf4' }}>
+                        <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Split Payment</Typography>
+                        {splitPayments.map((sp, idx) => (
+                          <Stack key={idx} direction="row" spacing={1} sx={{ mb: 1 }} alignItems="center">
+                            <FormControl size="small" sx={{ flex: 1 }}>
+                              <Select
+                                value={sp.accountId}
+                                onChange={(e) => {
+                                  const updated = [...splitPayments];
+                                  updated[idx].accountId = e.target.value;
+                                  setSplitPayments(updated);
+                                }}
+                                displayEmpty
+                              >
+                                <MenuItem value="" disabled><em>Account</em></MenuItem>
+                                {paymentAccounts.map(acc => (
+                                  <MenuItem key={acc.id} value={acc.id}>{acc.name} ({acc.type})</MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                            <TextField
+                              size="small"
+                              type="number"
+                              placeholder="Amount"
+                              value={sp.amount}
+                              onChange={(e) => {
+                                const updated = [...splitPayments];
+                                updated[idx].amount = e.target.value;
+                                setSplitPayments(updated);
+                              }}
+                              sx={{ width: 110 }}
+                            />
+                            {splitPayments.length > 1 && (
+                              <IconButton size="small" onClick={() => setSplitPayments(splitPayments.filter((_, i) => i !== idx))}>
+                                <Delete fontSize="small" />
+                              </IconButton>
+                            )}
+                          </Stack>
+                        ))}
+                        <Button size="small" onClick={() => setSplitPayments([...splitPayments, { accountId: '', amount: '' }])}>
+                          + Add Account
+                        </Button>
+                        <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                          Total: Rs. {splitPayments.reduce((s, sp) => s + (Number(sp.amount) || 0), 0).toLocaleString()}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  )}
+                  {selectedPaymentAccount && purchaseForm.payment_mode !== 'credit' && purchaseForm.payment_mode !== 'split' && (
                     <Grid item xs={12}>
                       <Paper variant="outlined" sx={{ p: 1, borderRadius: 1, bgcolor: 'grey.50' }}>
                         <Stack direction="row" justifyContent="space-between" alignItems="center">

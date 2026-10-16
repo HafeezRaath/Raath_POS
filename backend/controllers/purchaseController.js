@@ -81,6 +81,7 @@ exports.createPurchase = async (req, res, next) => {
       due_amount = 0,
       payment_method = 'cash',
       account_id = null,
+      split_payments = null,
       notes = '',
       purchase_date
     } = req.body;
@@ -158,8 +159,24 @@ exports.createPurchase = async (req, res, next) => {
         );
       }
 
-      // 4. Deduct payment from Account if paid
-      if (account_id && paid_amount > 0) {
+      // 4. Deduct payment from Account(s) if paid
+      // Split payment: debit each account separately
+      if (Array.isArray(split_payments) && split_payments.length > 0) {
+        for (const sp of split_payments) {
+          const spAccountId = sp.account_id;
+          const spAmount = Number(sp.amount) || 0;
+          if (!spAccountId || spAmount <= 0) continue;
+          await conn.query(
+            'UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?',
+            [spAmount, tenantId, spAccountId]
+          );
+          await conn.query(
+            `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
+             VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'purchase', ?, CURDATE())`,
+            [tenantId, spAccountId, spAmount, tenantId, spAccountId, `Purchase (split): ${poNum}`, purchaseId]
+          );
+        }
+      } else if (account_id && paid_amount > 0) {
         await conn.query(
           'UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?',
           [paid_amount, tenantId, account_id]
