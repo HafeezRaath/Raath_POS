@@ -55,7 +55,11 @@ class ApiClient {
         if (response.status === 401 && (data.error?.includes('token') || data.error?.includes('expired') || data.error?.includes('Authorization'))) {
           localStorage.removeItem('raath_token');
         }
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        // Axios-compatible error shape: the whole app reads e.response?.data?.error
+        const err = new Error(data.error || `HTTP error! status: ${response.status}`);
+        err.response = { status: response.status, data };
+        err.status = response.status;
+        throw err;
       }
 
       return data;
