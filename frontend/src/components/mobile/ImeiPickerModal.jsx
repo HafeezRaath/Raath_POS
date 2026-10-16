@@ -13,12 +13,14 @@ export default function ImeiPickerModal({ open, onClose, onSelect }) {
   const [q, setQ] = useState('');
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [tenant, setTenant] = useState('');
 
   const load = async (search = '') => {
     setLoading(true);
     try {
       const r = await api.get('/imei/picker', { search });
       setUnits(r.data?.data || []);
+      setTenant(r.data?.debug_tenant || '');
     } catch (e) {
       setUnits([]);
     } finally {
@@ -42,7 +44,7 @@ export default function ImeiPickerModal({ open, onClose, onSelect }) {
         </Box>
         {loading && <Typography variant="caption" sx={{ mt: 1 }}>Loading...</Typography>}
         {!loading && units.length === 0 && (
-          <Alert severity="info" sx={{ mt: 1.5 }}>Koi IN_STOCK unit nahi mili.</Alert>
+          <Alert severity="info" sx={{ mt: 1.5 }}>Koi IN_STOCK unit nahi mili.{tenant ? ` (tenant: ${tenant})` : ''}</Alert>
         )}
         <List dense sx={{ mt: 1, maxHeight: 320, overflow: 'auto' }}>
           {units.map(u => (

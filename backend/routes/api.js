@@ -40,33 +40,13 @@ const payrollRoutes = require('./payrollRoutes');
 const creditNoteRoutes = require('./creditNoteRoutes');
 
 // API Health Check
-router.get('/health', async (req, res) => {
-  const out = {
+router.get('/health', (req, res) => {
+  res.json({
     status: 'online',
     system: 'RAATH POS Backend',
     database: 'MySQL',
     timestamp: new Date().toISOString()
-  };
-  // v60 temporary diagnostics: IMEI tenant visibility (no auth needed)
-  try {
-    const byTenant = await query(`SELECT tenant_id, status, COUNT(*) AS c FROM device_imei GROUP BY tenant_id, status`);
-    const probes = await query(`SELECT id, imei1, status, tenant_id FROM device_imei WHERE imei1 IN ('356938035643809','356938035643805')`);
-    // v61: simulate the EXACT lookup + picker queries with tenant_default
-    let simLookup = null, simLookupErr = null;
-    try {
-      const r = await query(`SELECT id FROM device_imei WHERE tenant_id = ? AND (imei1 = ? OR imei2 = ?) AND is_deleted = 0 LIMIT 1`, ['tenant_default', '356938035643809', '356938035643809']);
-      simLookup = { found: r.length, ids: r.map(x => x.id) };
-    } catch (e) { simLookupErr = e.message; }
-    let simPicker = null, simPickerErr = null;
-    try {
-      const r = await query(`SELECT id, imei1 FROM device_imei WHERE tenant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0 ORDER BY id DESC LIMIT 100`, ['tenant_default']);
-      simPicker = { found: r.length, imeis: r.map(x => x.imei1) };
-    } catch (e) { simPickerErr = e.message; }
-    out.debug_imei = { by_tenant: byTenant, probes, sim_lookup: simLookup, sim_lookup_err: simLookupErr, sim_picker: simPicker, sim_picker_err: simPickerErr, build: 'v61' };
-  } catch (e) {
-    out.debug_imei = { error: e.message, build: 'v61' };
-  }
-  res.json(out);
+  });
 });
 
 // Global Tenant & Auth resolution for all API endpoints
@@ -164,22 +144,5 @@ router.use('/imei', imeiRoutes);
 router.use('/repairs', repairRoutes);
 router.use('/payroll', payrollRoutes);
 router.use('/credit-notes', creditNoteRoutes);
-
-// Temporary diagnostics (v59): tenant + IMEI visibility debugging
-const { verifyToken } = require('../middleware/auth');
-router.get('/debug/whoami', verifyToken, (req, res) => {
-  res.json({ success: true, data: {
-    tenant_id: req.tenant_id || 'tenant_default',
-    user_id: req.user?.id || null,
-    username: req.user?.username || null,
-  }});
-});
-router.get('/debug/imei-tenants', verifyToken, async (req, res, next) => {
-  try {
-    const rows = await query(`SELECT tenant_id, status, COUNT(*) AS c FROM device_imei GROUP BY tenant_id, status`);
-    const mine = await query(`SELECT id, imei1, status, tenant_id FROM device_imei WHERE imei1 IN ('356938035643809','356938035643805')`);
-    res.json({ success: true, data: { by_tenant: rows, probes: mine, my_tenant: req.tenant_id || 'tenant_default' } });
-  } catch (e) { next(e); }
-});
 
 module.exports = router;

@@ -138,7 +138,7 @@ exports.lookupImei = async (req, res, next) => {
       [tenantId, imei, imei]
     );
     if (rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'IMEI not found in system' });
+      return res.status(404).json({ success: false, error: 'IMEI not found in system', debug_tenant: tenantId });
     }
     const device = rows[0];
     const history = await query(
@@ -296,7 +296,7 @@ exports.inStockPicker = async (req, res, next) => {
     }
     sql += ` ORDER BY id DESC LIMIT 100`;
     const rows = await query(sql, params);
-    res.json({ success: true, data: rows });
+    res.json({ success: true, data: rows, debug_tenant: tenantId });
   } catch (error) {
     next(error);
   }
