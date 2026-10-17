@@ -149,6 +149,9 @@ async function initializeDatabase() {
 
     await addColumnIfMissing(connection, 'work_orders', '`machine_name` VARCHAR(150) NULL');
     await addColumnIfMissing(connection, 'account_transactions', '`reference_no` VARCHAR(100) NULL');
+    await addColumnIfMissing(connection, 'sale_returns', '`split_payments` TEXT NULL');
+    await addColumnIfMissing(connection, 'sale_returns', '`actual_refunded` DECIMAL(15,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'sale_returns', '`unrefunded_amount` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'emi_records', '`is_deleted` TINYINT(1) DEFAULT 0');
     await addColumnIfMissing(connection, 'work_orders', '`device_model` VARCHAR(150) NULL');
     await addColumnIfMissing(connection, 'work_orders', '`imei` VARCHAR(100) NULL');
@@ -381,6 +384,20 @@ async function initializeDatabase() {
 
     await addColumnIfMissing(connection, 'product_variants', '`expiry_date` DATE NULL');
     await addColumnIfMissing(connection, 'purchase_items', '`expiry_date` DATE NULL');
+
+    // Customer ledger migrations
+    await addColumnIfMissing(connection, 'customer_ledger', "`type` VARCHAR(50) NOT NULL DEFAULT 'invoice'");
+    await addColumnIfMissing(connection, 'customer_ledger', "`amount` DECIMAL(15,2) DEFAULT 0");
+    await addColumnIfMissing(connection, 'customer_ledger', "`previous_balance` DECIMAL(15,2) DEFAULT 0");
+    await addColumnIfMissing(connection, 'customer_ledger', "`balance_after` DECIMAL(15,2) DEFAULT 0");
+    await addColumnIfMissing(connection, 'customer_ledger', "`payment_mode` VARCHAR(50) DEFAULT 'cash'");
+    await addColumnIfMissing(connection, 'customer_ledger', "`reference_no` VARCHAR(100) NULL");
+    await addColumnIfMissing(connection, 'customer_ledger', "`sale_id` INT NULL");
+    await addColumnIfMissing(connection, 'customer_ledger', "`items_json` LONGTEXT NULL");
+
+    // Payments migrations
+    await addColumnIfMissing(connection, 'payments', "`account_id` INT NULL");
+    await addColumnIfMissing(connection, 'payments', "`reference_no` VARCHAR(100) NULL");
 
     // Product batches: batch-wise pricing + expiry (Grocery / Pharmacy verticals)
     // Stock lots: har purchase pe nayi row; purani batches ki price overwrite nahi hoti.

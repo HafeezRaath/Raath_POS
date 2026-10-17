@@ -43,9 +43,12 @@ const getLedgerTypeChip = (type) => {
     opening_balance: { label: 'Opening', color: 'info' },
     cash_sale: { label: 'Cash Sale', color: 'success' },
     credit_sale: { label: 'Credit Sale', color: 'warning' },
+    partial_sale: { label: 'Partial Sale', color: 'warning' },
+    sale: { label: 'Sale', color: 'warning' },
     payment: { label: 'Payment', color: 'success' },
     adjustment: { label: 'Adjustment', color: 'secondary' },
     sale_reversal: { label: 'Reversal', color: 'error' },
+    sale_return: { label: 'Return', color: 'info' },
   };
   return map[type] || { label: type ? type.replace(/_/g, ' ') : 'Entry', color: 'default' };
 };
@@ -439,6 +442,9 @@ export default function CustomerPage() {
 
   const filteredLedger = useMemo(() => {
     if (ledgerTab === 'all') return ledgerData;
+    if (ledgerTab === 'credit_sale' || ledgerTab === 'sales') {
+      return ledgerData.filter(e => e.type === 'credit_sale' || e.type === 'cash_sale' || e.type === 'sale' || e.type === 'partial_sale');
+    }
     return ledgerData.filter(e => e.type === ledgerTab);
   }, [ledgerData, ledgerTab]);
 
@@ -501,24 +507,12 @@ export default function CustomerPage() {
         account_id: selectedPaymentAccount?.id || undefined
       });
 
-      // Account mein payment add karo
-      if (selectedPaymentAccount?.id) {
-        await db.createTransaction({
-          account_id: selectedPaymentAccount.id,
-          transaction_type: 'credit',
-          amount: amount,
-          description: `Payment from ${selectedCustomer.name} — ${paymentForm.note || 'Payment received'}`,
-          payment_mode: paymentForm.payment_mode,
-          reference_no: paymentForm.reference_no || `CUST-PAY-${selectedCustomer.id}`,
-          date: paymentForm.date ? new Date(paymentForm.date).toISOString() : new Date().toISOString(),
-          reference_type: 'customer_payment'
-        });
-      }
-
       setSnackbar({ open: true, message: `Payment of ${formatPKR(amount)} recorded!`, severity: 'success' });
       setShowPayment(false);
-      loadCustomers();
-      if (showLedger && selectedCustomer) {
+      await loadCustomers();
+      if (selectedCustomer?.id) {
+        const updatedCust = await db.getCustomerById(selectedCustomer.id).catch(() => null);
+        if (updatedCust) setSelectedCustomer(updatedCust);
         const data = await db.getCustomerLedger(selectedCustomer.id);
         setLedgerData(Array.isArray(data) ? data : []);
       }
@@ -1194,7 +1188,16 @@ export default function CustomerPage() {
                     return (
                       <TableRow key={entry.id || idx} hover>
                         <TableCell sx={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
-                          {entry.date ? new Date(entry.date).toLocaleDateString('en-PK') : '-'}
+                          {entry.date ? (
+                            <>
+                              <Typography variant="body2" sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
+                                {new Date(entry.date).toLocaleDateString('en-PK')}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
+                                {new Date(entry.date).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })}
+                              </Typography>
+                            </>
+                          ) : '-'}
                         </TableCell>
                         <TableCell>
                           <Chip label={typeInfo.label} size="small" color={typeInfo.color} sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }} />
@@ -1277,6 +1280,25 @@ export default function CustomerPage() {
                   </Select>
                 </FormControl>
               </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Deposit Into Account</InputLabel>
+                  <Select
+                    value={selectedPaymentAccount?.id || ''}
+                    onChange={(e) => {
+                      const found = paymentAccounts.find(a => String(a.id) === String(e.target.value));
+                      setSelectedPaymentAccount(found || null);
+                    }}
+                    label="Deposit Into Account"
+                  >
+                    {paymentAccounts.map(a => (
+                      <MenuItem key={a.id} value={a.id}>
+                        {a.name} ({a.type?.toUpperCase() || 'ACC'}) — Bal: {formatPKR(a.current_balance)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
               {selectedPaymentAccount && (
                 <Grid item xs={12}>
                   <Paper sx={{ p: 1.5, bgcolor: '#f0fdf4', borderRadius: 1, border: '1px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1290,13 +1312,6 @@ export default function CustomerPage() {
                       Bal: {formatPKR(selectedPaymentAccount.current_balance)}
                     </Typography>
                   </Paper>
-                </Grid>
-              )}
-              {!selectedPaymentAccount && paymentForm.payment_mode && paymentAccounts.length > 0 && (
-                <Grid item xs={12}>
-                  <Alert severity="warning" sx={{ py: 0.5 }}>
-                    No active account found for <strong>{paymentForm.payment_mode.replace(/_/g, ' ')}</strong>. Please create this account in Accounts page first.
-                  </Alert>
                 </Grid>
               )}
               <Grid item xs={12} sm={6}>

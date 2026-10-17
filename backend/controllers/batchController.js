@@ -197,3 +197,25 @@ exports.deductBatchesFEFO = async (conn, tenantId, productId, variantId, qty) =>
     console.error('[batches] FEFO deduct failed (sale continues):', e.message);
   }
 };
+
+// ---- Internal: Restore batch stock on return ----
+exports.restoreBatches = async (conn, tenantId, productId, variantId, qty) => {
+  try {
+    let toRestore = Math.max(0, parseFloat(qty) || 0);
+    if (toRestore <= 0) return;
+    const [batches] = await conn.query(
+      `SELECT id, qty_remaining FROM product_batches
+       WHERE tenant_id = ? AND product_id = ? AND is_active = 1
+       ${variantId ? 'AND variant_id = ?' : ''}
+       ORDER BY id DESC LIMIT 1`,
+      variantId ? [tenantId, productId, variantId] : [tenantId, productId]
+    );
+    if (batches && batches.length > 0) {
+      await conn.query(
+        `UPDATE product_batches SET qty_remaining = qty_remaining + ? WHERE id = ?`,
+        [toRestore, batches[0].id]
+      );
+    }
+  } catch (e) {
+    console.error('[batches] Restore failed:', e.message);
+};

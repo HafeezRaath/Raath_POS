@@ -3,6 +3,7 @@
 // ============================================================
 
 const { query, transaction } = require('../config/db');
+const batchController = require('./batchController');
 
 // --- Sale Returns ---
 exports.getSaleReturns = async (req, res, next) => {
@@ -58,23 +59,36 @@ exports.createSaleReturn = async (req, res, next) => {
       return_no = '', return_number = '',
       total_amount = 0, refund_amount = 0, total_refund = 0,
       payment_mode = 'cash', payment_method = 'cash',
-      account_id = null, reason = '', return_date, items = []
+      account_id = null, reason = '', return_date, items = [],
+      split_payments = null, actual_refunded = 0, unrefunded_amount = 0
     } = req.body;
 
     const returnNumber = return_no || return_number || ('SR-' + Date.now().toString().slice(-6));
     const refAmt = parseFloat(refund_amount) || parseFloat(total_refund) || parseFloat(total_amount) || 0;
     const payMethod = payment_mode || payment_method || 'cash';
     const retDate = return_date ? new Date(return_date) : new Date();
+    const splitJson = (Array.isArray(split_payments) && split_payments.length > 0) ? JSON.stringify(split_payments) : null;
 
     const retId = await transaction(async (conn) => {
-      const [ins] = await conn.query(
-        `INSERT INTO sale_returns 
-         (tenant_id, return_number, sale_id, customer_id, total_refund, payment_method, account_id, reason, return_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [tenantId, returnNumber, sale_id || null, customer_id || null, refAmt, payMethod, account_id || null, reason || '', retDate]
-      );
-
-      const id = ins.insertId;
+      let id;
+      try {
+        const [ins] = await conn.query(
+          `INSERT INTO sale_returns 
+           (tenant_id, return_number, sale_id, customer_id, total_refund, payment_method, account_id, reason, return_date, split_payments, actual_refunded, unrefunded_amount)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, returnNumber, sale_id || null, customer_id || null, refAmt, payMethod, account_id || null, reason || '', retDate, splitJson, actual_refunded || 0, unrefunded_amount || 0]
+        );
+        id = ins.insertId;
+      } catch (colErr) {
+        // Fallback if extra columns not yet present in table
+        const [ins] = await conn.query(
+          `INSERT INTO sale_returns 
+           (tenant_id, return_number, sale_id, customer_id, total_refund, payment_method, account_id, reason, return_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, returnNumber, sale_id || null, customer_id || null, refAmt, payMethod, account_id || null, reason || '', retDate]
+        );
+        id = ins.insertId;
+      }
 
       if (Array.isArray(items) && items.length > 0) {
         for (const item of items) {
@@ -90,34 +104,157 @@ exports.createSaleReturn = async (req, res, next) => {
             [tenantId, id, prodId, qty, uPrice, tot]
           );
 
-          // Restore product stock
-          if (prodId) {
-            await conn.query(`UPDATE products SET stock = stock + ? WHERE tenant_id = ? AND id = ?`, [qty, tenantId, prodId]);
+          // 1. Resolve product_id if only variant was passed
+          let resolvedProdId = prodId;
+          if (!resolvedProdId && varId) {
+            const [pvRows] = await conn.query(`SELECT product_id FROM product_variants WHERE tenant_id = ? AND id = ?`, [tenantId, varId]);
+            if (pvRows && pvRows.length > 0) resolvedProdId = pvRows[0].product_id;
           }
-          // Restore variant stock
+
+          // 2. Restore base product stock
+          if (resolvedProdId) {
+            await conn.query(`UPDATE products SET stock = COALESCE(stock, 0) + ? WHERE tenant_id = ? AND id = ?`, [qty, tenantId, resolvedProdId]);
+          }
+
+          // 3. Restore variant stock (both stock and current_stock)
           if (varId) {
-            await conn.query(`UPDATE product_variants SET stock = stock + ? WHERE tenant_id = ? AND id = ?`, [qty, tenantId, varId]);
+            await conn.query(
+              `UPDATE product_variants SET 
+                stock = COALESCE(stock, 0) + ?, 
+                current_stock = COALESCE(current_stock, 0) + ? 
+               WHERE tenant_id = ? AND id = ?`,
+              [qty, qty, tenantId, varId]
+            );
+          }
+
+          // 4. Restore batch stock if applicable
+          if (resolvedProdId && batchController.restoreBatches) {
+            await batchController.restoreBatches(conn, tenantId, resolvedProdId, varId, qty);
           }
         }
       }
 
-      // If refunded from account, deduct account balance and record transaction
-      if (account_id && refAmt > 0) {
-        await conn.query(`UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?`, [refAmt, tenantId, account_id]);
-        await conn.query(
-          `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'sale_return', ?, CURDATE())`,
-          [tenantId, account_id, refAmt, tenantId, account_id, `Refund for Return #${returnNumber}`, id]
-        );
+      // ─── RESTORE SERIALIZED / IMEI DEVICES TO IN_STOCK ───
+      if (sale_id) {
+        try {
+          const [soldDevices] = await conn.query(
+            `SELECT id, product_id, product_variant_id, imei1, imei2 FROM device_imei 
+             WHERE tenant_id = ? AND sale_id = ? AND status = 'SOLD'`,
+            [tenantId, sale_id]
+          );
+          if (Array.isArray(soldDevices) && soldDevices.length > 0) {
+            for (const dev of soldDevices) {
+              await conn.query(
+                `UPDATE device_imei SET status = 'IN_STOCK', sale_id = NULL, customer_id = NULL, customer_name = NULL WHERE id = ?`,
+                [dev.id]
+              );
+              await conn.query(
+                `INSERT INTO device_imei_history (tenant_id, device_imei_id, action, from_status, to_status, ref_type, ref_id, user_id, notes)
+                 VALUES (?, ?, 'RETURN', 'SOLD', 'IN_STOCK', 'sale_return', ?, ?, ?)`,
+                [tenantId, dev.id, id, req.user?.id || null, `Returned via #${returnNumber}`]
+              );
+              if (dev.product_variant_id) {
+                await conn.query(
+                  `UPDATE product_variants SET current_stock = (SELECT COUNT(id) FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0) WHERE id = ?`,
+                  [tenantId, dev.product_variant_id, dev.product_variant_id]
+                );
+              }
+            }
+          }
+        } catch (devErr) {
+          console.warn('[Return] Serialized device restoration error (continuing):', devErr.message);
+        }
       }
 
-      // If customer balance adjustment
+      // ─── ACCOUNT DEDUCTIONS (Only deduct up to available balance: "sirf utni hi jay zyda nhi") ───
+      if ((payMethod === 'split' || Array.isArray(split_payments)) && Array.isArray(split_payments) && split_payments.length > 0) {
+        for (const sp of split_payments) {
+          const spAccId = sp.account_id || sp.accountId;
+          const spAmount = parseFloat(sp.amount) || 0;
+          if (!spAccId || spAmount <= 0) continue;
+
+          // Check current account balance — "sirf utni hi jay zyda nhi"
+          const [accRows] = await conn.query(`SELECT current_balance, name FROM accounts WHERE tenant_id = ? AND id = ?`, [tenantId, spAccId]);
+          const currentBal = accRows ? (parseFloat(accRows.current_balance) || 0) : 0;
+          const maxDeductible = Math.max(0, currentBal);
+          const actualDeduct = Math.min(spAmount, maxDeductible);
+
+          if (actualDeduct > 0) {
+            await conn.query(`UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?`, [actualDeduct, tenantId, spAccId]);
+            await conn.query(
+              `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
+               VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'sale_return', ?, CURDATE())`,
+              [tenantId, spAccId, actualDeduct, tenantId, spAccId, `Refund for Return #${returnNumber} (Split: ${accRows?.name || ''})`, id]
+            );
+          }
+        }
+      } else if (account_id && refAmt > 0) {
+        // Single account: only deduct up to available balance
+        const [accRows] = await conn.query(`SELECT current_balance, name FROM accounts WHERE tenant_id = ? AND id = ?`, [tenantId, account_id]);
+        const currentBal = accRows ? (parseFloat(accRows.current_balance) || 0) : 0;
+        const maxDeductible = Math.max(0, currentBal);
+        const actualDeduct = Math.min(refAmt, maxDeductible);
+
+        if (actualDeduct > 0) {
+          await conn.query(`UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?`, [actualDeduct, tenantId, account_id]);
+          await conn.query(
+            `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
+             VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'sale_return', ?, CURDATE())`,
+            [tenantId, account_id, actualDeduct, tenantId, account_id, `Refund for Return #${returnNumber}`, id]
+          );
+        }
+      }
+
+      // ─── CUSTOMER BALANCE & COMPLETE LEDGER ENTRY ───
       if (customer_id && refAmt > 0) {
-        await conn.query(`UPDATE customers SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?`, [refAmt, tenantId, customer_id]);
+        const [custRows] = await conn.query(`SELECT current_balance, name FROM customers WHERE tenant_id = ? AND id = ?`, [tenantId, customer_id]);
+        const cust = (Array.isArray(custRows) && custRows.length > 0) ? custRows[0] : null;
+        const prevBal = cust ? (parseFloat(cust.current_balance) || 0) : 0;
+
+        let balReduction = 0;
+        if (sale_id) {
+          const [saleRows] = await conn.query(`SELECT due_amount FROM sales WHERE tenant_id = ? AND id = ?`, [tenantId, sale_id]);
+          const sale = (Array.isArray(saleRows) && saleRows.length > 0) ? saleRows[0] : null;
+          const curDue = sale ? (parseFloat(sale.due_amount) || 0) : 0;
+          balReduction = Math.min(curDue, refAmt);
+        } else {
+          balReduction = Math.min(prevBal, refAmt);
+        }
+
+        const newBal = Math.max(0, prevBal - balReduction);
+        if (balReduction > 0) {
+          await conn.query(`UPDATE customers SET current_balance = ? WHERE tenant_id = ? AND id = ?`, [newBal, tenantId, customer_id]);
+        }
+
+        const retItemsJson = (Array.isArray(items) && items.length > 0)
+          ? JSON.stringify(items.map(it => ({
+              name: it.product_name || it.name || 'Returned Item',
+              quantity: parseFloat(it.quantity !== undefined ? it.quantity : (it.returnQty || 1)) || 1,
+              price: parseFloat(it.unit_price !== undefined ? it.unit_price : (it.price || 0)) || 0,
+              total: parseFloat(it.total !== undefined ? it.total : ((it.quantity || it.returnQty || 1) * (it.unit_price || it.price || 0))) || 0
+            })))
+          : null;
+
         await conn.query(
-          `INSERT INTO customer_ledger (tenant_id, customer_id, date, description, debit, credit, balance, reference_type, reference_id)
-           VALUES (?, ?, CURDATE(), ?, 0, ?, (SELECT current_balance FROM customers WHERE tenant_id = ? AND id = ?), 'sale_return', ?)`,
-          [tenantId, customer_id, `Return #${returnNumber}`, refAmt, tenantId, customer_id, id]
+          `INSERT INTO customer_ledger 
+           (tenant_id, customer_id, date, type, amount, previous_balance, balance_after, debit, credit, balance, description, payment_mode, reference_type, reference_no, reference_id, sale_id, items_json)
+           VALUES (?, ?, ?, 'sale_return', ?, ?, ?, 0, ?, ?, ?, ?, 'sale_return', ?, ?, ?, ?)`,
+          [
+            tenantId,
+            customer_id,
+            retDate,
+            -refAmt,
+            prevBal,
+            newBal,
+            refAmt,
+            newBal,
+            `Sale Return #${returnNumber} for Invoice #${invoice_no || sale_id || ''}`,
+            payMethod,
+            returnNumber,
+            id,
+            sale_id || null,
+            retItemsJson
+          ]
         );
       }
 

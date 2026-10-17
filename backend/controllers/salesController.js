@@ -186,17 +186,53 @@ exports.createSale = async (req, res, next) => {
         }
       }
 
-      // 3. Customer Ledger / Balance if due
-      if (customerId && dueAmount > 0) {
-        await conn.query(
-          'UPDATE customers SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?',
-          [dueAmount, tenantId, customerId]
-        );
+      // 3. Customer Ledger & Balance
+      if (customerId) {
+        const [custRows] = await conn.query('SELECT current_balance, name FROM customers WHERE tenant_id = ? AND id = ?', [tenantId, customerId]);
+        const cust = (Array.isArray(custRows) && custRows.length > 0) ? custRows[0] : null;
+        const prevBal = cust ? (parseFloat(cust.current_balance) || 0) : 0;
+        const newBal = prevBal + dueAmount;
+
+        if (dueAmount > 0) {
+          await conn.query(
+            'UPDATE customers SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?',
+            [dueAmount, tenantId, customerId]
+          );
+        }
+
+        const ledgerType = dueAmount > 0 ? (paidAmount > 0 ? 'partial_sale' : 'credit_sale') : 'cash_sale';
+        const itemSummary = rawItems.map(i => `${i.product_name || i.name || 'Item'} (${i.quantity || i.qty || 1}x)`).slice(0, 3).join(', ');
+        const desc = `Invoice #${invNum}${itemSummary ? ': ' + itemSummary : ''}`;
+        const itemsJson = JSON.stringify(rawItems.map(i => ({
+          name: i.product_name || i.name || 'Item',
+          quantity: parseFloat(i.quantity !== undefined ? i.quantity : (i.qty || 1)) || 1,
+          price: parseFloat(i.price !== undefined ? i.price : (i.unit_price || 0)) || 0,
+          discount: parseFloat(i.discount || 0),
+          total: parseFloat(i.total !== undefined ? i.total : (((i.price || i.unit_price || 0) * (i.quantity || i.qty || 1)) - (i.discount || 0))) || 0
+        })));
 
         await conn.query(
-          `INSERT INTO customer_ledger (tenant_id, customer_id, description, debit, credit, balance, reference_type, reference_id)
-           VALUES (?, ?, ?, ?, 0, (SELECT current_balance FROM customers WHERE tenant_id = ? AND id = ? LIMIT 1), 'sale', ?)`,
-          [tenantId, customerId, `Invoice #${invNum}`, dueAmount, tenantId, customerId, saleId]
+          `INSERT INTO customer_ledger 
+           (tenant_id, customer_id, date, type, amount, previous_balance, balance_after, debit, credit, balance, description, payment_mode, reference_type, reference_no, reference_id, sale_id, items_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sale', ?, ?, ?, ?)`,
+          [
+            tenantId,
+            customerId,
+            saleDate,
+            ledgerType,
+            grandTotal,
+            prevBal,
+            newBal,
+            grandTotal,
+            paidAmount,
+            newBal,
+            desc,
+            paymentMethod,
+            invNum,
+            saleId,
+            saleId,
+            itemsJson
+          ]
         );
       }
 

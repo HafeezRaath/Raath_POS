@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box, Paper, Typography, Button, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle,
@@ -14,7 +14,7 @@ import {
   TrendingUp, KeyboardReturn, AssignmentReturn, Phone, History,
   Menu as MenuIcon, Close, ArrowUpward, ArrowDownward, Receipt,
   CheckCircle, Cancel, Warning, Error, ShoppingCart, Delete,
-  DeleteSweep, CalendarToday
+  DeleteSweep, CalendarToday, Add
 } from '../components/ui/icons';
 import db from '../database/db';
 import useSyncListener from '../hooks/useSyncListener';
@@ -27,6 +27,7 @@ const PAYMENT_MODES = [
   { value: 'cheque', label: 'Cheque' },
   { value: 'easypaisa', label: 'EasyPaisa' },
   { value: 'jazzcash', label: 'JazzCash' },
+  { value: 'split', label: 'Split (Multi-Method)' },
   { value: 'credit', label: 'Credit' },
 ];
 
@@ -267,6 +268,7 @@ export default function ReturnsPage() {
   const [returnItems, setReturnItems] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [returnForm, setReturnForm] = useState({ reason: '', refund_mode: 'cash', account_id: '', notes: '' });
+  const [splitRefunds, setSplitRefunds] = useState([{ account_id: '', amount: '' }]);
   const [processingReturn, setProcessingReturn] = useState(false);
 
   // View Return Dialog
@@ -521,6 +523,7 @@ export default function ReturnsPage() {
         account_id: defaultAcc?.id || '',
         notes: '' 
       });
+      setSplitRefunds([{ account_id: defaultAcc?.id || (accounts[0]?.id || ''), amount: '' }]);
       setProcessDialog(true);
     } catch (err) {
       setSnackbar({ open: true, message: 'Error loading sale items: ' + err.message, severity: 'error' });
@@ -551,6 +554,34 @@ export default function ReturnsPage() {
       .reduce((sum, i) => sum + (i.returnQty * i.returnPrice), 0);
   }, [returnItems]);
 
+  const getAccountAvailable = useCallback((accId) => {
+    if (!accId) return 0;
+    const acc = accounts.find(a => String(a.id) === String(accId));
+    return Math.max(0, Number(acc?.current_balance || 0));
+  }, [accounts]);
+
+  const refundSummary = useMemo(() => {
+    if (returnForm.refund_mode === 'split') {
+      const allocated = splitRefunds.reduce((sum, sp) => {
+        const accAvail = getAccountAvailable(sp.account_id);
+        const amt = Number(sp.amount) || 0;
+        const validDeduct = Math.min(amt, accAvail);
+        return sum + validDeduct;
+      }, 0);
+      const payable = Math.min(totalRefund, allocated);
+      const shortage = Math.max(0, totalRefund - payable);
+      return { payable, shortage, total: totalRefund, allocated };
+    } else {
+      if (!returnForm.account_id) {
+        return { payable: 0, shortage: totalRefund, total: totalRefund, allocated: 0 };
+      }
+      const accAvail = getAccountAvailable(returnForm.account_id);
+      const payable = Math.min(totalRefund, accAvail);
+      const shortage = Math.max(0, totalRefund - payable);
+      return { payable, shortage, total: totalRefund, allocated: payable };
+    }
+  }, [returnForm.refund_mode, returnForm.account_id, splitRefunds, totalRefund, getAccountAvailable]);
+
   // ==================== PROCESS RETURN ====================
   const handleProcessReturn = async () => {
     const selectedItems = returnItems.filter(item => item.selected && item.returnQty > 0);
@@ -566,6 +597,17 @@ export default function ReturnsPage() {
     setProcessingReturn(true);
     try {
       const generatedReturnNo = `RET-${Date.now().toString().slice(-5)}`;
+      const isSplit = returnForm.refund_mode === 'split';
+      const cleanSplits = isSplit
+        ? splitRefunds.filter(sp => sp.account_id && Number(sp.amount) > 0).map(sp => {
+            const avail = getAccountAvailable(sp.account_id);
+            const amt = Number(sp.amount) || 0;
+            return {
+              account_id: sp.account_id,
+              amount: Math.min(amt, avail)
+            };
+          })
+        : [];
       
       const returnData = {
         sale_id: selectedSale.id,
@@ -578,11 +620,16 @@ export default function ReturnsPage() {
         tax_amount: 0,
         refund_amount: totalRefund,
         payment_mode: returnForm.refund_mode,
-        account_id: returnForm.account_id || null,
+        account_id: isSplit ? null : (returnForm.account_id || null),
+        split_payments: isSplit ? cleanSplits : null,
+        actual_refunded: refundSummary.payable,
+        unrefunded_amount: refundSummary.shortage,
         notes: returnForm.notes || '',
         items: selectedItems.map(item => ({
           product_id: item.product_id || item.productId,
           product_variant_id: item.product_variant_id || item.variant_id,
+          variant_id: item.product_variant_id || item.variant_id,
+          product_name: item.product_name || item.name || 'Item',
           quantity: item.returnQty,
           unit_price: item.returnPrice,
           total: item.returnQty * item.returnPrice,
@@ -657,11 +704,19 @@ export default function ReturnsPage() {
         }
       }
 
-      if (db.logToGeneralLedger) {
-        await db.logToGeneralLedger('return', parentReturnId, 0, totalRefund, `Return for invoice ${selectedSale.invoice_no}`);
+      if (refundSummary.shortage > 0) {
+        setSnackbar({
+          open: true,
+          message: `Return processed! Rs. ${refundSummary.payable.toLocaleString()} account se return ho gayi. Rs. ${refundSummary.shortage.toLocaleString()} balance shortage ki wajah se deduct nahi hui.`,
+          severity: 'info'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Return processed! Rs. ${totalRefund.toLocaleString()} successfully return ho gayi.`,
+          severity: 'success'
+        });
       }
-
-      setSnackbar({ open: true, message: `Return processed! Sale total reduced by Rs. ${totalRefund.toLocaleString()}`, severity: 'success' });
       setProcessDialog(false);
       loadData();
     } catch (err) {
@@ -1319,32 +1374,197 @@ export default function ReturnsPage() {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={3}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Deduct From Account</InputLabel>
-                    <Select 
-                      value={returnForm.account_id || ''} 
-                      onChange={(e) => setReturnForm(p => ({ ...p, account_id: e.target.value }))} 
-                      label="Deduct From Account"
-                    >
-                      <MenuItem value=""><em>-- No account deduction --</em></MenuItem>
-                      {accounts.map(acc => (
-                        <MenuItem key={acc.id} value={acc.id}>
-                          {acc.name} (Rs. {Number(acc.current_balance || 0).toLocaleString()})
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} md={3}>
+                {returnForm.refund_mode !== 'split' && (
+                  <Grid item xs={12} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Deduct From Account</InputLabel>
+                      <Select 
+                        value={returnForm.account_id || ''} 
+                        onChange={(e) => setReturnForm(p => ({ ...p, account_id: e.target.value }))} 
+                        label="Deduct From Account"
+                      >
+                        <MenuItem value=""><em>-- No account deduction --</em></MenuItem>
+                        {accounts.map(acc => (
+                          <MenuItem key={acc.id} value={acc.id}>
+                            {acc.name} (Rs. {Number(acc.current_balance || 0).toLocaleString()})
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                )}
+                <Grid item xs={12} md={returnForm.refund_mode === 'split' ? 6 : 3}>
                   <TextField fullWidth size="small" label="Notes" value={returnForm.notes} onChange={(e) => setReturnForm(p => ({ ...p, notes: e.target.value }))} />
                 </Grid>
               </Grid>
 
-              <Box sx={{ mt: 2, p: 2, bgcolor: '#fffbeb', borderRadius: 1, border: '1px solid #fecaca', textAlign: 'right' }}>
-                <Typography variant="h6" color="#b45309" fontWeight="bold">
-                  Total Refund: {formatCurrency(totalRefund)}
-                </Typography>
+              {/* Split Refund Payment UI */}
+              {returnForm.refund_mode === 'split' && (
+                <Paper variant="outlined" sx={{ mt: 2, p: 2, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #cbd5e1' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                    <Typography variant="subtitle2" fontWeight="bold" color="#1e293b">
+                      💳 Split Refund Payment Methods
+                    </Typography>
+                    <Button 
+                      size="small" 
+                      variant="outlined" 
+                      startIcon={<Add />} 
+                      onClick={() => setSplitRefunds(prev => [...prev, { account_id: '', amount: '' }])}
+                      sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+                    >
+                      Add Another Account
+                    </Button>
+                  </Box>
+
+                  {splitRefunds.map((split, idx) => {
+                    const selectedAcc = accounts.find(a => String(a.id) === String(split.account_id));
+                    const avail = Math.max(0, Number(selectedAcc?.current_balance || 0));
+                    const isExceeded = Number(split.amount) > avail;
+
+                    return (
+                      <Paper key={idx} sx={{ p: 1.5, mb: 1.5, bgcolor: '#ffffff', border: isExceeded ? '1px solid #ef4444' : '1px solid #e2e8f0', borderRadius: 1.5 }}>
+                        <Stack direction={isMobile ? 'column' : 'row'} spacing={1.5} alignItems={isMobile ? 'stretch' : 'center'}>
+                          <FormControl size="small" sx={{ flex: 1.5 }} error={isExceeded}>
+                            <InputLabel>Account #{idx + 1}</InputLabel>
+                            <Select
+                              value={split.account_id || ''}
+                              label={`Account #${idx + 1}`}
+                              onChange={(e) => {
+                                const updated = [...splitRefunds];
+                                const accId = e.target.value;
+                                const acc = accounts.find(a => String(a.id) === String(accId));
+                                const accAvail = Math.max(0, Number(acc?.current_balance || 0));
+                                const currentAmt = Number(updated[idx].amount) || 0;
+                                updated[idx].account_id = accId;
+                                if (currentAmt > accAvail) {
+                                  updated[idx].amount = accAvail > 0 ? accAvail : '';
+                                }
+                                setSplitRefunds(updated);
+                              }}
+                            >
+                              <MenuItem value="" disabled><em>Select Account</em></MenuItem>
+                              {accounts.map(acc => {
+                                const bal = Number(acc.current_balance || 0);
+                                return (
+                                  <MenuItem key={acc.id} value={acc.id}>
+                                    {acc.name} — Available: Rs. {bal.toLocaleString()}
+                                  </MenuItem>
+                                );
+                              })}
+                            </Select>
+                          </FormControl>
+
+                          <Box sx={{ flex: 1 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="number"
+                              label="Refund Amount"
+                              value={split.amount}
+                              error={isExceeded}
+                              helperText={
+                                isExceeded 
+                                  ? `Max Rs. ${avail.toLocaleString()} available!` 
+                                  : (selectedAcc ? `Max available: Rs. ${avail.toLocaleString()}` : '')
+                              }
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const num = Number(val) || 0;
+                                const updated = [...splitRefunds];
+                                if (selectedAcc && num > avail) {
+                                  updated[idx].amount = avail;
+                                } else {
+                                  updated[idx].amount = val;
+                                }
+                                setSplitRefunds(updated);
+                              }}
+                            />
+                          </Box>
+
+                          {selectedAcc && avail > 0 && (
+                            <Button
+                              size="small"
+                              variant="text"
+                              sx={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}
+                              onClick={() => {
+                                const updated = [...splitRefunds];
+                                const currentOtherAlloc = splitRefunds
+                                  .filter((_, i) => i !== idx)
+                                  .reduce((s, sp) => s + (Number(sp.amount) || 0), 0);
+                                const needed = Math.max(0, totalRefund - currentOtherAlloc);
+                                updated[idx].amount = Math.min(avail, needed > 0 ? needed : avail);
+                                setSplitRefunds(updated);
+                              }}
+                            >
+                              Use Max (Rs. {avail.toLocaleString()})
+                            </Button>
+                          )}
+
+                          {splitRefunds.length > 1 && (
+                            <IconButton 
+                              size="small" 
+                              color="error"
+                              onClick={() => setSplitRefunds(splitRefunds.filter((_, i) => i !== idx))}
+                            >
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          )}
+                        </Stack>
+                      </Paper>
+                    );
+                  })}
+                </Paper>
+              )}
+
+              {/* Summary Status Cards */}
+              <Box sx={{ mt: 2.5, p: 2, bgcolor: '#ffffff', borderRadius: 2, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderRadius: 1.5, border: '1px solid #e2e8f0' }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
+                        Total Return Amount
+                      </Typography>
+                      <Typography variant="h6" fontWeight="bold" color="#1e293b">
+                        {formatCurrency(totalRefund)}
+                      </Typography>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <Box sx={{ p: 1.5, bgcolor: '#f0fdf4', borderRadius: 1.5, border: '1px solid #bbf7d0' }}>
+                      <Typography variant="caption" color="success.main" fontWeight={700} display="block">
+                        ✓ Return Ho Jayegi (Account se)
+                      </Typography>
+                      <Typography variant="h6" fontWeight="bold" color="#15803d">
+                        {formatCurrency(refundSummary.payable)}
+                      </Typography>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <Box sx={{ p: 1.5, bgcolor: refundSummary.shortage > 0 ? '#fef2f2' : '#f8fafc', borderRadius: 1.5, border: refundSummary.shortage > 0 ? '1px solid #fecaca' : '1px solid #e2e8f0' }}>
+                      <Typography variant="caption" color={refundSummary.shortage > 0 ? 'error.main' : 'text.secondary'} fontWeight={700} display="block">
+                        {refundSummary.shortage > 0 ? '⚠ Return Nahi Ho Sakti (Shortage)' : 'Shortage / Unpaid'}
+                      </Typography>
+                      <Typography variant="h6" fontWeight="bold" color={refundSummary.shortage > 0 ? '#b91c1c' : '#64748b'}>
+                        {formatCurrency(refundSummary.shortage)}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+
+                {refundSummary.shortage > 0 && totalRefund > 0 && (
+                  <Alert severity="warning" sx={{ mt: 1.5, py: 0.5, fontSize: '0.82rem' }}>
+                    Account mein balance kam hone ki wajah se <strong>{formatCurrency(refundSummary.payable)}</strong> return ho sakegi, aur <strong>{formatCurrency(refundSummary.shortage)}</strong> return nahi ho sakegi (shortage).
+                    {returnForm.refund_mode !== 'split' && ' Zyada accounts use karne ke liye Refund Mode me "Split (Multi-Method)" select karein.'}
+                  </Alert>
+                )}
+
+                {refundSummary.shortage === 0 && totalRefund > 0 && (
+                  <Alert severity="success" sx={{ mt: 1.5, py: 0.5, fontSize: '0.82rem' }}>
+                    Poori return amount <strong>{formatCurrency(totalRefund)}</strong> accounts se successfully deduct ho jayegi.
+                  </Alert>
+                )}
               </Box>
             </Box>
           )}

@@ -2103,8 +2103,9 @@ useEffect(() => {
       const activeShopId = (db.getActiveShopId ? db.getActiveShopId() : null) || localStorage.getItem('raath_shop_id') || 'default';
       const saleData = {
         invoice_no: invoiceNo || `INV-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-        customer_id: partyType === 'customer' ? selectedParty?.id : null,
-        customer_name: selectedParty?.name || 'Walk-in Customer',
+        customer_id: (partyType === 'customer' && selectedParty) ? selectedParty.id : null,
+        customer_name: (partyType === 'customer' && selectedParty) ? selectedParty.name : (selectedParty?.name || 'Walk-in Customer'),
+        customer_phone: selectedParty?.phone || '',
         customer_ntn: selectedParty?.ntn || '',
         subtotal: calc.subtotal,
         item_discount: calc.itemDiscount,
@@ -2380,8 +2381,9 @@ useEffect(() => {
       const activeShopId = (db.getActiveShopId ? db.getActiveShopId() : null) || localStorage.getItem('raath_shop_id') || 'default';
       const saleData = {
         invoice_no: invoiceNo || `INV-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-        customer_id: partyType === 'customer' ? selectedParty?.id : null,
-        customer_name: selectedParty?.name || 'Walk-in Customer',
+        customer_id: (partyType === 'customer' && selectedParty) ? selectedParty.id : null,
+        customer_name: (partyType === 'customer' && selectedParty) ? selectedParty.name : (selectedParty?.name || 'Walk-in Customer'),
+        customer_phone: selectedParty?.phone || '',
         customer_ntn: selectedParty?.ntn || '',
         subtotal: calc.subtotal,
         item_discount: calc.itemDiscount,
@@ -3181,13 +3183,14 @@ useEffect(() => {
         value={selectedParty?.id || ''}
         displayEmpty
         onChange={(e) => {
+          const val = e.target.value;
           const dataset = partyType === 'customer' ? customers : suppliers;
-          const match = dataset.find(x => x.id === e.target.value);
+          const match = dataset.find(x => String(x.id) === String(val));
           setSelectedParty(match || null);
         }}
         sx={{ fontSize: '0.75rem', height: 40 }}
         renderValue={(v) => v
-          ? `${(partyType === 'customer' ? customers : suppliers).find(x => x.id === v)?.name || ''}`
+          ? `${(partyType === 'customer' ? customers : suppliers).find(x => String(x.id) === String(v))?.name || ''}`
           : <em>Select {partyType === 'customer' ? 'Customer' : 'Supplier'}</em>}
       >
         <MenuItem value="">Walk-in Customer</MenuItem>
@@ -4326,8 +4329,9 @@ sx={{ width: 85 }}
               <FormControl fullWidth size="small">
                 <InputLabel>{partyType === 'customer' ? 'Customer' : 'Supplier'}</InputLabel>
                 <Select value={selectedParty?.id || ''} onChange={(e) => {
+                  const val = e.target.value;
                   const dataset = partyType === 'customer' ? customers : suppliers;
-                  const match = dataset.find(x => x.id === e.target.value);
+                  const match = dataset.find(x => String(x.id) === String(val));
                   setSelectedParty(match || null);
                 }} label={partyType === 'customer' ? 'Customer' : 'Supplier'}>
                   <MenuItem value="">Walk-in</MenuItem>
