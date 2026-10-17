@@ -29,7 +29,7 @@ import ThermalReceipt from '../components/receipt/ThermalReceipt';
 import { printReceiptDirect, getEffectiveReceiptSettings, getEffectiveShopProfile } from '../utils/receiptGenerator';
 import WeightCalculatorDialog from '../components/common/WeightCalculatorDialog';
 import RollCalculatorDialog from '../components/common/RollCalculatorDialog';
-import { ArticlePickerModal, SizeExchangeModal } from '../components/shoes/ShoePickModals';
+import { ArticlePickerModal } from '../components/shoes/ShoePickModals';
 import UniformSizePicker from '../components/bookshop/UniformSizePicker';
 import ThaanMeterModal from '../components/garments/ThaanMeterModal';
 import ImeiPickerModal from '../components/mobile/ImeiPickerModal';
@@ -1070,11 +1070,10 @@ export default function BillingPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [searchResults, setSearchResults] = useState([]);
-  // Shoes vertical: article picker + size exchange modals
+  // Shoes vertical: article picker modal
   const [articlePicker, setArticlePicker] = useState(null);
   const [uniformPicker, setUniformPicker] = useState(null);
   const [bundles, setBundles] = useState([]);
-  const [showExchangeModal, setShowExchangeModal] = useState(false);
   // Garments vertical: thaan meter modal
   const [thaanModal, setThaanModal] = useState({ open: false, product: null });
   const [invoiceDate, setInvoiceDate] = useState(today());
@@ -1272,10 +1271,15 @@ export default function BillingPage() {
 
   const printRef = useRef();
   const searchRef = useRef();
+  const snackbarTimerRef = useRef(null);
 
-  // ---- SNACKBAR HELPER ----
+  // ---- SNACKBAR HELPER (Auto-dismiss in 2s with reliable timer safeguard) ----
   const showSnackbar = useCallback((message, severity = 'success') => {
+    if (snackbarTimerRef.current) clearTimeout(snackbarTimerRef.current);
     setSnackbar({ open: true, message, severity });
+    snackbarTimerRef.current = setTimeout(() => {
+      setSnackbar(p => ({ ...p, open: false }));
+    }, 2000);
   }, []);
 
   // BOOKSHOP: add class bundle line to cart (after showSnackbar — TDZ safe)
@@ -3159,12 +3163,6 @@ useEffect(() => {
       <Add />
     </Button>
 
-    <Button variant="outlined" size="small" onClick={() => setShowExchangeModal(true)}
-      sx={{ height: 40, flexShrink: 0, fontSize: '0.7rem', fontWeight: 'bold', borderColor: '#f59e0b', color: '#b45309' }}
-      title="Size Exchange (wapis +1 / naya -1)">
-      Exchange
-    </Button>
-
     <Button variant="outlined" size="small" onClick={() => setImeiPickerOpen(true)}
       sx={{ height: 40, flexShrink: 0, fontSize: '0.7rem', fontWeight: 'bold', borderColor: '#1e40af', color: '#1e40af' }}
       title="Serialized phone select karo (IMEI)">
@@ -4344,8 +4342,12 @@ sx={{ width: 85 }}
       {/* SNACKBAR */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={2500}
-        onClose={() => setSnackbar(p => ({ ...p, open: false }))}
+        autoHideDuration={2000}
+        disableWindowBlurListener={true}
+        onClose={(event, reason) => {
+          if (snackbarTimerRef.current) clearTimeout(snackbarTimerRef.current);
+          setSnackbar(p => ({ ...p, open: false }));
+        }}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         sx={{ zIndex: 9999, mt: 8 }}
       >
@@ -4407,15 +4409,6 @@ sx={{ width: 85 }}
         variants={uniformPicker?.variants || []}
         onClose={() => setUniformPicker(null)}
         onPick={(v) => { setUniformPicker(null); addToCart(v, 0); }}
-      />
-
-      {/* Shoes: Size Exchange (wapis +1 / naya -1) */}
-      <SizeExchangeModal
-        open={showExchangeModal}
-        onClose={() => setShowExchangeModal(false)}
-        products={products}
-        showSnackbar={showSnackbar}
-        onDone={() => loadData()}
       />
 
       {/* Garments: Thaan meter select */}

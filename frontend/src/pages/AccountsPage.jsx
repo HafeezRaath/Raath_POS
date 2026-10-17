@@ -461,8 +461,56 @@ export default function AccountsPage() {
 
       const arr = Array.isArray(data) ? data : [];
 
+      // STRICT FILTER: Only manual GL entries (hide auto-entries from sales/purchases/expenses/transfers)
+      const manualOnly = arr.filter(entry => {
+        const refType = String(entry.reference_type || '').toLowerCase();
+        const desc = String(entry.description || '').toLowerCase();
+        // Never allow sale / purchase / expense / transfer / emi / return auto-transactions
+        if (
+          refType === 'sale' ||
+          refType === 'sale_split' ||
+          refType === 'purchase' ||
+          refType === 'expense' ||
+          refType === 'transfer' ||
+          refType === 'adjustment' ||
+          refType === 'emi_downpayment' ||
+          refType === 'emi_installment' ||
+          refType === 'repair' ||
+          refType === 'return' ||
+          refType === 'sale_return' ||
+          refType === 'customer_payment' ||
+          refType === 'supplier_payment' ||
+          desc.startsWith('sale:') ||
+          desc.startsWith('purchase:') ||
+          desc.startsWith('expense:')
+        ) {
+          return false;
+        }
+        if (refType) {
+          return refType === 'manual_entry' || refType === 'manual';
+        }
+        return false;
+      });
+
+      // Normalize debit/credit and account name
+      const normalized = manualOnly.map(entry => {
+        const txType = (entry.transaction_type || entry.type || '').toLowerCase();
+        const amt = Number(entry.amount || 0);
+        const debit = entry.debit !== undefined ? Number(entry.debit) : (txType === 'debit' ? amt : 0);
+        const credit = entry.credit !== undefined ? Number(entry.credit) : (txType === 'credit' ? amt : 0);
+        const acc = (accounts || []).find(a => String(a.id) === String(entry.account_id));
+        return {
+          ...entry,
+          debit,
+          credit,
+          account_name: entry.account_name || (acc ? acc.name : (entry.account_id ? `Account #${entry.account_id}` : '-')),
+          account_type: entry.account_type || (acc ? acc.type : ''),
+          payment_mode: entry.payment_mode || (acc ? acc.type : 'cash')
+        };
+      });
+
       // Client-side date filter as backup
-      const filtered = arr.filter(entry => {
+      const filtered = normalized.filter(entry => {
         if (!ledgerFrom && !ledgerTo) return true;
         const d = new Date(entry.date || entry.created_at || 0);
         const from = ledgerFrom ? new Date(ledgerFrom) : new Date('2000-01-01');
@@ -484,7 +532,7 @@ export default function AccountsPage() {
     } finally {
       setLoading(false);
     }
-  }, [ledgerFilterType, ledgerFrom, ledgerTo]);
+  }, [accounts, ledgerFilterType, ledgerFrom, ledgerTo]);
 
   // ==================== BULLETPROOF LOAD ACCOUNT DATA ====================
   // ==================== BULLETPROOF LOAD ACCOUNT DATA ====================

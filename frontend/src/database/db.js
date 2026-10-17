@@ -1152,7 +1152,18 @@ class DatabaseClient {
   }
 
   async getLedger(filters = {}) {
-    return this.query('SELECT * FROM account_transactions ORDER BY id DESC');
+    return this.query(`
+      SELECT 
+        at.*,
+        a.name AS account_name,
+        a.type AS account_type,
+        CASE WHEN (at.type = 'debit' OR at.transaction_type = 'debit') THEN at.amount ELSE 0 END AS debit,
+        CASE WHEN (at.type = 'credit' OR at.transaction_type = 'credit') THEN at.amount ELSE 0 END AS credit
+      FROM account_transactions at
+      LEFT JOIN accounts a ON at.account_id = a.id
+      WHERE at.reference_type = 'manual_entry'
+      ORDER BY at.id DESC
+    `);
   }
 
   async getGeneralLedger(filters = {}) {
