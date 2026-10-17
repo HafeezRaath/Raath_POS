@@ -3066,9 +3066,9 @@ useEffect(() => {
         e.preventDefault();
         const q = (searchQuery || '').trim();
         if (!q) return;
-        // IMEI scan: 15-digit barcode -> serialized phone lookup
+        // IMEI scan: barcode / digits -> serialized phone lookup (dono me sy koi bhi IMEI)
         const digits = q.replace(/\D/g, '');
-        if (digits.length === 15 && digits === q) {
+        if (digits.length >= 8 && digits === q) {
           handleImeiScan(digits);
           return;
         }

@@ -3735,7 +3735,18 @@ const [copies, setCopies] = useState(1);
               {dialogProductType === 'imei' && (
                 <>
                 {!editingProduct ? (
-                  <BulkImeiForm productName={productForm.name || ''} brand={productForm.brand || ''} onDone={() => { loadData(); }} />
+                  <BulkImeiForm
+                    productName={productForm.name || ''}
+                    brand={productForm.brand || ''}
+                    categoryId={productForm.category_id || null}
+                    brandId={productForm.brand_id || null}
+                    onDone={() => {
+                      setProductDialog(false);
+                      resetProductForm();
+                      setImagePreview(null);
+                      loadData();
+                    }}
+                  />
                 ) : (
                 <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #bfdbfe', bgcolor: '#eff6ff', mt: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>

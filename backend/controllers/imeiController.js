@@ -13,6 +13,7 @@ exports.bulkAddImei = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const {
       product_id = null, product_variant_id = null,
+      category_id = null, brand_id = null,
       brand = '', model = '', ram = '', rom = '', color = '',
       condition_type = 'new',
       purchase_price = 0, sale_price = 0,
@@ -59,11 +60,16 @@ exports.bulkAddImei = async (req, res, next) => {
     await transaction(async (conn) => {
       // Create the product on the fly if not supplied
       if (!pid) {
+        let bId = brand_id;
+        if (!bId && brand) {
+          const [bRows] = await conn.query('SELECT id FROM brands WHERE tenant_id = ? AND name = ? AND is_deleted = 0 LIMIT 1', [tenantId, brand]);
+          if (bRows && bRows.length > 0) bId = bRows[0].id;
+        }
         const name = product_name || `${brand} ${model}`.trim() || 'Mobile Phone';
         const [pr] = await conn.query(
-          `INSERT INTO products (tenant_id, name, type, is_serialized, purchase_price, retail_price, sale_price, stock, status)
-           VALUES (?, ?, 'mobile', 1, ?, ?, ?, 0, 'active')`,
-          [tenantId, name, purchase_price, sale_price, sale_price]
+          `INSERT INTO products (tenant_id, name, type, category_id, brand_id, is_serialized, purchase_price, retail_price, sale_price, stock, status)
+           VALUES (?, ?, 'mobile', ?, ?, 1, ?, ?, ?, 0, 'active')`,
+          [tenantId, name, category_id || null, bId || null, purchase_price, sale_price, sale_price]
         );
         pid = pr.insertId;
         const [vr] = await conn.query(
@@ -290,9 +296,9 @@ exports.inStockPicker = async (req, res, next) => {
                FROM device_imei WHERE tenant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0`;
     const params = [tenantId];
     if (search) {
-      sql += ` AND (model LIKE ? OR brand LIKE ? OR imei1 LIKE ?)`;
+      sql += ` AND (model LIKE ? OR brand LIKE ? OR imei1 LIKE ? OR imei2 LIKE ?)`;
       const s = `%${search}%`;
-      params.push(s, s, s);
+      params.push(s, s, s, s);
     }
     sql += ` ORDER BY id DESC LIMIT 100`;
     const rows = await query(sql, params);

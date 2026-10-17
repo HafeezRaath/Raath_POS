@@ -10,7 +10,15 @@ import {
 import { Add, Delete, QrCodeScanner } from '../ui/icons';
 import api from '../../api/apiClient';
 
-export default function BulkImeiForm({ productId = null, productVariantId = null, productName = '', brand = '', onDone }) {
+export default function BulkImeiForm({
+  productId = null,
+  productVariantId = null,
+  productName = '',
+  brand = '',
+  categoryId = null,
+  brandId = null,
+  onDone
+}) {
   // common specs
   const [model, setModel] = useState('');
   const [ram, setRam] = useState('');
@@ -23,22 +31,38 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
   const [notes, setNotes] = useState('');
   const [sellerName, setSellerName] = useState('');
   // scan list
-  const [scanInput, setScanInput] = useState('');
+  const [imei1Input, setImei1Input] = useState('');
+  const [imei2Input, setImei2Input] = useState('');
   const [imeis, setImeis] = useState([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
 
   const addScan = () => {
-    const raw = scanInput.trim().replace(/\D/g, '');
-    if (!raw) return;
-    if (imeis.some(i => i.imei1 === raw)) {
-      setMsg({ t: 'error', m: `Duplicate in this batch: ${raw}` });
+    const raw1 = imei1Input.trim();
+    const raw2 = imei2Input.trim().replace(/\D/g, '');
+    if (!raw1 && !raw2) return;
+
+    // Support "imei1,imei2" paste in field 1
+    const parts = raw1.split(/[,;\s]+/).map(s => s.replace(/\D/g, '')).filter(Boolean);
+    const imei1 = parts[0] || raw1.replace(/\D/g, '');
+    const imei2 = parts[1] || raw2 || '';
+
+    if (!imei1) {
+      setMsg({ t: 'error', m: 'IMEI 1 is required' });
       return;
     }
-    // IMEI2: allow "imei1,imei2" paste
-    const parts = scanInput.trim().split(/[,;\s]+/).map(s => s.replace(/\D/g, '')).filter(Boolean);
-    setImeis(prev => [...prev, { imei1: parts[0] || raw, imei2: parts[1] || '' }]);
-    setScanInput('');
+    if (imeis.some(i => i.imei1 === imei1 || (i.imei2 && i.imei2 === imei1))) {
+      setMsg({ t: 'error', m: `Duplicate IMEI in this batch: ${imei1}` });
+      return;
+    }
+    if (imei2 && imeis.some(i => i.imei1 === imei2 || (i.imei2 && i.imei2 === imei2))) {
+      setMsg({ t: 'error', m: `Duplicate IMEI2 in this batch: ${imei2}` });
+      return;
+    }
+
+    setImeis(prev => [...prev, { imei1, imei2 }]);
+    setImei1Input('');
+    setImei2Input('');
     setMsg(null);
   };
 
@@ -57,7 +81,10 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
     setMsg(null);
     try {
       const res = await api.post('/imei/bulk', {
-        product_id: productId, product_variant_id: productVariantId,
+        product_id: productId,
+        product_variant_id: productVariantId,
+        category_id: categoryId,
+        brand_id: brandId,
         product_name: productName.trim() || `${brand} ${model}`.trim(),
         brand, model, ram, rom, color, condition_type: conditionType,
         purchase_price: Number(purchasePrice) || 0,
@@ -76,7 +103,8 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
       setPurchasePrice('');
       setSalePrice('');
       setNotes('');
-      setScanInput('');
+      setImei1Input('');
+      setImei2Input('');
       setWarrantyMonths('12');
       onDone && onDone(res.data);
     } catch (e) {
@@ -134,15 +162,38 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
 
       <Divider sx={{ my: 1.5 }} />
 
-      <Typography variant="caption" fontWeight="bold" color="text.secondary">SCAN / PASTE IMEI (Enter dabao)</Typography>
-      <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-        <TextField fullWidth size="small" label="Scan IMEI barcode ya paste karo" value={scanInput}
-          onChange={(e) => setScanInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addScan(); } }}
-          placeholder="356938035643809" autoFocus />
-        <Button variant="contained" onClick={addScan} startIcon={<Add />}>Add</Button>
-      </Box>
-      <Typography variant="caption" color="text.secondary">Tip: "imei1,imei2" paste karne pe dono save honge.</Typography>
+      <Typography variant="caption" fontWeight="bold" color="text.secondary">SCAN / ENTER IMEI (1 ya 2 IMEI Numbers)</Typography>
+      <Grid container spacing={1.5} sx={{ mt: 0.5 }} alignItems="center">
+        <Grid item xs={12} sm={5}>
+          <TextField
+            fullWidth
+            size="small"
+            label="IMEI 1 *"
+            value={imei1Input}
+            onChange={(e) => setImei1Input(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addScan(); } }}
+            placeholder="Scan / paste IMEI 1"
+            autoFocus
+          />
+        </Grid>
+        <Grid item xs={12} sm={5}>
+          <TextField
+            fullWidth
+            size="small"
+            label="IMEI 2 (optional)"
+            value={imei2Input}
+            onChange={(e) => setImei2Input(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addScan(); } }}
+            placeholder="Scan / type IMEI 2"
+          />
+        </Grid>
+        <Grid item xs={12} sm={2}>
+          <Button fullWidth variant="contained" onClick={addScan} startIcon={<Add />} sx={{ height: 40, bgcolor: '#1e40af', '&:hover': { bgcolor: '#1e3a8a' } }}>
+            Add
+          </Button>
+        </Grid>
+      </Grid>
+      <Typography variant="caption" color="text.secondary">Tip: Dono fields mein alag alag scan/type karein ya field 1 mein "imei1,imei2" paste karein.</Typography>
 
       {imeis.length > 0 && (
         <List dense sx={{ mt: 1, maxHeight: 180, overflow: 'auto', bgcolor: 'white', borderRadius: 2, border: '1px solid #dbeafe' }}>
