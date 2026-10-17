@@ -3,8 +3,19 @@
 // ============================================================
 
 // Same-origin by default: the Hostinger Web App serves frontend + /api from one origin.
-// REACT_APP_API_URL override still wins when explicitly set at build time.
-const API_BASE = process.env.REACT_APP_API_URL || '/api';
+// In local development (localhost:3000/3001), automatically route to backend port 5000.
+// REACT_APP_API_URL override still wins when explicitly set at build/runtime.
+const getDefaultApiBase = () => {
+  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    if (window.location.port !== '5000') {
+      return `http://${window.location.hostname}:5000/api`;
+    }
+  }
+  return '/api';
+};
+
+const API_BASE = getDefaultApiBase();
 
 class ApiClient {
   constructor(baseUrl = API_BASE) {

@@ -1610,6 +1610,10 @@ const [copies, setCopies] = useState(1);
         const typeUnits = UNITS_BY_TYPE[value] || DEFAULT_UNITS;
         updated.unit = typeUnits[0] || 'Piece';
       }
+      if (name === 'brand') {
+        const matched = brands.find(b => b.name === value);
+        updated.brand_id = matched ? matched.id : null;
+      }
       return updated;
     });
     if (name === 'type') setDialogProductType(value);
@@ -3731,7 +3735,7 @@ const [copies, setCopies] = useState(1);
               {dialogProductType === 'imei' && (
                 <>
                 {!editingProduct ? (
-                  <BulkImeiForm productName={productForm.name || ''} onDone={() => { loadData(); }} />
+                  <BulkImeiForm productName={productForm.name || ''} brand={productForm.brand || ''} onDone={() => { loadData(); }} />
                 ) : (
                 <Paper sx={{ p: isMobile ? 2 : 2.5, borderRadius: 3, border: '1px solid #bfdbfe', bgcolor: '#eff6ff', mt: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>

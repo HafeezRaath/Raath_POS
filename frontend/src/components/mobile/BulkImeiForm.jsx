@@ -10,9 +10,8 @@ import {
 import { Add, Delete, QrCodeScanner } from '../ui/icons';
 import api from '../../api/apiClient';
 
-export default function BulkImeiForm({ productId = null, productVariantId = null, productName = '', onDone }) {
+export default function BulkImeiForm({ productId = null, productVariantId = null, productName = '', brand = '', onDone }) {
   // common specs
-  const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [ram, setRam] = useState('');
   const [rom, setRom] = useState('');
@@ -43,6 +42,10 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
     setMsg(null);
   };
 
+  const updateImei2 = (idx, val) => {
+    setImeis(prev => prev.map((item, i) => (i === idx ? { ...item, imei2: val } : item)));
+  };
+
   const removeImei = (idx) => setImeis(prev => prev.filter((_, i) => i !== idx));
 
   const canSave = useMemo(() =>
@@ -66,6 +69,15 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
       setMsg({ t: 'success', m: res.data?.message || `${imeis.length} units added` });
       setImeis([]);
       setSellerName('');
+      setModel('');
+      setRam('');
+      setRom('');
+      setColor('');
+      setPurchasePrice('');
+      setSalePrice('');
+      setNotes('');
+      setScanInput('');
+      setWarrantyMonths('12');
       onDone && onDone(res.data);
     } catch (e) {
       setMsg({ t: 'error', m: e.response?.data?.error || 'Save failed' });
@@ -83,10 +95,7 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
 
       <Typography variant="caption" fontWeight="bold" color="text.secondary">COMMON SPECS (ek dafa)</Typography>
       <Grid container spacing={2} sx={{ mt: 0.5, mb: 1 }}>
-        <Grid item xs={6} sm={3}>
-          <TextField fullWidth size="small" label="Brand" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Apple" />
-        </Grid>
-        <Grid item xs={6} sm={3}>
+        <Grid item xs={12} sm={4}>
           <TextField fullWidth size="small" label="Model *" value={model} onChange={(e) => setModel(e.target.value)} placeholder="iPhone 12" />
         </Grid>
         <Grid item xs={4} sm={2}>
@@ -115,10 +124,10 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
         <Grid item xs={4} sm={2}>
           <TextField fullWidth size="small" label="Warranty (mo)" type="number" value={warrantyMonths} onChange={(e) => setWarrantyMonths(e.target.value)} />
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={3}>
           <TextField fullWidth size="small" label="Seller Name (optional)" value={sellerName} onChange={(e) => setSellerName(e.target.value)} placeholder="Used phone bechne wala" />
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={3}>
           <TextField fullWidth size="small" label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Grid>
       </Grid>
@@ -141,9 +150,21 @@ export default function BulkImeiForm({ productId = null, productVariantId = null
             <ListItem key={i} secondaryAction={
               <IconButton edge="end" size="small" onClick={() => removeImei(i)}><Delete fontSize="small" /></IconButton>
             }>
-              <ListItemText
-                primary={<Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{it.imei1}</Typography>}
-                secondary={it.imei2 ? `IMEI2: ${it.imei2}` : 'IMEI2: —'} />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%', pr: 4 }}>
+                <Box sx={{ minWidth: 160 }}>
+                  <Typography variant="caption" color="text.secondary">IMEI 1</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>{it.imei1}</Typography>
+                </Box>
+                <TextField
+                  size="small"
+                  label="IMEI 2 (optional)"
+                  placeholder="Scan / type IMEI 2"
+                  value={it.imei2 || ''}
+                  onChange={(e) => updateImei2(i, e.target.value)}
+                  sx={{ maxWidth: 220, bgcolor: 'white' }}
+                  inputProps={{ style: { fontFamily: 'monospace', fontSize: '0.85rem' } }}
+                />
+              </Box>
             </ListItem>
           ))}
         </List>
