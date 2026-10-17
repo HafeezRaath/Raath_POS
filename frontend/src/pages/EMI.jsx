@@ -811,7 +811,7 @@ export default function EMI() {
   // Separate effect for guarantors (runs once, then on demand)
   useEffect(() => {
     loadAllGuarantors();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ==================== PRECOMPUTED PAYMENTS MAP (Performance) ====================
   const paymentsMap = useMemo(() => {

@@ -277,3 +277,94 @@ exports.getRoles = async (req, res, next) => {
     next(error);
   }
 };
+
+// --- Create / Upsert Role ---
+exports.createRole = async (req, res, next) => {
+  try {
+    const tenantId = req.user?.tenant_id || req.tenant_id || DEFAULT_TENANT_ID;
+    const { id, label, color = 'primary', pages = [], permissions = {}, is_default = 0 } = req.body;
+    if (!id || !label) {
+      return res.status(400).json({ success: false, error: 'Role id and label are required' });
+    }
+
+    const pagesJson = typeof pages === 'string' ? pages : JSON.stringify(pages);
+    const permsJson = typeof permissions === 'string' ? permissions : JSON.stringify(permissions);
+
+    await query(
+      `INSERT INTO roles (id, label, color, pages, permissions, is_default, is_deleted)
+       VALUES (?, ?, ?, ?, ?, ?, 0)
+       ON DUPLICATE KEY UPDATE
+         label = VALUES(label),
+         color = VALUES(color),
+         pages = VALUES(pages),
+         permissions = VALUES(permissions),
+         is_default = VALUES(is_default),
+         is_deleted = 0`,
+      [id, label, color, pagesJson, permsJson, is_default ? 1 : 0]
+    );
+
+    res.json({
+      success: true,
+      message: 'Role saved successfully',
+      data: { id, label, color, pages, permissions, is_default }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- Update Role ---
+exports.updateRole = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { label, color, pages, permissions, is_default } = req.body;
+
+    const updates = [];
+    const params = [];
+
+    if (label !== undefined) {
+      updates.push('label = ?');
+      params.push(label);
+    }
+    if (color !== undefined) {
+      updates.push('color = ?');
+      params.push(color);
+    }
+    if (pages !== undefined) {
+      updates.push('pages = ?');
+      params.push(typeof pages === 'string' ? pages : JSON.stringify(pages));
+    }
+    if (permissions !== undefined) {
+      updates.push('permissions = ?');
+      params.push(typeof permissions === 'string' ? permissions : JSON.stringify(permissions));
+    }
+    if (is_default !== undefined) {
+      updates.push('is_default = ?');
+      params.push(is_default ? 1 : 0);
+    }
+
+    if (updates.length > 0) {
+      params.push(id);
+      await query(`UPDATE roles SET ${updates.join(', ')} WHERE id = ?`, params);
+    }
+
+    res.json({ success: true, message: 'Role updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- Delete Role ---
+exports.deleteRole = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (id === 'admin') {
+      return res.status(400).json({ success: false, error: 'Cannot delete admin role' });
+    }
+    await query('UPDATE roles SET is_deleted = 1, deleted_at = NOW() WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Role deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+

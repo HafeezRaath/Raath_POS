@@ -194,6 +194,8 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'emi_records', '`settled_at` DATETIME NULL');
     await addColumnIfMissing(connection, 'emi_records', '`cnic_only` TINYINT(1) DEFAULT 0');
     await addColumnIfMissing(connection, 'emi_guarantors', '`guarantor_id` INT NULL');
+    await addColumnIfMissing(connection, 'emi_guarantors', '`customer_id` INT NULL');
+    await addColumnIfMissing(connection, 'emi_guarantors', '`is_deleted` TINYINT(1) DEFAULT 0');
     await addColumnIfMissing(connection, 'emi_schedule', '`tenant_id` VARCHAR(100) DEFAULT \'tenant_default\'');
 
     try {

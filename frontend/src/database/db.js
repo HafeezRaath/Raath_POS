@@ -757,6 +757,16 @@ class DatabaseClient {
     return res.data;
   }
 
+  async updateRole(id, data) {
+    const res = await api.put(`/auth/roles/${id}`, data);
+    return res.data;
+  }
+
+  async deleteRole(id) {
+    const res = await api.delete(`/auth/roles/${id}`);
+    return res.success;
+  }
+
   // ==================== OFFERS & DEALS ====================
   async getOffers() {
     const res = await api.get('/offers');
@@ -1113,8 +1123,9 @@ class DatabaseClient {
     return this.query('SELECT * FROM emi_guarantors WHERE is_deleted = 0');
   }
 
-  async getGuarantors(customerId) {
-    return this.query('SELECT * FROM emi_guarantors WHERE customer_id = ? AND is_deleted = 0', [customerId]);
+  async getGuarantors(id) {
+    if (!id) return this.getAllGuarantors();
+    return this.query('SELECT * FROM emi_guarantors WHERE (customer_id = ? OR emi_id = ?) AND is_deleted = 0', [id, id]);
   }
 
   async createGuarantor(data) {

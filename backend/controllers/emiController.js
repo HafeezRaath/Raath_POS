@@ -645,3 +645,39 @@ exports.collectionDashboard = async (req, res, next) => {
     }});
   } catch (error) { next(error); }
 };
+
+// --- All EMI Payments across tenant ---
+exports.getAllPayments = async (req, res, next) => {
+  try {
+    const tenantId = req.user?.tenant_id || req.tenant_id;
+    const payments = await query(
+      `SELECT p.*, r.application_no, r.customer_name, r.product_name, COALESCE(r.installment_amount, r.emi_amount, 0) AS monthly_installment
+       FROM emi_payments p
+       LEFT JOIN emi_records r ON p.emi_id = r.id
+       WHERE (p.tenant_id = ? OR p.tenant_id IS NULL) AND (p.is_reversal = 0 OR p.is_reversal IS NULL)
+       ORDER BY p.payment_date DESC, p.id DESC`,
+      [tenantId]
+    );
+    res.json({ success: true, data: payments });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- Payments for single EMI agreement ---
+exports.getPaymentsByEmiId = async (req, res, next) => {
+  try {
+    const tenantId = req.user?.tenant_id || req.tenant_id;
+    const { id } = req.params;
+    const payments = await query(
+      `SELECT * FROM emi_payments
+       WHERE (tenant_id = ? OR tenant_id IS NULL) AND emi_id = ? AND (is_reversal = 0 OR is_reversal IS NULL)
+       ORDER BY payment_date DESC, id DESC`,
+      [tenantId, id]
+    );
+    res.json({ success: true, data: payments });
+  } catch (error) {
+    next(error);
+  }
+};
+

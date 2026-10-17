@@ -1968,7 +1968,7 @@ export default function SettingsPage({ initialTab } = {}) {
                                   </span>
                                 )}
                               </Typography>
-                              <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 1 }}>
+                              <Stack direction="row" spacing={0.5} sx={{ mt: 1, flexWrap: 'wrap' }} useFlexGap>
                                 {Object.entries(role.permissions || {})
                                   .filter(([_, perms]) => perms.view)
                                   .slice(0, 2)
@@ -2023,7 +2023,7 @@ export default function SettingsPage({ initialTab } = {}) {
                             <TableCell><Chip size="small" label={roleConfig?.label || user.role} color={roleConfig?.color || 'default'} /></TableCell>
                             {!isMobile && (
                               <TableCell>
-                                <Stack direction="row" spacing={0.5} flexWrap="wrap">
+                                <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }} useFlexGap>
                                   {Object.entries(roleConfig?.permissions || {})
                                     .filter(([_, perms]) => perms.view)
                                     .map(([pid, perms]) => {
@@ -2049,7 +2049,7 @@ export default function SettingsPage({ initialTab } = {}) {
                             <TableCell><Chip size="small" label={user.active ? 'Active' : 'Inactive'} color={user.active ? 'success' : 'default'} /></TableCell>
                             {canManageUsers && (
                               <TableCell align="right">
-                                <Stack direction="row" spacing={0.5} justifyContent="flex-end" flexWrap="wrap">
+                                <Stack direction="row" spacing={0.5} justifyContent="flex-end" sx={{ flexWrap: 'wrap' }} useFlexGap>
                                   <Tooltip title={user.active ? 'Deactivate' : 'Activate'}><Switch size="small" checked={user.active} onChange={() => toggleUserActive(user.id)} color="success" /></Tooltip>
                                   <IconButton size="small" onClick={() => handleEditUser(user)}><Edit fontSize="small" /></IconButton>
                                   <IconButton size="small" color="error" onClick={() => handleDeleteUser(user.id)}><Delete fontSize="small" /></IconButton>
@@ -2126,7 +2126,7 @@ export default function SettingsPage({ initialTab } = {}) {
                   <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
                     <Typography variant="caption" color="text.secondary" fontWeight="bold">Selected Role: {roles.find(r => r.id === editingUser?.role)?.label}</Typography>
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>Permissions breakdown:</Typography>
-                    <Stack direction="row" spacing={0.5} flexWrap="wrap">
+                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }} useFlexGap>
                       {Object.entries(roles.find(r => r.id === editingUser?.role)?.permissions || {})
                         .filter(([_, perms]) => perms.view)
                         .map(([pid, perms]) => {
@@ -2199,10 +2199,10 @@ export default function SettingsPage({ initialTab } = {}) {
                       <Box sx={{ minWidth: isMobile ? 380 : 'auto' }}>
                         <Grid container sx={{ bgcolor: 'grey.50', p: 1.5, borderBottom: '1px solid', borderColor: 'divider', fontWeight: 'bold', fontSize: '0.7rem' }} spacing={1}>
                           <Grid item xs={4}><Typography variant="caption" fontWeight="bold">Page</Typography></Grid>
-                          <Grid item xs={2} textAlign="center"><Typography variant="caption" fontWeight="bold">View</Typography></Grid>
-                          <Grid item xs={2} textAlign="center"><Typography variant="caption" fontWeight="bold">Add</Typography></Grid>
-                          <Grid item xs={2} textAlign="center"><Typography variant="caption" fontWeight="bold">Edit</Typography></Grid>
-                          <Grid item xs={2} textAlign="center"><Typography variant="caption" fontWeight="bold" sx={{ color: 'error.main' }}>Delete</Typography></Grid>
+                          <Grid item xs={2} sx={{ textAlign: 'center' }}><Typography variant="caption" fontWeight="bold">View</Typography></Grid>
+                          <Grid item xs={2} sx={{ textAlign: 'center' }}><Typography variant="caption" fontWeight="bold">Add</Typography></Grid>
+                          <Grid item xs={2} sx={{ textAlign: 'center' }}><Typography variant="caption" fontWeight="bold">Edit</Typography></Grid>
+                          <Grid item xs={2} sx={{ textAlign: 'center' }}><Typography variant="caption" fontWeight="bold" sx={{ color: 'error.main' }}>Delete</Typography></Grid>
                         </Grid>
                         {AVAILABLE_PAGES.map(page => {
                           const perms = roleForm.permissions[page.id] || { view: false, add: false, edit: false, delete: false };
@@ -2213,16 +2213,16 @@ export default function SettingsPage({ initialTab } = {}) {
                                   {page.icon} {page.label}
                                 </Typography>
                               </Grid>
-                              <Grid item xs={2} textAlign="center">
+                              <Grid item xs={2} sx={{ textAlign: 'center' }}>
                                 <Checkbox size="small" checked={perms.view} onChange={() => toggleRolePermission(page.id, 'view')} />
                               </Grid>
-                              <Grid item xs={2} textAlign="center">
+                              <Grid item xs={2} sx={{ textAlign: 'center' }}>
                                 <Checkbox size="small" checked={perms.add} onChange={() => toggleRolePermission(page.id, 'add')} disabled={!perms.view} />
                               </Grid>
-                              <Grid item xs={2} textAlign="center">
+                              <Grid item xs={2} sx={{ textAlign: 'center' }}>
                                 <Checkbox size="small" checked={perms.edit} onChange={() => toggleRolePermission(page.id, 'edit')} disabled={!perms.view} />
                               </Grid>
-                              <Grid item xs={2} textAlign="center">
+                              <Grid item xs={2} sx={{ textAlign: 'center' }}>
                                 <Checkbox size="small" checked={perms.delete} onChange={() => toggleRolePermission(page.id, 'delete')} disabled={!perms.view} sx={{ color: 'error.main', '&.Mui-checked': { color: 'error.main' } }} />
                               </Grid>
                             </Grid>
@@ -3129,7 +3129,7 @@ export default function SettingsPage({ initialTab } = {}) {
                         />
                         
                         {/* FBR Actions Row */}
-                        <Stack direction="row" spacing={1} flexWrap="wrap">
+                        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }} useFlexGap>
                           <Tooltip title="FBR API credentials required — configure in FBR portal first">
                             <span>
                               <Button 

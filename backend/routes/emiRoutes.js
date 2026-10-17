@@ -17,6 +17,8 @@ router.post('/advanced', emiController.createAdvancedEMI);
 router.get('/collection-dashboard', emiController.collectionDashboard);
 router.get('/guarantors', emiController.getGuarantors);
 router.post('/guarantors', emiController.createGuarantor);
+router.get('/payments/all', emiController.getAllPayments);
+router.get('/:id/payments', emiController.getPaymentsByEmiId);
 router.post('/:id/early-settlement', emiController.earlySettlement);
 router.get('/:id', emiController.getEMIById);
 router.delete('/:id', emiController.deleteEMI);
