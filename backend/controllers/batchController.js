@@ -218,4 +218,5 @@ exports.restoreBatches = async (conn, tenantId, productId, variantId, qty) => {
     }
   } catch (e) {
     console.error('[batches] Restore failed:', e.message);
+  }
 };
