@@ -6,7 +6,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from './api/apiClient';
-import { getRoles, hasPermission } from './role';
+import { getRoles, hasPermissionSync } from './role';
 
 const AuthContext = createContext(null);
 
@@ -127,6 +127,10 @@ export function AuthProvider({ children }) {
       setShopId(tenantId);
       setShopName(userData.shop_name || 'RAATH POS Store');
 
+      try {
+        await loadRoles();
+      } catch (_) {}
+
       return { success: true, user: userData, role: roleData, token };
     } catch (error) {
       console.error('[AuthContext] Login error:', error.message);
@@ -215,7 +219,7 @@ export function AuthProvider({ children }) {
   const checkPermissionSync = useCallback((pageId) => {
     if (!user || !user.role) return false;
     if (user.role === 'admin') return true;
-    return hasPermission(user.role, pageId);
+    return hasPermissionSync(user.role, pageId);
   }, [user]);
 
   const value = {

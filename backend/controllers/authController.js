@@ -200,8 +200,13 @@ exports.login = async (req, res, next) => {
     // Get user's role permissions
     const roles = await query('SELECT * FROM roles WHERE id = ?', [user.role]);
     let roleData = roles[0] || null;
-    if (roleData && typeof roleData.pages === 'string') {
-      try { roleData.pages = JSON.parse(roleData.pages); } catch (e) {}
+    if (roleData) {
+      if (typeof roleData.pages === 'string') {
+        try { roleData.pages = JSON.parse(roleData.pages); } catch (e) {}
+      }
+      if (typeof roleData.permissions === 'string') {
+        try { roleData.permissions = JSON.parse(roleData.permissions); } catch (e) {}
+      }
     }
 
     const payload = {
@@ -251,8 +256,13 @@ exports.getMe = async (req, res, next) => {
 
     const roles = await query('SELECT * FROM roles WHERE id = ?', [user.role]);
     let roleData = roles[0] || null;
-    if (roleData && typeof roleData.pages === 'string') {
-      try { roleData.pages = JSON.parse(roleData.pages); } catch (e) {}
+    if (roleData) {
+      if (typeof roleData.pages === 'string') {
+        try { roleData.pages = JSON.parse(roleData.pages); } catch (e) {}
+      }
+      if (typeof roleData.permissions === 'string') {
+        try { roleData.permissions = JSON.parse(roleData.permissions); } catch (e) {}
+      }
     }
 
     res.json({ success: true, user, role: roleData });

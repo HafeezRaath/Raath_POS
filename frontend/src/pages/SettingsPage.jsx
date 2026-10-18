@@ -25,7 +25,7 @@ import db from '../database/db';
 import {
   AVAILABLE_PAGES, DEFAULT_ROLES,
   getRoles, getRolePermissions, hasPermission, getRoleLabel, getRoleColor,
-  getRolesSync, getRolePermissionsSync,
+  getRolesSync, getRolePermissionsSync, normalizeRole,
   persistRolesToDB
 } from '../role';
 import ThermalReceipt from '../components/receipt/ThermalReceipt';
@@ -970,8 +970,9 @@ export default function SettingsPage({ initialTab } = {}) {
       }
     }
     
-    setRoles([...new Map((dbRoles || []).map(r => [r.id, r])).values()]);
-    setRolePermissions(buildPermissionsMap(dbRoles || []));
+    const normalizedDbRoles = (dbRoles || []).map(r => normalizeRole(r)).filter(Boolean);
+    setRoles([...new Map(normalizedDbRoles.map(r => [r.id, r])).values()]);
+    setRolePermissions(buildPermissionsMap(normalizedDbRoles));
 
     // Load users
     const dbUsers = await db.getUsers();
@@ -1080,8 +1081,8 @@ export default function SettingsPage({ initialTab } = {}) {
   const buildPermissionsMap = (rolesArr) => {
     const perms = {};
     rolesArr.forEach(r => {
-      // NEW: Support granular permissions object
-      if (r.permissions && typeof r.permissions === 'object' && !Array.isArray(r.permissions)) {
+      // NEW: Support granular permissions object if populated with keys
+      if (r.permissions && typeof r.permissions === 'object' && !Array.isArray(r.permissions) && Object.keys(r.permissions).length > 0) {
         perms[r.id] = r.permissions;
       } else {
         // Migrate old format (pages array) -> new format with full CRUD
@@ -1130,8 +1131,9 @@ export default function SettingsPage({ initialTab } = {}) {
       await refreshUsersList();
       const dbRoles = await db.getRoles();
       if (dbRoles && dbRoles.length > 0) {
-        setRoles(dbRoles);
-        setRolePermissions(buildPermissionsMap(dbRoles));
+        const normalized = dbRoles.map(r => normalizeRole(r)).filter(Boolean);
+        setRoles(normalized);
+        setRolePermissions(buildPermissionsMap(normalized));
       }
 
       setSnackbar({
@@ -1347,7 +1349,7 @@ export default function SettingsPage({ initialTab } = {}) {
   const handleEditRole = (role) => {
     // NEW: Load granular permissions or migrate from old pages array
     let perms = {};
-    if (role.permissions && typeof role.permissions === 'object' && !Array.isArray(role.permissions)) {
+    if (role.permissions && typeof role.permissions === 'object' && !Array.isArray(role.permissions) && Object.keys(role.permissions).length > 0) {
       perms = role.permissions;
     } else {
       (role.pages || []).forEach(pid => {

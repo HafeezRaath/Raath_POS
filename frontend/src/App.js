@@ -8,7 +8,7 @@ import {
 } from 'react-router-dom';
 import { useResponsive } from './hooks/useResponsive';
 import { AuthProvider, useAuth } from './AuthContext';
-import { hasPermission } from './role';
+import { hasPermissionSync } from './role';
 import { isModuleEnabled, TOGGLEABLE_MODULES } from './config/businessModules';
 
 const TOGGLEABLE_IDS = new Set(TOGGLEABLE_MODULES.map(m => m.id));
@@ -67,8 +67,10 @@ function ProtectedRoute({ children, pageId }) {
   const location = useLocation();
 
   const hasAccess = useMemo(() => {
-    if (!user?.role || !pageId) return false;
-    return hasPermission(user.role, pageId);
+    if (!pageId) return true;
+    if (!user?.role) return false;
+    if (user.role === 'admin') return true;
+    return hasPermissionSync(user.role, pageId);
   }, [user?.role, pageId]);
 
   if (loading) return <PageLoader />;

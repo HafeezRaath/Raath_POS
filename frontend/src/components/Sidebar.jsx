@@ -286,18 +286,11 @@ export default function Navbar() {
 
   const canAccess = useCallback(
     (permId) => {
-      const authResult = checkPermissionSync(permId);
-      if (authResult) return true;
-      if (!currentUser?.role) return false;
-      if (currentUser.role === 'admin') return true;
-      try {
-        const storedPerms = localStorage.getItem('pos_permissions');
-        if (storedPerms) {
-          const perms = JSON.parse(storedPerms);
-          return perms[currentUser.role]?.includes(permId) || false;
-        }
-      } catch (e) {}
-      return false;
+      if (!permId) return true;
+      const role = currentUser?.role;
+      if (!role) return false;
+      if (role === 'admin') return true;
+      return Boolean(checkPermissionSync(permId));
     },
     [checkPermissionSync, currentUser]
   );

@@ -67,17 +67,44 @@ export const DEFAULT_ROLES = [
 ];
 
 // ==================== BUILD PERMISSIONS MAP ====================
-function buildPermissionsMap(roles) {
+// ==================== ROLE NORMALIZATION ====================
+export function normalizeRole(role) {
+  if (!role) return null;
+  let pages = role.pages || [];
+  if (typeof pages === 'string') {
+    try { pages = JSON.parse(pages); } catch (e) { pages = []; }
+  }
+  let perms = role.permissions;
+  if (typeof perms === 'string') {
+    try { perms = JSON.parse(perms); } catch (e) { perms = {}; }
+  }
+
+  // If permissions is empty or missing, populate from pages
+  if (!perms || typeof perms !== 'object' || Array.isArray(perms) || Object.keys(perms).length === 0) {
+    perms = {};
+    (pages || []).forEach(pid => {
+      perms[pid] = { view: true, add: true, edit: true, delete: true };
+    });
+  } else {
+    // If permissions object exists, synchronize pages array with pages that have view: true
+    const activePages = Object.entries(perms)
+      .filter(([_, p]) => p && (p.view === true || p === true))
+      .map(([pid]) => pid);
+    if (activePages.length > 0) {
+      pages = activePages;
+    }
+  }
+
+  return { ...role, pages, permissions: perms };
+}
+
+// ==================== BUILD PERMISSIONS MAP ====================
+export function buildPermissionsMap(roles) {
   const perms = {};
-  roles.forEach(r => {
-    if (r.permissions && typeof r.permissions === 'object' && !Array.isArray(r.permissions)) {
-      perms[r.id] = r.permissions;
-    } else {
-      const pagePerms = {};
-      (r.pages || []).forEach(pid => {
-        pagePerms[pid] = { view: true, add: true, edit: true, delete: true };
-      });
-      perms[r.id] = pagePerms;
+  (roles || []).forEach(r => {
+    const normalized = normalizeRole(r);
+    if (normalized && normalized.id) {
+      perms[normalized.id] = normalized.permissions;
     }
   });
   return perms;
@@ -86,23 +113,9 @@ function buildPermissionsMap(roles) {
 // ==================== GET ROLES ====================
 export async function getRoles() {
   try {
-    // First try to get from DB
     let dbRoles = await db.getRoles();
-    
     if (dbRoles && dbRoles.length > 0) {
-      // Ensure all roles have proper permissions object
-      const enhanced = dbRoles.map(role => {
-        if (!role.permissions || typeof role.permissions !== 'object' || Array.isArray(role.permissions)) {
-          const pagePerms = {};
-          (role.pages || []).forEach(pid => {
-            pagePerms[pid] = { view: true, add: true, edit: true, delete: true };
-          });
-          return { ...role, permissions: pagePerms };
-        }
-        return role;
-      });
-      
-      // Update localStorage cache
+      const enhanced = dbRoles.map(role => normalizeRole(role)).filter(Boolean);
       localStorage.setItem('pos_roles', JSON.stringify(enhanced));
       localStorage.setItem('pos_permissions', JSON.stringify(buildPermissionsMap(enhanced)));
       return enhanced;
@@ -111,34 +124,9 @@ export async function getRoles() {
     console.warn('[Roles] DB load failed:', e.message);
   }
 
-  // No roles in DB, try to seed defaults
-  try {
-    await db.seedDefaultRoles(DEFAULT_ROLES);
-    let dbRoles = await db.getRoles();
-    if (dbRoles && dbRoles.length > 0) {
-      const enhanced = dbRoles.map(role => {
-        if (!role.permissions || typeof role.permissions !== 'object' || Array.isArray(role.permissions)) {
-          const pagePerms = {};
-          (role.pages || []).forEach(pid => {
-            pagePerms[pid] = { view: true, add: true, edit: true, delete: true };
-          });
-          return { ...role, permissions: pagePerms };
-        }
-        return role;
-      });
-      localStorage.setItem('pos_roles', JSON.stringify(enhanced));
-      localStorage.setItem('pos_permissions', JSON.stringify(buildPermissionsMap(enhanced)));
-      return enhanced;
-    }
-  } catch (e) {
-    console.warn('[Roles] DB seed failed:', e.message);
-  }
-
-  // Final fallback - use hardcoded defaults
-  const defaults = JSON.parse(JSON.stringify(DEFAULT_ROLES));
-  localStorage.setItem('pos_roles', JSON.stringify(defaults));
-  localStorage.setItem('pos_permissions', JSON.stringify(buildPermissionsMap(defaults)));
-  return defaults;
+  // Fallback to cache or defaults
+  const cached = getRolesSync();
+  return cached;
 }
 
 export async function getRolePermissions() {
@@ -146,11 +134,8 @@ export async function getRolePermissions() {
   return buildPermissionsMap(roles);
 }
 
-export async function hasPermission(role, page) {
-  if (!role) return false;
-  if (role === 'admin') return true;
-  const perms = await getRolePermissions();
-  return perms[role]?.[page]?.view || false;
+export function hasPermission(role, page) {
+  return hasPermissionSync(role, page);
 }
 
 export async function getRoleLabel(roleId) {
@@ -170,20 +155,11 @@ export function getRolesSync() {
     if (stored) {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(role => {
-          if (!role.permissions || typeof role.permissions !== 'object' || Array.isArray(role.permissions)) {
-            const pagePerms = {};
-            (role.pages || []).forEach(pid => {
-              pagePerms[pid] = { view: true, add: true, edit: true, delete: true };
-            });
-            return { ...role, permissions: pagePerms };
-          }
-          return role;
-        });
+        return parsed.map(role => normalizeRole(role)).filter(Boolean);
       }
     }
   } catch (e) {}
-  return JSON.parse(JSON.stringify(DEFAULT_ROLES));
+  return DEFAULT_ROLES.map(role => normalizeRole(role));
 }
 
 export function getRolePermissionsSync() {
@@ -191,17 +167,43 @@ export function getRolePermissionsSync() {
     const stored = localStorage.getItem('pos_permissions');
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Object.keys(parsed).length > 0) return parsed;
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        return parsed;
+      }
     }
   } catch (e) {}
-  return buildPermissionsMap(DEFAULT_ROLES);
+  return buildPermissionsMap(getRolesSync());
 }
 
 export function hasPermissionSync(role, page) {
-  if (!role) return false;
+  if (!role || !page) return false;
   if (role === 'admin') return true;
-  const perms = getRolePermissionsSync()[role];
-  return perms?.[page]?.view || false;
+
+  const roles = getRolesSync();
+  const r = roles.find(item => item.id === role);
+  if (!r) {
+    const allPerms = getRolePermissionsSync();
+    const rolePerms = allPerms[role];
+    if (rolePerms) {
+      const pagePerm = rolePerms[page];
+      if (typeof pagePerm === 'boolean') return pagePerm;
+      if (pagePerm && typeof pagePerm === 'object') return Boolean(pagePerm.view);
+    }
+    return false;
+  }
+
+  const normalized = normalizeRole(r);
+  if (!normalized) return false;
+
+  const pagePerm = normalized.permissions?.[page];
+  if (typeof pagePerm === 'boolean') return pagePerm;
+  if (pagePerm && typeof pagePerm === 'object') return Boolean(pagePerm.view);
+
+  if (Array.isArray(normalized.pages)) {
+    return normalized.pages.includes(page);
+  }
+
+  return false;
 }
 
 export function getRoleLabelSync(roleId) {
@@ -218,11 +220,10 @@ export async function persistRolesToDB(newRoles) {
     throw new Error('Cannot persist empty roles');
   }
 
-  const perms = buildPermissionsMap(newRoles);
+  const normalizedRoles = newRoles.map(role => normalizeRole(role)).filter(Boolean);
+  const perms = buildPermissionsMap(normalizedRoles);
 
   try {
-    // FIX: Directly clear and re-insert all roles to avoid duplicate key errors
-    // First, try to get existing roles
     let existing = [];
     try {
       existing = await db.getRoles();
@@ -230,12 +231,10 @@ export async function persistRolesToDB(newRoles) {
       console.warn('[persistRolesToDB] Could not get existing roles:', e.message);
     }
 
-    // FIX: For each role, use createRole which handles INSERT OR REPLACE
-    for (const role of newRoles) {
+    for (const role of normalizedRoles) {
       try {
         await db.createRole(role);
       } catch (err) {
-        // If create fails, try update
         if (err.message && err.message.includes('exists')) {
           await db.updateRole(role.id, role);
         } else {
@@ -244,9 +243,8 @@ export async function persistRolesToDB(newRoles) {
       }
     }
 
-    // Delete roles that are no longer in the list (except admin)
     if (existing && existing.length > 0) {
-      const newIds = new Set(newRoles.map(r => r.id));
+      const newIds = new Set(normalizedRoles.map(r => r.id));
       for (const old of existing) {
         if (!newIds.has(old.id) && old.id !== 'admin') {
           try {
@@ -259,10 +257,10 @@ export async function persistRolesToDB(newRoles) {
     }
 
     // Sync to localStorage cache
-    localStorage.setItem('pos_roles', JSON.stringify(newRoles));
+    localStorage.setItem('pos_roles', JSON.stringify(normalizedRoles));
     localStorage.setItem('pos_permissions', JSON.stringify(perms));
 
-    return { roles: newRoles, permissions: perms };
+    return { roles: normalizedRoles, permissions: perms };
   } catch (error) {
     console.error('[persistRolesToDB] Error:', error);
     throw error;
