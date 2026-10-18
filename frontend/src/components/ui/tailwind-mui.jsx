@@ -788,12 +788,28 @@ const extractTextFromReactNode = (node) => {
   return '';
 };
 
-export const MenuItem = ({ value, children, ...props }) => {
-  const textContent = extractTextFromReactNode(children);
+export const MenuItem = ({ value, children, onClick, className = '', sx, style = {}, ...props }) => {
+  // If it's used inside Select (has value and no onClick), render native <option>
+  if (value !== undefined && !onClick) {
+    const textContent = extractTextFromReactNode(children);
+    return (
+      <option value={value} {...props}>
+        {textContent || (typeof children === 'string' ? children : '')}
+      </option>
+    );
+  }
+  // Otherwise render rich interactive menu item for dropdown Menu
+  const parsedSx = parseSx(sx);
   return (
-    <option value={value} {...props}>
-      {textContent || (typeof children === 'string' ? children : '')}
-    </option>
+    <div
+      role="menuitem"
+      onClick={onClick}
+      className={`flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 active:bg-slate-200 cursor-pointer transition-colors select-none ${className}`}
+      style={{ ...parsedSx, ...style }}
+      {...props}
+    >
+      {children}
+    </div>
   );
 };
 
@@ -1061,7 +1077,7 @@ export const Dialog = ({ open = false, onClose, maxWidth = 'sm', fullWidth, chil
       <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" style={{ zIndex: 9999 }} onClick={onClose} />
       <div
         role="dialog"
-        className={`relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full z-[10000] my-auto flex flex-col max-h-[92vh] overflow-hidden ${
+        className={`relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full z-[10000] my-auto flex flex-col max-h-[92vh] overflow-hidden [&>form]:flex [&>form]:flex-col [&>form]:flex-1 [&>form]:min-h-0 [&>form]:overflow-hidden ${
           widthClasses[maxWidth] || widthClasses.sm
         } ${className}`}
         style={{ ...parsedSx, ...style }}
@@ -1076,7 +1092,7 @@ export const DialogTitle = ({ children, className = '', sx, style = {}, ...props
   const parsedSx = parseSx(sx);
   const hasCustomBg = parsedSx.backgroundColor || style.backgroundColor;
   return (
-    <div className={`flex items-center justify-between px-5 py-4 border-b border-slate-100 font-bold ${hasCustomBg ? '' : 'text-slate-900'} text-base sm:text-lg ${className}`} style={{ ...parsedSx, ...style }} {...props}>
+    <div className={`flex items-center justify-between px-5 py-4 border-b border-slate-100 font-bold shrink-0 ${hasCustomBg ? '' : 'text-slate-900'} text-base sm:text-lg ${className}`} style={{ ...parsedSx, ...style }} {...props}>
       {children}
     </div>
   );
@@ -1085,7 +1101,7 @@ export const DialogTitle = ({ children, className = '', sx, style = {}, ...props
 export const DialogContent = ({ children, dividers = false, className = '', sx, style = {}, ...props }) => {
   const parsedSx = parseSx(sx);
   return (
-    <div className={`p-5 overflow-y-auto text-sm sm:text-[15px] text-slate-700 ${dividers ? 'border-y border-slate-100' : ''} ${className}`} style={{ ...parsedSx, ...style }} {...props}>
+    <div className={`p-5 overflow-y-auto flex-1 min-h-0 text-sm sm:text-[15px] text-slate-700 ${dividers ? 'border-y border-slate-100' : ''} ${className}`} style={{ ...parsedSx, ...style }} {...props}>
       {children}
     </div>
   );
@@ -1094,7 +1110,7 @@ export const DialogContent = ({ children, dividers = false, className = '', sx, 
 export const DialogActions = ({ children, className = '', sx, style = {}, ...props }) => {
   const parsedSx = parseSx(sx);
   return (
-    <div className={`flex items-center justify-end gap-2.5 px-5 py-3.5 bg-slate-50 border-t border-slate-100 ${className}`} style={{ ...parsedSx, ...style }} {...props}>
+    <div className={`flex items-center justify-end gap-2.5 px-5 py-3.5 bg-slate-50 border-t border-slate-100 shrink-0 ${className}`} style={{ ...parsedSx, ...style }} {...props}>
       {children}
     </div>
   );
@@ -1177,7 +1193,7 @@ export const Divider = ({ orientation = 'horizontal', flexItem = false, classNam
 };
 
 // ==================== ALERTS & TOASTS ====================
-export const Alert = ({ severity = 'info', children, onClose, className = '', sx, style = {}, ...props }) => {
+export const Alert = ({ severity = 'info', children, onClose, action, className = '', sx, style = {}, ...props }) => {
   const parsedSx = parseSx(sx);
   const styles = {
     success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
@@ -1195,6 +1211,7 @@ export const Alert = ({ severity = 'info', children, onClose, className = '', sx
       {...props}
     >
       <div className="flex-1">{children}</div>
+      {action && <div className="shrink-0 flex items-center">{action}</div>}
       {onClose && (
         <button type="button" onClick={onClose} className="p-1 hover:opacity-75">
           <X size={14} />
@@ -1204,14 +1221,15 @@ export const Alert = ({ severity = 'info', children, onClose, className = '', sx
   );
 };
 
-export const Snackbar = ({ open = false, message, children, onClose, sx, style = {}, ...props }) => {
+export const Snackbar = ({ open = false, message, children, onClose, action, autoHideDuration, sx, style = {}, ...props }) => {
   if (!open) return null;
   const parsedSx = parseSx(sx);
   return (
-    <div className="fixed bottom-5 right-5 z-50 max-w-sm animate-in fade-in-50 slide-in-from-bottom duration-200" style={{ ...parsedSx, ...style }}>
+    <div className="fixed bottom-5 right-5 z-50 max-w-sm animate-in fade-in-50 slide-in-from-bottom duration-200" style={{ ...parsedSx, ...style }} {...props}>
       {children || (
         <div className="bg-slate-900 text-white text-xs px-4 py-3 rounded-xl shadow-xl flex items-center justify-between gap-3">
           <span>{message}</span>
+          {action && <div className="shrink-0 flex items-center">{action}</div>}
           {onClose && (
             <button type="button" onClick={onClose} className="text-slate-400 hover:text-white">
               <X size={14} />
@@ -1334,7 +1352,7 @@ export const ListItemButton = ({ children, selected = false, onClick, className 
 export const ListItemIcon = ({ children, className = '', sx, style = {}, ...props }) => {
   const parsedSx = parseSx(sx);
   return (
-    <span className={`text-slate-400 flex-shrink-0 ${className}`} style={{ ...parsedSx, ...style }} {...props}>
+    <span className={`text-slate-400 flex-shrink-0 inline-flex items-center ${className}`} style={{ ...parsedSx, ...style }} {...props}>
       {children}
     </span>
   );
@@ -1514,25 +1532,27 @@ export const LinearProgress = ({ value, variant = 'indeterminate', className = '
 // ==================== MENUS ====================
 export const Menu = ({ open = false, onClose, anchorEl, children, className = '', slotProps, ...props }) => {
   if (!open) return null;
+  const rect = anchorEl && typeof anchorEl.getBoundingClientRect === 'function' ? anchorEl.getBoundingClientRect() : null;
+  const posStyle = rect
+    ? {
+        top: Math.min(window.innerHeight - 220, rect.bottom + 4),
+        left: Math.max(10, Math.min(window.innerWidth - 190, rect.right - 180)),
+      }
+    : undefined;
+
   return (
-    <div className="fixed inset-0 z-50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/5" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`absolute mt-1 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 min-w-[180px] ${className}`}
-        style={
-          anchorEl
-            ? {
-                top: anchorEl.getBoundingClientRect().bottom + window.scrollY,
-                left: Math.max(10, anchorEl.getBoundingClientRect().left),
-              }
-            : undefined
-        }
+        className={`fixed bg-white rounded-xl shadow-2xl border border-slate-200 py-1 z-50 min-w-[180px] overflow-hidden ${className}`}
+        style={{ ...posStyle, ...parseSx(slotProps?.paper?.sx) }}
       >
         {children}
       </div>
     </div>
   );
 };
+
 
 // ==================== TABS ====================
 export const Tabs = ({

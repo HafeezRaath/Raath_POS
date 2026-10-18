@@ -9,7 +9,8 @@ import {
   List, ListItem, ListItemText, CircularProgress, Autocomplete,
   Alert, Snackbar, useTheme, useMediaQuery,
   Avatar, Tab, Tabs, Badge, Collapse, Fab,
-  Accordion, AccordionSummary, AccordionDetails
+  Accordion, AccordionSummary, AccordionDetails,
+  Menu, ListItemIcon
 } from '../components/ui/tailwind-mui';
 import {
   Add, Edit, Delete, Search, LocalShipping, Save, Person,
@@ -20,13 +21,15 @@ import {
   Description, Print, CloudUpload, DocumentScanner,
   Inventory, AccountBalance, CreditCard, Undo,
   ShoppingCart, AssignmentReturn, QrCodeScanner, Visibility,
-  ExpandMore, FilterList, ClearAll, TableChart, Category
+  ExpandMore, FilterList, ClearAll, TableChart, Category,
+  MoreVert
 } from '../components/ui/icons';
 import * as XLSX from 'xlsx';
 import db from '../database/db';
 import { useNavigate } from 'react-router-dom';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
+import BarcodePrintModal from '../components/common/BarcodePrintModal';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -44,9 +47,10 @@ const formatCurrency = (amount) => {
 };
 
 // ==================== MOBILE PURCHASE CARD ====================
-const MobilePurchaseCard = ({ purchase, onEdit, onDelete, onReturn, onPayment, onViewSupplier }) => {
+const MobilePurchaseCard = ({ purchase, onEdit, onDelete, onReturn, onPayment, onViewSupplier, onView }) => {
   const [expanded, setExpanded] = useState(false);
   const due = (purchase.grand_total || 0) - (purchase.paid_amount || 0);
+  const computedPaymentStatus = due <= 0 ? 'paid' : ((purchase.paid_amount || 0) > 0 ? 'partial' : 'due');
 
   return (
     <Card sx={{ 
@@ -59,7 +63,7 @@ const MobilePurchaseCard = ({ purchase, onEdit, onDelete, onReturn, onPayment, o
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" fontWeight="bold" noWrap>
-              {purchase.purchase_no}
+              {purchase.purchase_no || purchase.purchase_number || ('PUR-' + String(purchase.id).padStart(5, '0'))}
             </Typography>
             <Button 
               variant="text" 
@@ -80,8 +84,8 @@ const MobilePurchaseCard = ({ purchase, onEdit, onDelete, onReturn, onPayment, o
               />
               <Chip 
                 size="small" 
-                label={purchase.payment_status?.toUpperCase() || 'DUE'} 
-                color={purchase.payment_status === 'paid' ? 'success' : purchase.payment_status === 'partial' ? 'warning' : 'error'}
+                label={computedPaymentStatus.toUpperCase()} 
+                color={computedPaymentStatus === 'paid' ? 'success' : computedPaymentStatus === 'partial' ? 'warning' : 'error'}
                 sx={{ height: 18, fontSize: '0.55rem', fontWeight: 500 }}
               />
             </Stack>
@@ -139,9 +143,14 @@ const MobilePurchaseCard = ({ purchase, onEdit, onDelete, onReturn, onPayment, o
         </Collapse>
 
         <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
-          <Button size="small" variant="outlined" startIcon={<Payment />} onClick={() => onPayment(purchase)} sx={{ flex: 1, fontSize: '0.6rem', py: 0.5, minWidth: 0 }}>
-            Pay
+          <Button size="small" variant="contained" startIcon={<Visibility />} onClick={() => onView && onView(purchase)} sx={{ flex: 1, fontSize: '0.6rem', py: 0.5, minWidth: 0, bgcolor: '#1c2580' }}>
+            View
           </Button>
+          {due > 0 && (
+            <Button size="small" variant="outlined" color="success" startIcon={<Payment />} onClick={() => onPayment(purchase)} sx={{ flex: 1, fontSize: '0.6rem', py: 0.5, minWidth: 0 }}>
+              Pay
+            </Button>
+          )}
           <Button size="small" variant="outlined" color="warning" startIcon={<AssignmentReturn />} onClick={() => onReturn(purchase)} sx={{ flex: 1, fontSize: '0.6rem', py: 0.5, minWidth: 0 }}>
             Return
           </Button>
@@ -304,6 +313,9 @@ export default function PurchasePage() {
   const [categories, setCategories] = useState([]);
   const [purchaseReturns, setPurchaseReturns] = useState([]);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
+  const [barcodeModalProduct, setBarcodeModalProduct] = useState(null);
+  const [barcodeModalItems, setBarcodeModalItems] = useState(null);
   
   // Filters
   const [searchPurchase, setSearchPurchase] = useState('');
@@ -368,6 +380,15 @@ export default function PurchasePage() {
   // View Return Dialog
   const [viewReturnDialog, setViewReturnDialog] = useState(false);
   const [viewReturnData, setViewReturnData] = useState(null);
+
+  // View Purchase Dialog
+  const [viewPurchaseDialog, setViewPurchaseDialog] = useState(false);
+  const [viewPurchaseData, setViewPurchaseData] = useState(null);
+  const [loadingViewPurchase, setLoadingViewPurchase] = useState(false);
+
+  // Actions 3-Dots Menu
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
+  const [menuSelectedPurchase, setMenuSelectedPurchase] = useState(null);
 
   // Supplier Dialog
   const [supplierDialog, setSupplierDialog] = useState(false);
@@ -666,6 +687,86 @@ export default function PurchasePage() {
   };
 
   // ==================== PURCHASE FUNCTIONS ====================
+  const handleOpenActionMenu = (e, purchase) => {
+    e.stopPropagation();
+    setActionMenuAnchor(e.currentTarget);
+    setMenuSelectedPurchase(purchase);
+  };
+
+  const handleCloseActionMenu = () => {
+    setActionMenuAnchor(null);
+    setMenuSelectedPurchase(null);
+  };
+
+  const handleViewPurchase = async (purchase) => {
+    if (!purchase) return;
+    setViewPurchaseData(purchase);
+    setViewPurchaseDialog(true);
+    setLoadingViewPurchase(true);
+    try {
+      const full = await db.getPurchaseById(purchase.id);
+      let data = (full && (full.data || full)) || purchase;
+      if (!data.items || data.items.length === 0) {
+        try {
+          const itemsRes = await db.getAllPurchaseItems(purchase.id);
+          const itemsList = Array.isArray(itemsRes) ? itemsRes : (itemsRes?.data || []);
+          if (itemsList && itemsList.length > 0) {
+            data = { ...data, items: itemsList };
+          }
+        } catch (_) {}
+      }
+      setViewPurchaseData(data);
+    } catch (err) {
+      console.error('Error fetching purchase details:', err);
+    } finally {
+      setLoadingViewPurchase(false);
+    }
+  };
+
+  const handlePrintItemBarcode = (item) => {
+    const prod = products.find(p => p.id === item.product_variant_id || p.variant_id === item.product_variant_id || p.id === item.product_id);
+    const barcode = item.barcode || prod?.barcode;
+    if (!barcode) {
+      setSnackbar({ open: true, message: 'Is item ka barcode nahi hai. Please product me barcode add karein.', severity: 'warning' });
+      return;
+    }
+    setBarcodeModalItems(null);
+    setBarcodeModalProduct({
+      ...item,
+      barcode: barcode,
+      retail_price: item.retail_price || prod?.retail_price || item.unit_price || item.purchase_price,
+      quantity: Math.max(1, Math.round(parseFloat(item.quantity) || 1))
+    });
+    setBarcodeModalOpen(true);
+  };
+
+  const handlePrintAllPurchaseBarcodes = (purchase) => {
+    if (!purchase?.items || purchase.items.length === 0) {
+      setSnackbar({ open: true, message: 'Is purchase me koi items nahi hain.', severity: 'warning' });
+      return;
+    }
+    const printableItems = [];
+    for (const item of purchase.items) {
+      const prod = products.find(p => p.id === item.product_variant_id || p.variant_id === item.product_variant_id || p.id === item.product_id);
+      const barcode = item.barcode || prod?.barcode;
+      if (barcode) {
+        printableItems.push({
+          ...item,
+          barcode: barcode,
+          retail_price: item.retail_price || prod?.retail_price || item.unit_price || item.purchase_price,
+          quantity: Math.max(1, Math.round(parseFloat(item.quantity) || 1))
+        });
+      }
+    }
+    if (printableItems.length === 0) {
+      setSnackbar({ open: true, message: 'Purchased items me kisi ka barcode set nahi hai.', severity: 'warning' });
+      return;
+    }
+    setBarcodeModalProduct(null);
+    setBarcodeModalItems(printableItems);
+    setBarcodeModalOpen(true);
+  };
+
   const handleOpenPurchase = (purchase = null) => {
     setEditingPurchase(purchase);
     if (purchase) {
@@ -934,21 +1035,34 @@ export default function PurchasePage() {
     }
 
     const supplierObj = suppliers.find(s => s.id == purchaseForm.supplier_id);
+    const finalGrandTotal = totals.grandTotal || 0;
+    const finalPaid = paidAmount || 0;
+    const finalDue = Math.max(0, finalGrandTotal - finalPaid);
+    const poNumber = (editingPurchase ? purchaseForm.purchase_no : null) || purchaseForm.purchase_no || `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+
     const purchaseData = {
-      supplier_id: purchaseForm.supplier_id,  // FIX: Keep as-is, don't force Number. Remove supplier_name — backend mein ye field nahi hai.
-      purchase_no: purchaseForm.purchase_no,
+      supplier_id: purchaseForm.supplier_id,
+      supplier_name: supplierObj?.name || '',
+      purchase_no: poNumber,
+      purchase_number: poNumber,
       supplier_invoice_no: purchaseForm.supplier_invoice_no,
       purchase_date: purchaseForm.purchase_date,
       due_date: purchaseForm.due_date || null,
       status: purchaseForm.status,
+      subtotal: totals.subtotal,
       total_amount: totals.subtotal,
+      discount: totals.discount,
       discount_amount: totals.discount,
+      tax: totals.tax,
       tax_amount: totals.tax,
+      shipping_cost: totals.shipping,
       shipping_charges: totals.shipping,
-      grand_total: totals.grandTotal,
-      paid_amount: paidAmount,
+      grand_total: finalGrandTotal,
+      paid_amount: finalPaid,
+      due_amount: finalDue,
       payment_status: paymentStatus,
       payment_mode: purchaseForm.payment_mode,
+      payment_method: purchaseForm.payment_mode,
       account_id: purchaseAccountId,
       split_payments: splitList,
       notes: purchaseForm.notes,
@@ -971,8 +1085,6 @@ export default function PurchasePage() {
         await db.updatePurchase(editingPurchase.id, purchaseData);
         setSnackbar({ open: true, message: 'Purchase updated!', severity: 'success' });
       } else {
-        // FIX: Fresh unique purchase_no generate karo save ke waqt — double click pe bhi alag hoga
-        purchaseData.purchase_no = `PUR-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
         const result = await db.createPurchase(purchaseData);
         setSnackbar({ open: true, message: 'Purchase created!', severity: 'success' });
       }
@@ -2140,6 +2252,7 @@ const handleProcessReturn = async () => {
                     onReturn={handleOpenReturn}
                     onPayment={handleOpenPayment}
                     onViewSupplier={handleViewSupplier}
+                    onView={handleViewPurchase}
                   />
                 ))}
                 {filteredPurchases.length === 0 && (
@@ -2187,10 +2300,13 @@ const handleProcessReturn = async () => {
                     )}
                     {paginatedPurchases.map((purchase) => {
                       const due = (purchase.grand_total || 0) - (purchase.paid_amount || 0);
+                      const computedPaymentStatus = due <= 0 ? 'paid' : ((purchase.paid_amount || 0) > 0 ? 'partial' : 'due');
                       return (
                         <TableRow key={purchase.id} hover>
                           <TableCell>
-                            <Typography fontWeight="bold">{purchase.purchase_no}</Typography>
+                            <Typography fontWeight="bold">
+                              {purchase.purchase_no || purchase.purchase_number || ('PUR-' + String(purchase.id).padStart(5, '0'))}
+                            </Typography>
                           </TableCell>
                           <TableCell>{formatDate(purchase.purchase_date)}</TableCell>
                           <TableCell>
@@ -2201,7 +2317,7 @@ const handleProcessReturn = async () => {
                               sx={{ textTransform: 'none', p: 0, minWidth: 0, '&:hover': { bgcolor: 'transparent' } }}
                             >
                               <Typography variant="body2" color="primary">
-                                {purchase.supplier_name || '-'}
+                                {purchase.supplier_name || suppliers.find(s => s.id == purchase.supplier_id)?.name || '-'}
                               </Typography>
                             </Button>
                           </TableCell>
@@ -2221,32 +2337,37 @@ const handleProcessReturn = async () => {
                               />
                               <Chip 
                                 size="small" 
-                                color={purchase.payment_status === 'paid' ? 'success' : purchase.payment_status === 'partial' ? 'warning' : 'error'} 
-                                label={purchase.payment_status?.toUpperCase() || 'DUE'} 
+                                color={computedPaymentStatus === 'paid' ? 'success' : computedPaymentStatus === 'partial' ? 'warning' : 'error'} 
+                                label={computedPaymentStatus.toUpperCase()} 
                                 sx={{ height: 20, fontSize: '0.6rem' }}
                               />
                             </Stack>
                           </TableCell>
                           <TableCell align="right">
-                            <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                              <Tooltip title="Payment">
-                                <IconButton size="small" color="success" onClick={() => handleOpenPayment(purchase)}>
-                                  <Payment fontSize="small" />
+                            <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center">
+                              <Tooltip title="View Details">
+                                <IconButton 
+                                  size="small" 
+                                  onClick={() => handleViewPurchase(purchase)}
+                                  sx={{ 
+                                    bgcolor: 'rgba(28, 37, 128, 0.08)', 
+                                    color: '#1c2580',
+                                    '&:hover': { bgcolor: 'rgba(28, 37, 128, 0.18)' } 
+                                  }}
+                                >
+                                  <Visibility fontSize="small" />
                                 </IconButton>
                               </Tooltip>
-                              <Tooltip title="Return">
-                                <IconButton size="small" color="warning" onClick={() => handleOpenReturn(purchase)}>
-                                  <AssignmentReturn fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Edit">
-                                <IconButton size="small" color="info" onClick={() => handleOpenPurchase(purchase)}>
-                                  <Edit fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Delete">
-                                <IconButton size="small" color="error" onClick={() => handleDeletePurchase(purchase.id)}>
-                                  <Delete fontSize="small" />
+                              <Tooltip title="Actions">
+                                <IconButton 
+                                  size="small" 
+                                  onClick={(e) => handleOpenActionMenu(e, purchase)}
+                                  sx={{ 
+                                    bgcolor: 'rgba(0, 0, 0, 0.04)', 
+                                    '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.1)' } 
+                                  }}
+                                >
+                                  <MoreVert fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                             </Stack>
@@ -2257,6 +2378,94 @@ const handleProcessReturn = async () => {
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {/* 3-Dots Dropdown Menu for Purchase Actions */}
+              <Menu
+                open={Boolean(actionMenuAnchor)}
+                anchorEl={actionMenuAnchor}
+                onClose={handleCloseActionMenu}
+                slotProps={{
+                  paper: {
+                    sx: {
+                      minWidth: 190,
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
+                      borderRadius: '10px',
+                      border: '1px solid #e2e8f0',
+                      py: 0.5
+                    }
+                  }
+                }}
+              >
+                <MenuItem
+                  onClick={() => {
+                    const p = menuSelectedPurchase;
+                    handleCloseActionMenu();
+                    if (p) handleViewPurchase(p);
+                  }}
+                >
+                  <ListItemIcon sx={{ color: 'primary.main', minWidth: 28 }}>
+                    <Visibility fontSize="small" />
+                  </ListItemIcon>
+                  <Typography variant="body2" fontWeight={500}>View Details</Typography>
+                </MenuItem>
+
+                {menuSelectedPurchase && ((menuSelectedPurchase.grand_total || 0) - (menuSelectedPurchase.paid_amount || 0) > 0) && (
+                  <MenuItem
+                    onClick={() => {
+                      const p = menuSelectedPurchase;
+                      handleCloseActionMenu();
+                      if (p) handleOpenPayment(p);
+                    }}
+                  >
+                    <ListItemIcon sx={{ color: 'success.main', minWidth: 28 }}>
+                      <Payment fontSize="small" />
+                    </ListItemIcon>
+                    <Typography variant="body2" fontWeight={500}>Make Payment</Typography>
+                  </MenuItem>
+                )}
+
+                <MenuItem
+                  onClick={() => {
+                    const p = menuSelectedPurchase;
+                    handleCloseActionMenu();
+                    if (p) handleOpenReturn(p);
+                  }}
+                >
+                  <ListItemIcon sx={{ color: 'warning.main', minWidth: 28 }}>
+                    <AssignmentReturn fontSize="small" />
+                  </ListItemIcon>
+                  <Typography variant="body2" fontWeight={500}>Return Items</Typography>
+                </MenuItem>
+
+                <MenuItem
+                  onClick={() => {
+                    const p = menuSelectedPurchase;
+                    handleCloseActionMenu();
+                    if (p) handleOpenPurchase(p);
+                  }}
+                >
+                  <ListItemIcon sx={{ color: 'info.main', minWidth: 28 }}>
+                    <Edit fontSize="small" />
+                  </ListItemIcon>
+                  <Typography variant="body2" fontWeight={500}>Edit Purchase</Typography>
+                </MenuItem>
+
+                <Divider sx={{ my: 0.5 }} />
+
+                <MenuItem
+                  onClick={() => {
+                    const p = menuSelectedPurchase;
+                    handleCloseActionMenu();
+                    if (p) handleDeletePurchase(p.id);
+                  }}
+                  sx={{ color: 'error.main' }}
+                >
+                  <ListItemIcon sx={{ color: 'error.main', minWidth: 28 }}>
+                    <Delete fontSize="small" />
+                  </ListItemIcon>
+                  <Typography variant="body2" fontWeight={500} color="error.main">Delete Purchase</Typography>
+                </MenuItem>
+              </Menu>
                 <UnifiedPagination
                   count={filteredPurchases.length}
                   page={purchasePage}
@@ -2317,8 +2526,8 @@ const handleProcessReturn = async () => {
                       const due = (purchase.grand_total || 0) - (purchase.paid_amount || 0);
                       return (
                         <TableRow key={purchase.id} hover>
-                          <TableCell>{purchase.purchase_no}</TableCell>
-                          <TableCell>{purchase.supplier_name || '-'}</TableCell>
+                          <TableCell>{purchase.purchase_no || purchase.purchase_number || ('PUR-' + String(purchase.id).padStart(5, '0'))}</TableCell>
+                          <TableCell>{purchase.supplier_name || suppliers.find(s => s.id == purchase.supplier_id)?.name || '-'}</TableCell>
                           <TableCell>{formatCurrency(purchase.grand_total)}</TableCell>
                           <TableCell>{formatCurrency(purchase.paid_amount)}</TableCell>
                           <TableCell sx={{ color: 'error.main', fontWeight: 'bold' }}>
@@ -3667,6 +3876,322 @@ const handleProcessReturn = async () => {
         </DialogActions>
       </Dialog>
 
+      {/* ==================== VIEW PURCHASE DIALOG ==================== */}
+      <Dialog 
+        open={viewPurchaseDialog} 
+        onClose={() => setViewPurchaseDialog(false)} 
+        maxWidth="md" 
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle sx={{ bgcolor: '#1c2580', color: 'white', py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Visibility sx={{ color: 'white' }} />
+            <Box>
+              <Typography variant="subtitle1" fontWeight="bold" sx={{ color: 'white', lineHeight: 1.2 }}>
+                Purchase Details
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+                {viewPurchaseData?.purchase_no || viewPurchaseData?.purchase_number || ('PUR-' + String(viewPurchaseData?.id || '').padStart(5, '0'))}
+              </Typography>
+            </Box>
+          </Box>
+          <IconButton size="small" onClick={() => setViewPurchaseDialog(false)} sx={{ color: 'white' }}>
+            <Close fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: isMobile ? 1.5 : 2.5 }}>
+          {loadingViewPurchase ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 6, gap: 2 }}>
+              <CircularProgress size={36} sx={{ color: '#1c2580' }} />
+              <Typography variant="body2" color="text.secondary">Loading purchase details...</Typography>
+            </Box>
+          ) : viewPurchaseData ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* Summary Cards */}
+              <Grid container spacing={1.5}>
+                <Grid item xs={12} sm={4}>
+                  <Card variant="outlined" sx={{ bgcolor: '#f8fafc', height: '100%', borderRadius: 1.5 }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase">
+                        Supplier Information
+                      </Typography>
+                      <Typography variant="subtitle2" fontWeight="bold" sx={{ mt: 0.5, color: '#0f172a' }}>
+                        {viewPurchaseData.supplier_name || suppliers.find(s => s.id == viewPurchaseData.supplier_id)?.name || 'Direct / Cash Supplier'}
+                      </Typography>
+                      {viewPurchaseData.supplier_phone && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          Phone: {viewPurchaseData.supplier_phone}
+                        </Typography>
+                      )}
+                      {viewPurchaseData.supplier_invoice_no && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          Supplier Inv: {viewPurchaseData.supplier_invoice_no}
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} sm={4}>
+                  <Card variant="outlined" sx={{ bgcolor: '#f8fafc', height: '100%', borderRadius: 1.5 }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase">
+                        Date & Order Info
+                      </Typography>
+                      <Box sx={{ mt: 0.5 }}>
+                        <Typography variant="body2" fontWeight={600}>
+                          {formatDate(viewPurchaseData.purchase_date)}
+                        </Typography>
+                        <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                          <Chip 
+                            size="small" 
+                            color={viewPurchaseData.status === 'received' ? 'success' : 'warning'} 
+                            label={(viewPurchaseData.status || 'PENDING').toUpperCase()} 
+                            sx={{ height: 20, fontSize: '0.65rem' }}
+                          />
+                          <Chip 
+                            size="small" 
+                            color={((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0)) <= 0 ? 'success' : ((viewPurchaseData.paid_amount || 0) > 0 ? 'warning' : 'error')} 
+                            label={((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0)) <= 0 ? 'PAID' : ((viewPurchaseData.paid_amount || 0) > 0 ? 'PARTIAL' : 'DUE')} 
+                            sx={{ height: 20, fontSize: '0.65rem' }}
+                          />
+                        </Stack>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} sm={4}>
+                  <Card variant="outlined" sx={{ bgcolor: '#f8fafc', height: '100%', borderRadius: 1.5 }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase">
+                        Payment Mode
+                      </Typography>
+                      <Typography variant="subtitle2" fontWeight="bold" sx={{ mt: 0.5, textTransform: 'capitalize' }}>
+                        {viewPurchaseData.payment_mode || viewPurchaseData.payment_method || 'Cash'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Total Items: {viewPurchaseData.items?.length || 1}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+
+              {/* Items List Table with Candela-Style GRN Barcode Printing */}
+              <Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#1e293b' }}>
+                    Purchased Items ({viewPurchaseData.items?.length || 0})
+                  </Typography>
+                  {viewPurchaseData.items && viewPurchaseData.items.length > 0 && (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<Print />}
+                      onClick={() => handlePrintAllPurchaseBarcodes(viewPurchaseData)}
+                      sx={{
+                        bgcolor: '#4f46e5',
+                        '&:hover': { bgcolor: '#4338ca' },
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        textTransform: 'none',
+                        py: 0.5,
+                        px: 1.5,
+                        borderRadius: 1.5
+                      }}
+                    >
+                      Print All Barcodes ({viewPurchaseData.items.reduce((sum, it) => sum + (parseFloat(it.quantity) || 1), 0)} Labels)
+                    </Button>
+                  )}
+                </Box>
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5, overflowX: 'auto' }}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: '#f1f5f9' }}>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', py: 1 }}>#</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem', py: 1 }}>PRODUCT / ITEM</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem', py: 1 }}>QTY</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.75rem', py: 1 }}>UNIT PRICE</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.75rem', py: 1 }}>TOTAL</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem', py: 1 }}>EXPIRY</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem', py: 1 }}>BARCODE</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {viewPurchaseData.items && viewPurchaseData.items.length > 0 ? (
+                        viewPurchaseData.items.map((item, index) => {
+                          const itemQty = parseFloat(item.quantity) || 1;
+                          const itemCost = parseFloat(item.unit_cost || item.purchase_price || item.unit_price) || 0;
+                          const itemTotal = parseFloat(item.total || item.sub_total) || (itemQty * itemCost);
+                          return (
+                            <TableRow key={item.id || index} hover>
+                              <TableCell sx={{ fontSize: '0.8rem', py: 1 }}>{index + 1}</TableCell>
+                              <TableCell sx={{ fontWeight: 600, fontSize: '0.8rem', py: 1 }}>
+                                {item.product_name || item.name || 'Unnamed Product'}
+                              </TableCell>
+                              <TableCell align="center" sx={{ fontSize: '0.8rem', py: 1, fontWeight: 600 }}>
+                                {itemQty}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontSize: '0.8rem', py: 1 }}>
+                                {formatCurrency(itemCost)}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontSize: '0.8rem', py: 1, fontWeight: 'bold', color: '#0f172a' }}>
+                                {formatCurrency(itemTotal)}
+                              </TableCell>
+                              <TableCell align="center" sx={{ fontSize: '0.75rem', py: 1, color: 'text.secondary' }}>
+                                {item.expiry_date ? formatDate(item.expiry_date) : '-'}
+                              </TableCell>
+                              <TableCell align="center" sx={{ py: 0.5 }}>
+                                <Tooltip title={`Print ${itemQty} Barcode(s)`}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handlePrintItemBarcode(item)}
+                                    sx={{ color: '#4f46e5', '&:hover': { bgcolor: '#e0e7ff' } }}
+                                  >
+                                    <Print fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={7} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                            No item breakdown details found.
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+
+              {/* Financial Calculation Breakdown */}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                <Box sx={{ width: { xs: '100%', sm: 320 }, bgcolor: '#f8fafc', p: 1.5, borderRadius: 1.5, border: '1px solid #e2e8f0' }}>
+                  <Stack spacing={0.75}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="caption" color="text.secondary">Subtotal:</Typography>
+                      <Typography variant="caption" fontWeight="bold">
+                        {formatCurrency(viewPurchaseData.subtotal || viewPurchaseData.total_amount || viewPurchaseData.grand_total)}
+                      </Typography>
+                    </Box>
+
+                    {parseFloat(viewPurchaseData.discount || viewPurchaseData.discount_amount) > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', color: 'success.main' }}>
+                        <Typography variant="caption">Discount:</Typography>
+                        <Typography variant="caption" fontWeight="bold">
+                          - {formatCurrency(viewPurchaseData.discount || viewPurchaseData.discount_amount)}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {parseFloat(viewPurchaseData.tax || viewPurchaseData.tax_amount) > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" color="text.secondary">Tax:</Typography>
+                        <Typography variant="caption" fontWeight="bold">
+                          + {formatCurrency(viewPurchaseData.tax || viewPurchaseData.tax_amount)}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {parseFloat(viewPurchaseData.shipping_cost || viewPurchaseData.shipping_charges) > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" color="text.secondary">Shipping:</Typography>
+                        <Typography variant="caption" fontWeight="bold">
+                          + {formatCurrency(viewPurchaseData.shipping_cost || viewPurchaseData.shipping_charges)}
+                        </Typography>
+                      </Box>
+                    )}
+
+                    <Divider sx={{ my: 0.5 }} />
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" fontWeight="bold" color="#1e293b">Grand Total:</Typography>
+                      <Typography variant="subtitle1" fontWeight="bold" color="#1c2580">
+                        {formatCurrency(viewPurchaseData.grand_total)}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="caption" color="text.secondary">Paid Amount:</Typography>
+                      <Typography variant="body2" fontWeight="bold" color="success.main">
+                        {formatCurrency(viewPurchaseData.paid_amount || 0)}
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="caption" color="text.secondary">Due Balance:</Typography>
+                      <Typography 
+                        variant="body2" 
+                        fontWeight="bold" 
+                        color={((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0)) > 0 ? 'error.main' : 'text.secondary'}
+                      >
+                        {formatCurrency(Math.max(0, (viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0)))}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Box>
+              </Box>
+
+              {/* Notes if any */}
+              {viewPurchaseData.notes && (
+                <Box sx={{ p: 1.5, bgcolor: '#f1f5f9', borderRadius: 1.5 }}>
+                  <Typography variant="caption" fontWeight="bold" color="text.secondary">Notes / Remarks:</Typography>
+                  <Typography variant="body2" sx={{ mt: 0.25 }}>{viewPurchaseData.notes}</Typography>
+                </Box>
+              )}
+            </Box>
+          ) : null}
+        </DialogContent>
+
+        <DialogActions sx={{ px: isMobile ? 1.5 : 2.5, py: 1.5, bgcolor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+          {viewPurchaseData && ((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0) > 0) && (
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<Payment />}
+              size="small"
+              onClick={() => {
+                const p = viewPurchaseData;
+                setViewPurchaseDialog(false);
+                handleOpenPayment(p);
+              }}
+            >
+              Make Payment
+            </Button>
+          )}
+
+          {viewPurchaseData && (
+            <Button
+              variant="outlined"
+              color="warning"
+              startIcon={<AssignmentReturn />}
+              size="small"
+              onClick={() => {
+                const p = viewPurchaseData;
+                setViewPurchaseDialog(false);
+                handleOpenReturn(p);
+              }}
+            >
+              Return Items
+            </Button>
+          )}
+
+          <Button 
+            variant="outlined" 
+            onClick={() => setViewPurchaseDialog(false)}
+            size="small"
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* ==================== VIEW RETURN DIALOG ==================== */}
       <Dialog open={viewReturnDialog} onClose={() => setViewReturnDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ bgcolor: 'warning.main', color: 'white', py: 1.5 }}>
@@ -3942,7 +4467,7 @@ const handleProcessReturn = async () => {
                       const due = (p.grand_total || 0) - (p.paid_amount || 0);
                       return (
                         <TableRow key={p.id} hover>
-                          <TableCell>{p.purchase_no}</TableCell>
+                          <TableCell>{p.purchase_no || p.purchase_number || ('PUR-' + String(p.id).padStart(5, '0'))}</TableCell>
                           <TableCell>{formatDate(p.purchase_date)}</TableCell>
                           <TableCell align="right">{formatCurrency(p.grand_total)}</TableCell>
                           <TableCell align="right">{formatCurrency(p.paid_amount)}</TableCell>
@@ -4441,6 +4966,21 @@ const handleProcessReturn = async () => {
           <Add />
         </Fab>
       )}
+      {/* Barcode Label Print Modal (Zero-Waste Multi-Column) */}
+      <BarcodePrintModal
+        open={barcodeModalOpen}
+        onClose={() => setBarcodeModalOpen(false)}
+        product={barcodeModalProduct}
+        items={barcodeModalItems}
+        onSuccess={(res) => {
+          setSnackbar({
+            open: true,
+            message: `Printed ${res.totalQuantity} barcode label(s) across ${res.totalRows} row(s) to "${res.printerName}"!`,
+            severity: 'success'
+          });
+        }}
+      />
+
       {/* SNACKBAR */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }} sx={{ mb: isMobile ? 8 : 0 }}>
         <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} sx={{ fontSize: isMobile ? '0.75rem' : '0.875rem' }}>

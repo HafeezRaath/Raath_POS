@@ -356,6 +356,7 @@ CREATE TABLE IF NOT EXISTS `customers` (
   `is_deleted` TINYINT(1) DEFAULT 0,
   `deleted_at` DATETIME NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NULL,
   INDEX idx_cust_phone (`phone`),
   INDEX idx_cust_cnic (`cnic`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

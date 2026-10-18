@@ -84,18 +84,23 @@ exports.deleteAccount = async (req, res, next) => {
 exports.getTransactions = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
-    const accountId = req.params.id || req.query.accountId;
-    const { startDate, endDate, limit = 100 } = req.query;
+    const rawAccountId = req.params.id || req.query.accountId;
+    const accountId = (rawAccountId && rawAccountId !== 'undefined' && rawAccountId !== 'all' && rawAccountId !== '') ? rawAccountId : null;
+    const { startDate, endDate, type, search, limit = 500 } = req.query;
     let sql = `
-      SELECT t.*, t.type AS transaction_type, a.name AS account_name
+      SELECT t.*, COALESCE(t.type, 'debit') AS transaction_type, COALESCE(a.name, CONCAT('Account #', t.account_id)) AS account_name
       FROM account_transactions t
-      JOIN accounts a ON t.account_id = a.id
+      LEFT JOIN accounts a ON t.account_id = a.id
       WHERE t.tenant_id = ?
     `;
     const params = [tenantId];
     if (accountId) {
       sql += ' AND t.account_id = ?';
       params.push(accountId);
+    }
+    if (type && type !== 'all') {
+      sql += ' AND t.type = ?';
+      params.push(type);
     }
     if (startDate) {
       sql += ' AND t.date >= ?';
@@ -105,8 +110,13 @@ exports.getTransactions = async (req, res, next) => {
       sql += ' AND t.date <= ?';
       params.push(endDate);
     }
+    if (search && search.trim()) {
+      sql += ' AND (t.description LIKE ? OR t.reference_no LIKE ? OR a.name LIKE ?)';
+      const s = `%${search.trim()}%`;
+      params.push(s, s, s);
+    }
 
-    sql += ' ORDER BY t.id DESC LIMIT ?';
+    sql += ' ORDER BY t.date DESC, t.id DESC LIMIT ?';
     params.push(parseInt(limit, 10));
 
     const rows = await query(sql, params);
@@ -250,3 +260,243 @@ exports.adjustBalance = async (req, res, next) => {
     next(error);
   }
 };
+
+// GET /accounts/daily-summary?date=YYYY-MM-DD
+exports.getDailySummary = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const targetDate = req.query.date || new Date().toISOString().slice(0, 10);
+
+    const accounts = await query(
+      'SELECT id, name, type, account_number, bank_name, opening_balance, current_balance FROM accounts WHERE tenant_id = ? AND is_deleted = 0 ORDER BY id ASC',
+      [tenantId]
+    );
+
+    const summary = [];
+    let totalOpening = 0;
+    let totalCredits = 0;
+    let totalDebits = 0;
+    let totalClosing = 0;
+
+    for (const acc of accounts) {
+      const initialOp = parseFloat(acc.opening_balance) || 0;
+
+      // 1. Check if daily opening balance was explicitly set for this date
+      const dailyRows = await query(
+        'SELECT opening_balance FROM account_daily_balances WHERE tenant_id = ? AND account_id = ? AND date = ?',
+        [tenantId, acc.id, targetDate]
+      ).catch(() => []);
+
+      let openingBal = initialOp;
+
+      if (dailyRows && dailyRows.length > 0 && dailyRows[0].opening_balance !== null && dailyRows[0].opening_balance !== undefined) {
+        openingBal = parseFloat(dailyRows[0].opening_balance) || 0;
+      } else {
+        // Compute dynamically from all transactions prior to targetDate
+        const priorRows = await query(
+          `SELECT 
+            COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) AS prior_credits,
+            COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0) AS prior_debits
+           FROM account_transactions 
+           WHERE tenant_id = ? AND account_id = ? AND date < ?`,
+          [tenantId, acc.id, targetDate]
+        );
+        const priorCredits = parseFloat(priorRows?.[0]?.prior_credits) || 0;
+        const priorDebits = parseFloat(priorRows?.[0]?.prior_debits) || 0;
+        openingBal = initialOp + priorCredits - priorDebits;
+      }
+
+      // 2. Compute transactions on targetDate
+      const todayRows = await query(
+        `SELECT 
+          COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) AS today_credits,
+          COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0) AS today_debits,
+          COUNT(*) AS tx_count
+         FROM account_transactions 
+         WHERE tenant_id = ? AND account_id = ? AND date = ?`,
+        [tenantId, acc.id, targetDate]
+      );
+
+      const credits = parseFloat(todayRows?.[0]?.today_credits) || 0;
+      const debits = parseFloat(todayRows?.[0]?.today_debits) || 0;
+      const txCount = parseInt(todayRows?.[0]?.tx_count, 10) || 0;
+      const closingBal = openingBal + credits - debits;
+
+      totalOpening += openingBal;
+      totalCredits += credits;
+      totalDebits += debits;
+      totalClosing += closingBal;
+
+      summary.push({
+        id: acc.id,
+        name: acc.name,
+        type: acc.type,
+        account_number: acc.account_number,
+        bank_name: acc.bank_name,
+        opening_balance: Number(openingBal.toFixed(2)),
+        today_credits: Number(credits.toFixed(2)),
+        today_debits: Number(debits.toFixed(2)),
+        closing_balance: Number(closingBal.toFixed(2)),
+        current_balance: Number(parseFloat(acc.current_balance || 0).toFixed(2)),
+        net_change: Number((credits - debits).toFixed(2)),
+        tx_count: txCount
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        date: targetDate,
+        accounts: summary,
+        totals: {
+          total_opening: Number(totalOpening.toFixed(2)),
+          total_credits: Number(totalCredits.toFixed(2)),
+          total_debits: Number(totalDebits.toFixed(2)),
+          total_closing: Number(totalClosing.toFixed(2)),
+          net_change: Number((totalCredits - totalDebits).toFixed(2))
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /accounts/:id/statement?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+exports.getAccountStatement = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const accountId = req.params.id;
+    const { startDate, endDate } = req.query;
+
+    const fromDate = startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const toDate = endDate || new Date().toISOString().slice(0, 10);
+
+    const rows = await query(
+      'SELECT * FROM accounts WHERE tenant_id = ? AND id = ? AND is_deleted = 0',
+      [tenantId, accountId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ success: false, error: 'Account not found' });
+    }
+    const account = rows[0];
+
+    // 1. Calculate opening balance at start of fromDate
+    const initialOp = parseFloat(account.opening_balance) || 0;
+
+    const dailyRows = await query(
+      'SELECT opening_balance FROM account_daily_balances WHERE tenant_id = ? AND account_id = ? AND date = ?',
+      [tenantId, accountId, fromDate]
+    ).catch(() => []);
+
+    let openingBalance = initialOp;
+    if (dailyRows && dailyRows.length > 0 && dailyRows[0].opening_balance !== null && dailyRows[0].opening_balance !== undefined) {
+      openingBalance = parseFloat(dailyRows[0].opening_balance) || 0;
+    } else {
+      const priorRows = await query(
+        `SELECT 
+          COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) AS prior_credits,
+          COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0) AS prior_debits
+         FROM account_transactions 
+         WHERE tenant_id = ? AND account_id = ? AND date < ?`,
+        [tenantId, accountId, fromDate]
+      );
+      const priorCredits = parseFloat(priorRows?.[0]?.prior_credits) || 0;
+      const priorDebits = parseFloat(priorRows?.[0]?.prior_debits) || 0;
+      openingBalance = initialOp + priorCredits - priorDebits;
+    }
+
+    // 2. Fetch all transactions between fromDate and toDate in chronological order
+    const txRows = await query(
+      `SELECT t.*, 
+        t.type AS raw_type,
+        CASE WHEN t.type = 'credit' THEN 'credit' ELSE 'debit' END AS tx_type,
+        a.name AS account_name
+       FROM account_transactions t
+       JOIN accounts a ON t.account_id = a.id
+       WHERE t.tenant_id = ? AND t.account_id = ? AND t.date >= ? AND t.date <= ?
+       ORDER BY t.date ASC, t.id ASC`,
+      [tenantId, accountId, fromDate, toDate]
+    );
+
+    // 3. Compute progressive running balance
+    let running = openingBalance;
+    let totalCredits = 0;
+    let totalDebits = 0;
+
+    const items = txRows.map((tx, idx) => {
+      const isCredit = tx.tx_type === 'credit';
+      const amt = parseFloat(tx.amount) || 0;
+      if (isCredit) {
+        totalCredits += amt;
+        running += amt;
+      } else {
+        totalDebits += amt;
+        running -= amt;
+      }
+      return {
+        ...tx,
+        index: idx + 1,
+        id: tx.id,
+        amount: amt,
+        transaction_type: isCredit ? 'credit' : 'debit',
+        running_balance: Number(running.toFixed(2)),
+        balance_after: Number(running.toFixed(2))
+      };
+    });
+
+    const closingBalance = Number(running.toFixed(2));
+
+    res.json({
+      success: true,
+      data: {
+        account,
+        startDate: fromDate,
+        endDate: toDate,
+        opening_balance: Number(openingBalance.toFixed(2)),
+        closing_balance: closingBalance,
+        total_credits: Number(totalCredits.toFixed(2)),
+        total_debits: Number(totalDebits.toFixed(2)),
+        net_change: Number((closingBalance - openingBalance).toFixed(2)),
+        transactions: items
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /accounts/daily-opening
+exports.setDailyOpeningBalance = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { account_id, opening_balance, date, notes = '' } = req.body;
+    if (!account_id) return res.status(400).json({ success: false, error: 'account_id is required' });
+    const opBal = parseFloat(opening_balance);
+    if (!Number.isFinite(opBal)) return res.status(400).json({ success: false, error: 'Valid opening balance required' });
+    const targetDate = date || new Date().toISOString().slice(0, 10);
+
+    const [existing] = await query(
+      'SELECT id FROM account_daily_balances WHERE tenant_id = ? AND account_id = ? AND date = ?',
+      [tenantId, account_id, targetDate]
+    );
+
+    if (existing) {
+      await query(
+        'UPDATE account_daily_balances SET opening_balance = ?, notes = ? WHERE id = ?',
+        [opBal, notes, existing.id]
+      );
+    } else {
+      await query(
+        'INSERT INTO account_daily_balances (tenant_id, account_id, date, opening_balance, notes) VALUES (?, ?, ?, ?, ?)',
+        [tenantId, account_id, targetDate, opBal, notes]
+      );
+    }
+
+    res.json({ success: true, message: 'Daily opening balance saved!' });
+  } catch (error) {
+    next(error);
+  }
+};
+

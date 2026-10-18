@@ -104,66 +104,101 @@ const getPaymentModeColor = (mode) => {
   return colors[mode] || 'default';
 };
 
-// ==================== AGING ANALYSIS COMPONENT ====================
+// ==================== AGING ANALYSIS HELPER & COMPONENT ====================
+const calculateAgingBuckets = (customer, sales) => {
+  const balance = parseFloat(customer?.current_balance || 0);
+  const buckets = { _0_30: 0, _31_60: 0, _61_90: 0, _90plus: 0, total: 0 };
+  if (!customer || balance <= 0) return buckets;
+
+  let remaining = balance;
+  // Get this customer's non-deleted sales, sorted newest to oldest
+  const customerSales = (sales || [])
+    .filter(s => String(s.customer_id) === String(customer.id) && !s.is_deleted)
+    .sort((a, b) => new Date(b.date || b.created_at || 0) - new Date(a.date || a.created_at || 0));
+
+  for (const sale of customerSales) {
+    if (remaining <= 0) break;
+    const saleTotal = parseFloat(sale.grand_total || sale.due_amount || 0);
+    if (saleTotal <= 0) continue;
+    const portion = Math.min(remaining, saleTotal);
+    const days = daysSince(sale.date || sale.created_at);
+    if (days <= 30) buckets._0_30 += portion;
+    else if (days <= 60) buckets._31_60 += portion;
+    else if (days <= 90) buckets._61_90 += portion;
+    else buckets._90plus += portion;
+    remaining -= portion;
+  }
+
+  // Any remaining balance beyond sales invoices (e.g. from opening balance or older debts)
+  if (remaining > 0) {
+    const custDays = daysSince(customer.created_at);
+    if (custDays <= 30) buckets._0_30 += remaining;
+    else if (custDays <= 60) buckets._31_60 += remaining;
+    else if (custDays <= 90) buckets._61_90 += remaining;
+    else buckets._90plus += remaining;
+  }
+
+  buckets.total = buckets._0_30 + buckets._31_60 + buckets._61_90 + buckets._90plus;
+  return buckets;
+};
+
 const AgingAnalysis = ({ customer, sales }) => {
-  const customerSales = sales.filter(s => 
-    String(s.customer_id) === String(customer.id) && 
-    !s.is_deleted && 
-    (parseFloat(s.due_amount) > 0)
-  );
-
-  const buckets = { _0_30: 0, _31_60: 0, _61_90: 0, _90plus: 0 };
-
-  customerSales.forEach(sale => {
-    const due = parseFloat(sale.due_amount) || 0;
-    if (due <= 0) return;
-    const days = daysSince(sale.date);
-    if (days <= 30) buckets._0_30 += due;
-    else if (days <= 60) buckets._31_60 += due;
-    else if (days <= 90) buckets._61_90 += due;
-    else buckets._90plus += due;
-  });
-
-  const total = buckets._0_30 + buckets._31_60 + buckets._61_90 + buckets._90plus;
-  if (total <= 0) return null;
+  const balance = parseFloat(customer?.current_balance || 0);
+  if (balance <= 0) return null;
+  const buckets = calculateAgingBuckets(customer, sales);
 
   return (
-    <Box sx={{ mt: 2, p: 1.5, bgcolor: '#f8fafc', borderRadius: 1, border: '1px solid #e5e7eb' }}>
-      <Typography variant="caption" fontWeight="bold" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-        <Timer fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-        Aging Analysis (Outstanding)
-      </Typography>
-      <Grid container spacing={1}>
-        <Grid item xs={3}>
-          <Box sx={{ textAlign: 'center', p: 0.5, bgcolor: '#f0fdf4', borderRadius: 1 }}>
-            <Typography variant="caption" color="success.main" fontWeight="bold">0-30d</Typography>
-            <Typography variant="body2" fontWeight="bold">{formatCurrency(buckets._0_30)}</Typography>
+    <Box sx={{ mt: 2, p: 2, bgcolor: '#ffffff', borderRadius: 2, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+        <Typography variant="subtitle2" fontWeight="bold" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Timer fontSize="small" sx={{ color: '#10b981' }} />
+          Aging Analysis
+        </Typography>
+        <Chip 
+          size="small" 
+          label={`Outstanding: ${formatCurrency(balance)}`} 
+          color="error" 
+          sx={{ fontWeight: 'bold', height: 22 }} 
+        />
+      </Box>
+      <Grid container spacing={1.5}>
+        <Grid item xs={6} sm={3}>
+          <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: '#f0fdf4', borderRadius: 1.5, border: '1px solid #bbf7d0' }}>
+            <Typography variant="caption" color="success.main" fontWeight="bold">0-30 Days</Typography>
+            <Typography variant="body1" fontWeight="bold" color="success.dark">{formatCurrency(buckets._0_30)}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+              {Math.round((buckets._0_30 / (balance || 1)) * 100)}% of balance
+            </Typography>
           </Box>
         </Grid>
-        <Grid item xs={3}>
-          <Box sx={{ textAlign: 'center', p: 0.5, bgcolor: '#fef3c7', borderRadius: 1 }}>
-            <Typography variant="caption" color="warning.main" fontWeight="bold">31-60d</Typography>
-            <Typography variant="body2" fontWeight="bold">{formatCurrency(buckets._31_60)}</Typography>
+        <Grid item xs={6} sm={3}>
+          <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: '#fefce8', borderRadius: 1.5, border: '1px solid #fef08a' }}>
+            <Typography variant="caption" color="warning.main" fontWeight="bold">31-60 Days</Typography>
+            <Typography variant="body1" fontWeight="bold" color="#ca8a04">{formatCurrency(buckets._31_60)}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+              {Math.round((buckets._31_60 / (balance || 1)) * 100)}% of balance
+            </Typography>
           </Box>
         </Grid>
-        <Grid item xs={3}>
-          <Box sx={{ textAlign: 'center', p: 0.5, bgcolor: '#fff7ed', borderRadius: 1 }}>
-            <Typography variant="caption" color="error.main" fontWeight="bold">61-90d</Typography>
-            <Typography variant="body2" fontWeight="bold">{formatCurrency(buckets._61_90)}</Typography>
+        <Grid item xs={6} sm={3}>
+          <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: '#fff7ed', borderRadius: 1.5, border: '1px solid #fed7aa' }}>
+            <Typography variant="caption" color="error.light" fontWeight="bold">61-90 Days</Typography>
+            <Typography variant="body1" fontWeight="bold" color="#ea580c">{formatCurrency(buckets._61_90)}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+              {Math.round((buckets._61_90 / (balance || 1)) * 100)}% of balance
+            </Typography>
           </Box>
         </Grid>
-        <Grid item xs={3}>
-          <Box sx={{ textAlign: 'center', p: 0.5, bgcolor: '#fef2f2', borderRadius: 1 }}>
-            <Typography variant="caption" color="error.dark" fontWeight="bold">90d+</Typography>
-            <Typography variant="body2" fontWeight="bold">{formatCurrency(buckets._90plus)}</Typography>
+        <Grid item xs={6} sm={3}>
+          <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: '#fef2f2', borderRadius: 1.5, border: '1px solid #fecaca' }}>
+            <Typography variant="caption" color="error.dark" fontWeight="bold">90+ Days</Typography>
+            <Typography variant="body1" fontWeight="bold" color="error.dark">{formatCurrency(buckets._90plus)}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+              {Math.round((buckets._90plus / (balance || 1)) * 100)}% of balance
+            </Typography>
           </Box>
         </Grid>
       </Grid>
-      <LinearProgress 
-        variant="determinate" 
-        value={Math.min(100, (total / (parseFloat(customer.credit_limit) || total || 1)) * 100)} 
-        sx={{ mt: 1, height: 6, borderRadius: 3, bgcolor: '#e5e7eb' }}
-      />
     </Box>
   );
 };
@@ -389,8 +424,8 @@ const StatementDialog = ({ open, onClose, customer, ledger, shop }) => {
             </Box>
           </Box>
 
-          <TableContainer>
-            <Table size="small">
+          <TableContainer sx={{ overflowX: 'auto', width: '100%' }}>
+            <Table size="small" sx={{ minWidth: 650 }}>
               <TableHead>
                 <TableRow sx={{ bgcolor: '#1c2580' }}>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.85rem' }}>Date</TableCell>
@@ -470,8 +505,8 @@ const PaymentHistoryTable = ({ payments, onPrint, onDelete }) => {
   }
 
   return (
-    <TableContainer>
-      <Table size="small">
+    <TableContainer sx={{ overflowX: 'auto', width: '100%' }}>
+      <Table size="small" sx={{ minWidth: 650 }}>
         <TableHead>
           <TableRow sx={{ bgcolor: '#1c2580' }}>
             <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.85rem' }}>Date</TableCell>
@@ -705,6 +740,8 @@ export default function RecoveryPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
+  const [mainTab, setMainTab] = useState(0); // 0 = Customer Accounts, 1 = Customer Ledger & Detail, 2 = Aging & Market Debt, 3 = Recent Receipts
+  const [customerTab, setCustomerTab] = useState(0); // 0 = Ledger, 1 = Invoices, 2 = Payments, 3 = Aging, 4 = Profile
   const [activeTab, setActiveTab] = useState(0);
   const [customers, setCustomers] = useState([]);
   const [sales, setSales] = useState([]);
@@ -722,6 +759,7 @@ export default function RecoveryPage() {
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [allPayments, setAllPayments] = useState([]);
 
   const [recoveryEnabled, setRecoveryEnabled] = useState(() => {
     const saved = localStorage.getItem('recovery_module_enabled');
@@ -769,6 +807,7 @@ export default function RecoveryPage() {
     try {
       let customersData = [];
       let salesData = [];
+      let paymentsData = [];
 
       if (window.electronAPI && window.electronAPI.dbQuery) {
         console.log('[Recovery] Using Electron API');
@@ -778,10 +817,14 @@ export default function RecoveryPage() {
         salesData = await window.electronAPI.dbQuery(
           "SELECT * FROM sales WHERE is_deleted = 0 ORDER BY id DESC"
         );
+        paymentsData = await window.electronAPI.dbQuery(
+          "SELECT * FROM payments WHERE is_deleted = 0 ORDER BY id DESC"
+        ).catch(() => []);
       } else {
         console.log('[Recovery] Using Browser mode');
         customersData = await db.getCustomers();
         salesData = await db.getSalesHistory();
+        paymentsData = db.getPayments ? await db.getPayments() : [];
       }
 
       const normalizedCustomers = (Array.isArray(customersData) ? customersData : []).map(c => ({
@@ -793,6 +836,7 @@ export default function RecoveryPage() {
 
       setCustomers(normalizedCustomers);
       setSales(Array.isArray(salesData) ? salesData : []);
+      setAllPayments(Array.isArray(paymentsData) ? paymentsData : []);
 
       const orphan = (Array.isArray(salesData) ? salesData : []).filter(
         s => s.customer_id === null || s.customer_id === undefined || s.customer_id === ''
@@ -922,10 +966,14 @@ export default function RecoveryPage() {
       let runningBalance = openingBalance;
 
       (ledgerEntries || []).forEach(entry => {
-        const amount = parseFloat(entry.amount) || 0;
+        const rawAmount = parseFloat(entry.amount) || 0;
+        const debitVal = parseFloat(entry.debit) || 0;
+        const creditVal = parseFloat(entry.credit) || 0;
         const entryType = String(entry.type || '').toLowerCase().trim();
-        const isSale = entryType === 'sale';
-        const isDebit = isSale || entryType === 'debit';
+        const isSale = entryType === 'sale' || entryType === 'partial_sale' || entryType === 'credit_sale' || entryType === 'cash_sale';
+        const isPayment = entryType === 'payment' || entryType === 'received';
+        const isDebit = isSale || entryType === 'debit' || debitVal > 0;
+        const amount = Math.abs(creditVal || debitVal || rawAmount);
 
         if (isDebit) {
           runningBalance += amount;
@@ -939,7 +987,7 @@ export default function RecoveryPage() {
         transactions.push({
           id: `ledger-${entry.id}`,
           date: entry.date || new Date().toISOString(),
-          type: isSale ? 'Sale' : (entryType === 'payment' || entryType === 'received' ? 'Payment Received' : 'Adjustment'),
+          type: isSale ? 'Sale' : (isPayment ? 'Payment Received' : 'Adjustment'),
           description: entry.description || (isSale ? `Invoice #${invoiceNo}` : `Payment via ${(entry.payment_mode || 'cash').toUpperCase()}`),
           payment_mode: entry.payment_mode || 'cash',
           reference_no: entry.reference_no || invoiceNo,
@@ -970,7 +1018,7 @@ export default function RecoveryPage() {
       });
 
       const payments = processed.filter(t => 
-        t.type === 'Payment Received' || t.type === 'payment' || t.type === 'Payment'
+        !t.isDebit && !t.isOpening
       );
       setPaymentHistory(payments);
 
@@ -1004,6 +1052,8 @@ export default function RecoveryPage() {
     }
     setPaymentDialog(false);
     if (isMobile) setMobileDrawer(false);
+    setMainTab(1);
+    setCustomerTab(0);
   };
 
   // ==================== VERIFY BALANCE ====================
@@ -1049,8 +1099,15 @@ export default function RecoveryPage() {
     });
 
     const totalSales = customerSales.reduce((sum, s) => sum + (parseFloat(s.grand_total) || 0), 0);
-    const totalPaid = customerSales.reduce((sum, s) => sum + (parseFloat(s.paid_amount) || 0), 0);
-    const totalDue = customerSales.reduce((sum, s) => sum + (parseFloat(s.due_amount) || 0), 0);
+    const initialPaidAtSale = customerSales.reduce((sum, s) => sum + (parseFloat(s.paid_amount) || 0), 0);
+
+    // Also include all recovery payments made by this customer
+    const recoveryPaid = (allPayments || [])
+      .filter(p => !p.is_deleted && String(p.customer_id) === String(customerId) && (p.type === 'customer_payment' || !p.type))
+      .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
+    const totalPaid = initialPaidAtSale + recoveryPaid;
+    const totalDue = Math.max(0, totalSales - totalPaid);
     const invoiceCount = customerSales.length;
     const lastSale = customerSales.length > 0 ? customerSales[0] : null;
 
@@ -1059,15 +1116,27 @@ export default function RecoveryPage() {
       lastItems = lastSale.items;
     }
 
+    const allPayDates = [];
+    customerSales.forEach(s => {
+      if (parseFloat(s.paid_amount || 0) > 0 && (s.date || s.created_at)) {
+        allPayDates.push(s.date || s.created_at);
+      }
+    });
+    (allPayments || []).forEach(p => {
+      if (String(p.customer_id) === String(customerId) && !p.is_deleted && (p.date || p.created_at)) {
+        allPayDates.push(p.date || p.created_at);
+      }
+    });
+
     let lastPaymentDate = null;
-    if (paymentHistory.length > 0) {
-      const sorted = [...paymentHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
-      lastPaymentDate = sorted[0].date;
+    if (allPayDates.length > 0) {
+      allPayDates.sort((a, b) => new Date(b) - new Date(a));
+      lastPaymentDate = allPayDates[0];
     }
     const daysSincePayment = lastPaymentDate ? daysSince(lastPaymentDate) : 0;
 
     return { totalSales, totalPaid, totalDue, invoiceCount, lastSale, lastItems, lastPaymentDate, daysSincePayment };
-  }, [sales, recoveryEnabled, paymentHistory]);
+  }, [sales, recoveryEnabled, allPayments]);
 
   // ==================== FIX ORPHAN SALES ====================
   const handleFixOrphanSales = async () => {
@@ -1174,7 +1243,7 @@ export default function RecoveryPage() {
         sale_id: null
       };
 
-      // Step 1: Add to customer_ledger (Electron + Browser)
+      // Step 1 & 2: Record payment via unified customer payment API
       if (window.electronAPI && window.electronAPI.dbQuery) {
         await window.electronAPI.dbQuery(
           `INSERT INTO customer_ledger (customer_id, type, amount, balance_after, description, payment_mode, reference_no, date, sale_id) 
@@ -1182,7 +1251,7 @@ export default function RecoveryPage() {
           [
             ledgerEntry.customer_id,
             ledgerEntry.type,
-            ledgerEntry.amount,
+            -amount,
             ledgerEntry.balance_after,
             ledgerEntry.description,
             ledgerEntry.payment_mode,
@@ -1191,26 +1260,29 @@ export default function RecoveryPage() {
             ledgerEntry.sale_id
           ]
         );
-      } else if (db.addCustomerLedgerEntry) {
-        await db.addCustomerLedgerEntry(ledgerEntry);
-      } else {
-        throw new Error('Database function not available');
-      }
-
-      // Step 2: Update customer balance (Electron + Browser)
-      if (window.electronAPI && window.electronAPI.dbQuery) {
         await window.electronAPI.dbQuery(
           "UPDATE customers SET current_balance = ?, updated_at = ? WHERE id = ?",
           [newBalance, new Date().toISOString(), selectedCustomer.id]
         );
-      } else if (db.updateCustomer) {
+        await window.electronAPI.dbQuery(
+          `INSERT INTO payments (customer_id, amount, type, payment_mode, note, date, reference_no)
+           VALUES (?, ?, 'customer_payment', ?, ?, ?, ?)`,
+          [selectedCustomer.id, amount, paymentForm.payment_mode, ledgerEntry.description, ledgerEntry.date, ledgerEntry.reference_no]
+        ).catch(() => {});
+      } else if (db.addCustomerPayment) {
+        await db.addCustomerPayment(selectedCustomer.id, {
+          amount: amount,
+          payment_mode: paymentForm.payment_mode,
+          description: ledgerEntry.description,
+          reference_no: ledgerEntry.reference_no,
+          date: ledgerEntry.date
+        });
+      } else {
         await db.updateCustomer(selectedCustomer.id, {
           ...selectedCustomer,
           current_balance: newBalance,
           updated_at: new Date().toISOString()
         });
-      } else {
-        throw new Error('Update customer function not available');
       }
 
       // Step 3: Log to general ledger
@@ -1597,6 +1669,92 @@ export default function RecoveryPage() {
     return ledger;
   }, [ledger, ledgerFilter]);
 
+  const customerSummary = useMemo(() => {
+    if (!selectedCustomer) return { totalInvoiced: 0, totalPaid: 0, currentBalance: 0 };
+    const openingBal = parseFloat(selectedCustomer.opening_balance || 0);
+    const debits = ledger
+      .filter(l => l.isDebit && !l.isOpening)
+      .reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0) + (openingBal > 0 ? openingBal : 0);
+    const credits = ledger
+      .filter(l => !l.isDebit && !l.isOpening)
+      .reduce((sum, l) => sum + (parseFloat(l.amount) || 0), 0) + (openingBal < 0 ? Math.abs(openingBal) : 0);
+    const currentBal = parseFloat(selectedCustomer.current_balance || 0);
+    return {
+      totalInvoiced: debits,
+      totalPaid: credits,
+      currentBalance: currentBal
+    };
+  }, [selectedCustomer, ledger]);
+
+  const customerInvoices = useMemo(() => {
+    if (!selectedCustomer) return [];
+    return (sales || [])
+      .filter(s => String(s.customer_id) === String(selectedCustomer.id) && !s.is_deleted)
+      .sort((a, b) => new Date(b.date || b.created_at || 0) - new Date(a.date || a.created_at || 0));
+  }, [selectedCustomer, sales]);
+
+  const globalAging = useMemo(() => {
+    const result = { _0_30: 0, _31_60: 0, _61_90: 0, _90plus: 0, total: 0 };
+    customers.forEach(c => {
+      if (parseFloat(c.current_balance || 0) > 0) {
+        const b = calculateAgingBuckets(c, sales);
+        result._0_30 += b._0_30;
+        result._31_60 += b._31_60;
+        result._61_90 += b._61_90;
+        result._90plus += b._90plus;
+        result.total += b.total;
+      }
+    });
+    return result;
+  }, [customers, sales]);
+
+  const topDebtors = useMemo(() => {
+    return [...customers]
+      .filter(c => parseFloat(c.current_balance || 0) > 0)
+      .sort((a, b) => parseFloat(b.current_balance || 0) - parseFloat(a.current_balance || 0))
+      .slice(0, 15);
+  }, [customers]);
+
+  const allRecentPayments = useMemo(() => {
+    const list = [];
+    (sales || []).forEach(s => {
+      const paid = parseFloat(s.paid_amount || 0);
+      if (paid > 0 && !s.is_deleted) {
+        list.push({
+          id: `sale-${s.id}`,
+          date: s.date || s.created_at,
+          amount: paid,
+          customer_name: s.customer_name || 'Customer',
+          customer_phone: s.customer_phone || '',
+          customer_id: s.customer_id,
+          payment_mode: s.payment_mode || 'cash',
+          reference_no: s.invoice_no || `INV-${s.id}`,
+          description: `Sale payment #${s.invoice_no || s.id}`
+        });
+      }
+    });
+
+    (allPayments || []).forEach(p => {
+      const amt = parseFloat(p.amount || 0);
+      if (amt > 0 && !p.is_deleted && (p.type === 'customer_payment' || !p.type)) {
+        const cust = customers.find(c => String(c.id) === String(p.customer_id));
+        list.push({
+          id: `pay-${p.id}`,
+          date: p.date || p.created_at,
+          amount: amt,
+          customer_name: cust?.name || p.note || `Customer #${p.customer_id}`,
+          customer_phone: cust?.phone || '',
+          customer_id: p.customer_id,
+          payment_mode: p.payment_mode || 'cash',
+          reference_no: p.reference_no || `PAY-${p.id}`,
+          description: p.note || 'Recovery Payment'
+        });
+      }
+    });
+
+    return list.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 50);
+  }, [sales, allPayments, customers]);
+
   // ==================== TOGGLE RECOVERY ====================
   const toggleRecovery = () => {
     const newState = !recoveryEnabled;
@@ -1713,127 +1871,137 @@ export default function RecoveryPage() {
         </Alert>
       )}
 
-      {/* STATS CARDS */}
+      {/* ==================== 4 MAIN NAVIGATION TABS ==================== */}
       {recoveryEnabled && (
-        <Grid container spacing={isMobile ? 1 : 2} sx={{ mb: 2 }}>
-          {[
-            { title: 'Total Receivable', value: formatCurrency(stats.totalReceivable), icon: <TrendingUp />, isReceivable: true },
-            { title: 'Pending Balance', value: formatCurrency(stats.totalPending), icon: <Warning />, isPending: true },
-            { title: 'Arrears', value: stats.defaulters, icon: <ErrorIcon />, isCount: true, isDefaulter: stats.defaulters > 0 },
-            { title: 'Wholesale', value: stats.wholesale, icon: <Store />, isCount: true },
-            { title: 'Retail', value: stats.retail, icon: <Person />, isCount: true },
-            { title: 'Total Customers', value: customers.length, icon: <AccountBalance />, isCount: true },
-          ].map((stat, idx) => (
-            <Grid item xs={4} md={2} key={idx}>
-              <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #1c2580', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
-                  <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: isMobile ? '0.75rem' : '0.85rem', mb: 0.5 }} noWrap>
-                    {stat.title}
-                  </Typography>
-                  <Typography variant="h6" fontWeight="bold" color="#1c2580" sx={{ fontSize: isMobile ? '1.05rem' : '1.25rem', lineHeight: 1.2, mb: 0.5 }} noWrap>
-                    {stat.isCount ? stat.value : stat.value}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      )}
-
-      {/* TABS */}
-      {recoveryEnabled && (
-        <Paper sx={{ mb: 2, overflowX: 'auto' }}>
+        <Paper sx={{ mb: 2.5, bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 2.5, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <Tabs 
-            value={activeTab} 
-            onChange={handleTabChange} 
-            indicatorColor="primary" 
-            textColor="primary" 
-            variant={isMobile ? 'fullWidth' : 'scrollable'}
-            scrollButtons={isMobile ? false : 'auto'}
-            sx={{ minHeight: isMobile ? 40 : 48 }}
+            value={mainTab} 
+            onChange={(e, val) => setMainTab(val)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{ 
+              px: { xs: 1, sm: 2 },
+              minHeight: 48,
+              borderBottom: '1px solid #f1f5f9'
+            }}
           >
             <Tab 
               icon={<AccountBalance fontSize="small" />} 
               iconPosition="start" 
-              label={isMobile ? 'All (' + customers.length + ')' : 'All Ledgers (' + customers.length + ')'} 
-              sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
-            />
-            <Tab 
-              icon={<Warning fontSize="small" />} 
-              iconPosition="start" 
-              label={isMobile ? 'Due (' + stats.defaulters + ')' : 'Arrears (' + stats.defaulters + ')'} 
-              sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
-            />
-            <Tab 
-              icon={<CheckCircle fontSize="small" />} 
-              iconPosition="start" 
-              label={isMobile ? 'Settled' : 'Fully Settled'} 
-              sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
-            />
-            <Tab 
-              icon={<Store fontSize="small" />} 
-              iconPosition="start" 
-              label={isMobile ? 'Whole' : 'Wholesale'} 
-              sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+              label={`1. Customer Accounts (${customers.length})`}
+              value={0}
+              sx={{ fontWeight: 'bold', fontSize: isMobile ? '0.75rem' : '0.85rem' }}
             />
             <Tab 
               icon={<Person fontSize="small" />} 
               iconPosition="start" 
-              label={isMobile ? 'Retail' : 'Retail'} 
-              sx={{ fontSize: isMobile ? '0.6rem' : '0.875rem', py: isMobile ? 0.5 : 1 }}
+              label={selectedCustomer ? (isMobile ? `2. ${selectedCustomer.name}` : `2. Ledger: ${selectedCustomer.name} (${formatCurrency(selectedCustomer.current_balance)})`) : "2. Customer Ledger & Statement"}
+              value={1}
+              sx={{ 
+                fontWeight: 'bold', 
+                fontSize: isMobile ? '0.75rem' : '0.85rem',
+                color: selectedCustomer ? '#1c2580' : 'text.secondary'
+              }}
+            />
+            <Tab 
+              icon={<Assessment fontSize="small" />} 
+              iconPosition="start" 
+              label="3. Aging & Market Debt Report"
+              value={2}
+              sx={{ fontWeight: 'bold', fontSize: isMobile ? '0.75rem' : '0.85rem' }}
+            />
+            <Tab 
+              icon={<ReceiptLong fontSize="small" />} 
+              iconPosition="start" 
+              label="4. Recent Recovery Receipts"
+              value={3}
+              sx={{ fontWeight: 'bold', fontSize: isMobile ? '0.75rem' : '0.85rem' }}
             />
           </Tabs>
         </Paper>
       )}
 
-      {/* SEARCH */}
-      {recoveryEnabled && showFilters && (
-        <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2, border: '1px solid #10b981', bgcolor: '#fbfdfb' }}>
-          <Grid container spacing={isMobile ? 1 : 2} alignItems="center">
-            <Grid item xs={12} md={9}>
-              <TextField
-                fullWidth 
-                size="small" 
-                placeholder={isMobile ? "Search customers..." : "Search by name, phone, or shop name..."}
-                value={searchQuery} 
-                onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-                InputProps={{ 
-                  startAdornment: <Search sx={{ mr: 1, color: '#10b981' }} />,
-                  endAdornment: searchQuery && (
-                    <IconButton size="small" onClick={() => setSearchQuery('')}>
-                      <Close fontSize="small" />
-                    </IconButton>
-                  )
-                }}
-              />
+      {/* ==================== TAB 0: CUSTOMER ACCOUNTS LIST ==================== */}
+      {recoveryEnabled && mainTab === 0 && (
+        <Fade in>
+          <Box>
+            {/* 4 STATS CARDS */}
+            <Grid container spacing={isMobile ? 1.5 : 2} sx={{ mb: 2.5 }}>
+              {[
+                { title: 'Total Market Receivable', value: formatCurrency(stats.totalPending), count: `${stats.defaulters} parties with due`, icon: <TrendingUp />, border: '#ef4444', textColor: '#b91c1c' },
+                { title: 'Overdue Accounts', value: stats.defaulters, count: `Out of ${customers.length} total`, icon: <Warning />, border: '#f59e0b', textColor: '#b45309' },
+                { title: 'Wholesale Accounts', value: stats.wholesale, count: 'Wholesale clients', icon: <Store />, border: '#3b82f6', textColor: '#1d4ed8' },
+                { title: 'Retail Accounts', value: stats.retail, count: 'Retail clients', icon: <Person />, border: '#10b981', textColor: '#047857' },
+              ].map((stat, idx) => (
+                <Grid item xs={6} sm={6} md={3} key={idx}>
+                  <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: `4px solid ${stat.border}`, borderRadius: 2.5, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', height: '100%' }}>
+                    <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+                      <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        {stat.title}
+                      </Typography>
+                      <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" sx={{ color: stat.textColor, mb: 0.5 }}>
+                        {stat.value}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                        {stat.count}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
             </Grid>
-            <Grid item xs={12} md={3}>
-              <Button fullWidth variant="outlined" color="success" size="small" onClick={() => { setSearchQuery(''); setPage(1); }}>
-                Clear Filters
-              </Button>
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
 
-      {/* MAIN CONTENT */}
-      {recoveryEnabled && (
-        <Grid container spacing={isMobile ? 1 : 2}>
-          {/* CUSTOMER LIST */}
-          <Grid item xs={12} md={selectedCustomer && !isMobile && showLedgerPanel ? 4 : 12}>
-            <Paper sx={{ border: '1px solid #e5e7eb' }}>
+            {/* PARTY FILTER TABS & SEARCH */}
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2, border: '1px solid #e2e8f0', borderRadius: 2.5, bgcolor: '#ffffff' }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} md={7}>
+                  <Tabs 
+                    value={activeTab} 
+                    onChange={handleTabChange} 
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    allowScrollButtonsMobile
+                    sx={{ minHeight: 40 }}
+                  >
+                    <Tab label={`All (${customers.length})`} value={0} sx={{ py: 0.5, fontSize: '0.8rem', fontWeight: 600 }} />
+                    <Tab label={`Due Balances (${stats.defaulters})`} value={1} sx={{ py: 0.5, fontSize: '0.8rem', fontWeight: 600, color: '#dc2626' }} />
+                    <Tab label={`Settled (${customers.length - stats.defaulters})`} value={2} sx={{ py: 0.5, fontSize: '0.8rem', fontWeight: 600, color: '#16a34a' }} />
+                    <Tab label={`Wholesale (${stats.wholesale})`} value={3} sx={{ py: 0.5, fontSize: '0.8rem', fontWeight: 600 }} />
+                    <Tab label={`Retail (${stats.retail})`} value={4} sx={{ py: 0.5, fontSize: '0.8rem', fontWeight: 600 }} />
+                  </Tabs>
+                </Grid>
+                <Grid item xs={12} md={5}>
+                  <TextField
+                    fullWidth 
+                    size="small" 
+                    placeholder="Search by customer name, phone, shop..."
+                    value={searchQuery} 
+                    onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+                    InputProps={{ 
+                      startAdornment: <Search sx={{ mr: 1, color: '#10b981' }} />,
+                      endAdornment: searchQuery && (
+                        <IconButton size="small" onClick={() => setSearchQuery('')}>
+                          <Close fontSize="small" />
+                        </IconButton>
+                      )
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* CUSTOMER FULL-WIDTH TABLE */}
+            <Paper sx={{ border: '1px solid #e2e8f0', borderRadius: 2.5, overflow: 'hidden', bgcolor: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
               {isMobile ? (
-                <Box sx={{ p: 0.5 }}>
+                <Box sx={{ p: 1 }}>
                   {loading ? (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                      <LinearProgress />
-                      <Typography sx={{ mt: 2 }}>Loading...</Typography>
-                    </Box>
+                    <Box sx={{ textAlign: 'center', py: 4 }}><LinearProgress /><Typography sx={{ mt: 2 }}>Loading...</Typography></Box>
                   ) : paginatedCustomers.length === 0 ? (
-                    <Paper sx={{ p: 4, textAlign: 'center' }}>
-                      <AccountBalanceWallet sx={{ fontSize: 48, color: '#d1d5db' }} />
-                      <Typography color="text.secondary">No customers found</Typography>
-                    </Paper>
+                    <Box sx={{ p: 4, textAlign: 'center' }}>
+                      <AccountBalanceWallet sx={{ fontSize: 48, color: '#d1d5db', mb: 1 }} />
+                      <Typography color="text.secondary">No matching customers found</Typography>
+                    </Box>
                   ) : (
                     paginatedCustomers.map((c, idx) => (
                       <MobileCustomerCard
@@ -1847,34 +2015,34 @@ export default function RecoveryPage() {
                       />
                     ))
                   )}
-                  <UnifiedPagination
-                    count={filteredCustomers.length}
-                    page={page}
-                    rowsPerPage={rowsPerPage}
-                    onPageChange={setPage}
-                    onRowsPerPageChange={(newR) => {
-                      setRowsPerPage(newR);
-                      setPage(1);
-                    }}
-                    rowsPerPageOptions={[10, 25, 50, 100]}
-                  />
                 </Box>
               ) : (
-                <>
-                  <TableContainer sx={{ maxHeight: selectedCustomer && showLedgerPanel ? 'calc(100vh - 380px)' : 'calc(100vh - 320px)' }}>
-                    <Table size="small" stickyHeader>
-                      <TableHead>
-                        <TableRow sx={{ bgcolor: '#1c2580' }}>
-                          <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.85rem' }}>#</TableCell>
-                          <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.85rem' }}>Party Details</TableCell>
-                          <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.85rem' }}>Type</TableCell>
-                          <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.85rem' }}>Balance</TableCell>
-                          <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.85rem' }}>Sales</TableCell>
-                          <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.85rem' }} align="center">Actions</TableCell>
+                <TableContainer sx={{ maxHeight: 'calc(100vh - 380px)', overflowX: 'auto', width: '100%' }}>
+                  <Table size="small" stickyHeader sx={{ minWidth: 850 }}>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#1c2580' }}>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, width: 50 }}>#</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }}>Party / Customer Details</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, width: 110 }}>Type</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }} align="right">Outstanding Balance</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }} align="right">Total Purchases</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5 }} align="right">Total Paid</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, width: 130 }}>Credit Limit</TableCell>
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, width: 220 }} align="center">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {loading ? (
+                        <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4 }}><LinearProgress /></TableCell></TableRow>
+                      ) : paginatedCustomers.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                            <AccountBalanceWallet sx={{ fontSize: 44, color: '#cbd5e1', mb: 1 }} />
+                            <Typography color="text.secondary">No matching customers found.</Typography>
+                          </TableCell>
                         </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {paginatedCustomers.map((c, idx) => {
+                      ) : (
+                        paginatedCustomers.map((c, idx) => {
                           const summary = getCustomerSalesSummary(c.id);
                           const isSelected = selectedCustomer?.id === c.id;
                           const balance = parseFloat(c.current_balance || 0);
@@ -1885,85 +2053,136 @@ export default function RecoveryPage() {
                             <TableRow 
                               key={c.id} 
                               hover 
-                              onClick={() => viewLedger(c)}
                               sx={{ 
-                                cursor: 'pointer',
-                                bgcolor: isSelected ? '#f0fdf4' : balance > 0 ? '#fff5f5' : 'inherit',
-                                '&:hover': { bgcolor: '#f3f4f6' }
+                                bgcolor: isSelected ? '#f0fdf4' : balance > 0 ? '#fffdfd' : 'inherit',
+                                '&:hover': { bgcolor: '#f8fafc' }
                               }}
                             >
                               <TableCell>{(page - 1) * rowsPerPage + idx + 1}</TableCell>
                               <TableCell>
-                                <Typography variant="subtitle2" fontWeight="bold">{c.name}</Typography>
-                                <Typography variant="caption" color="text.secondary" display="block">
-                                  <Phone sx={{ fontSize: 12, verticalAlign: 'middle', mr: 0.5 }} />
-                                  {c.phone || 'No phone'}
-                                </Typography>
-                                {c.shop_name && (
-                                  <Typography variant="caption" color="primary.main" fontWeight={500} display="block">
-                                    <Store sx={{ fontSize: 12, verticalAlign: 'middle', mr: 0.5 }} />
-                                    {c.shop_name}
-                                  </Typography>
-                                )}
-                                {limit > 0 && (
-                                  <Box sx={{ mt: 0.5 }}>
-                                    <LinearProgress 
-                                      variant="determinate" 
-                                      value={usagePercent}
-                                      sx={{ height: 4, borderRadius: 2, width: 100, bgcolor: '#e5e7eb', '& .MuiLinearProgress-bar': { bgcolor: usagePercent > 90 ? '#ef4444' : usagePercent > 70 ? '#f59e0b' : '#10b981' }}}
-                                    />
-                                    <Typography variant="caption" color={usagePercent > 80 ? 'error.main' : 'text.secondary'}>
-                                      {Math.round(usagePercent)}% of {formatCurrency(limit)}
-                                    </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                  <Avatar sx={{ width: 34, height: 34, bgcolor: balance > 0 ? '#fee2e2' : '#dcfce7', color: balance > 0 ? '#b91c1c' : '#15803d', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                                    {(c.name || 'C')[0].toUpperCase()}
+                                  </Avatar>
+                                  <Box>
+                                    <Typography variant="body2" fontWeight="bold" sx={{ color: '#0f172a' }}>{c.name}</Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                      {c.phone && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
+                                          <Phone sx={{ fontSize: 11 }} /> {c.phone}
+                                        </Typography>
+                                      )}
+                                      {c.shop_name && (
+                                        <Typography variant="caption" color="primary.main" fontWeight={500} sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
+                                          <Store sx={{ fontSize: 11 }} /> {c.shop_name}
+                                        </Typography>
+                                      )}
+                                    </Box>
                                   </Box>
-                                )}
+                                </Box>
                               </TableCell>
                               <TableCell>
                                 <Chip 
                                   size="small" 
                                   color={c.customer_type === 'wholesale' ? 'info' : 'default'} 
                                   label={String(c.customer_type || 'retail').toUpperCase()} 
-                                  sx={{ height: 18, fontSize: '0.62rem', fontWeight: 'bold' }} 
+                                  sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold' }} 
                                 />
                               </TableCell>
                               <TableCell align="right">
-                                <Typography variant="body2" fontWeight="bold" color={balance > 0 ? 'error.main' : balance < 0 ? 'warning.main' : 'success.main'}>
-                                  {formatCurrency(balance)}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {summary.invoiceCount} invoices
-                                </Typography>
+                                <Box sx={{ display: 'inline-block', textAlign: 'right' }}>
+                                  <Typography 
+                                    variant="body2" 
+                                    fontWeight="bold" 
+                                    sx={{ 
+                                      color: balance > 0 ? '#dc2626' : balance < 0 ? '#d97706' : '#16a34a',
+                                      fontSize: '0.95rem'
+                                    }}
+                                  >
+                                    {formatCurrency(balance)}
+                                  </Typography>
+                                  {balance > 0 ? (
+                                    <Chip size="small" label="DUE" color="error" sx={{ height: 16, fontSize: '0.55rem', fontWeight: 'bold' }} />
+                                  ) : (
+                                    <Chip size="small" label="SETTLED" color="success" sx={{ height: 16, fontSize: '0.55rem', fontWeight: 'bold' }} />
+                                  )}
+                                </Box>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" fontWeight={500}>{formatCurrency(summary.totalSales)}</Typography>
+                                <Typography variant="caption" color="text.secondary">{summary.invoiceCount} invoices</Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" fontWeight={500} sx={{ color: '#16a34a' }}>{formatCurrency(summary.totalPaid)}</Typography>
                                 {summary.daysSincePayment > 0 && balance > 0 && (
                                   <Typography variant="caption" color="warning.main" display="block">
-                                    Last paid: {summary.daysSincePayment}d ago
+                                    {summary.daysSincePayment}d ago
                                   </Typography>
                                 )}
                               </TableCell>
-                              <TableCell align="right">
-                                <Typography variant="body2" fontWeight="500">
-                                  {formatCurrency(summary.totalSales)}
-                                </Typography>
-                                <Typography variant="caption" color="success.main">
-                                  Paid: {formatCurrency(summary.totalPaid)}
-                                </Typography>
-                                {summary.lastSale && (
-                                  <Typography variant="caption" color="text.secondary" display="block">
-                                    Last: {formatDate(summary.lastSale.date)}
-                                  </Typography>
+                              <TableCell>
+                                {limit > 0 ? (
+                                  <Box>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.3 }}>
+                                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>{Math.round(usagePercent)}%</Typography>
+                                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>{formatCurrency(limit)}</Typography>
+                                    </Box>
+                                    <LinearProgress 
+                                      variant="determinate" 
+                                      value={usagePercent}
+                                      sx={{ 
+                                        height: 5, borderRadius: 2, bgcolor: '#e2e8f0', 
+                                        '& .MuiLinearProgress-bar': { bgcolor: usagePercent > 90 ? '#ef4444' : usagePercent > 70 ? '#f59e0b' : '#10b981' }
+                                      }}
+                                    />
+                                  </Box>
+                                ) : (
+                                  <Typography variant="caption" color="text.secondary">-</Typography>
                                 )}
                               </TableCell>
                               <TableCell align="center">
                                 <Stack direction="row" spacing={0.5} justifyContent="center">
-                                  <IconButton size="small" color="primary" onClick={(e) => { e.stopPropagation(); viewLedger(c); }}>
-                                    <Visibility fontSize="small" />
-                                  </IconButton>
+                                  <Button 
+                                    size="small" 
+                                    variant="contained" 
+                                    onClick={() => viewLedger(c)}
+                                    startIcon={<Visibility fontSize="small" />}
+                                    sx={{ 
+                                      bgcolor: '#1c2580', 
+                                      color: 'white', 
+                                      fontSize: '0.72rem', 
+                                      py: 0.5, px: 1.2, 
+                                      fontWeight: 'bold',
+                                      '&:hover': { bgcolor: '#0f172a' } 
+                                    }}
+                                  >
+                                    View Ledger
+                                  </Button>
+                                  <Tooltip title="Receive Payment">
+                                    <span>
+                                      <IconButton 
+                                        size="small" 
+                                        color="success" 
+                                        onClick={() => { setSelectedCustomer(c); handlePaymentOpen(); }}
+                                        disabled={balance <= 0}
+                                        sx={{ bgcolor: balance > 0 ? '#f0fdf4' : 'transparent' }}
+                                      >
+                                        <Payment fontSize="small" />
+                                      </IconButton>
+                                    </span>
+                                  </Tooltip>
+                                  <Tooltip title="Statement">
+                                    <IconButton size="small" color="primary" onClick={async () => { setSelectedCustomer(c); await buildLedger(c); setShowStatementDialog(true); }}>
+                                      <Assessment fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
                                   <Tooltip title="Clear Balance">
-                                    <IconButton size="small" color="warning" onClick={(e) => { e.stopPropagation(); handleClearBalance(c); }}>
+                                    <IconButton size="small" color="warning" onClick={() => handleClearBalance(c)}>
                                       <Restore fontSize="small" />
                                     </IconButton>
                                   </Tooltip>
                                   <Tooltip title="Delete Customer">
-                                    <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleDeleteCustomer(c); }}>
+                                    <IconButton size="small" color="error" onClick={() => handleDeleteCustomer(c)}>
                                       <Delete fontSize="small" />
                                     </IconButton>
                                   </Tooltip>
@@ -1971,215 +2190,410 @@ export default function RecoveryPage() {
                               </TableCell>
                             </TableRow>
                           );
-                        })}
-                        {paginatedCustomers.length === 0 && (
-                          <TableRow>
-                            <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
-                              <Typography color="text.secondary">No matching records found.</Typography>
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                  <UnifiedPagination
-                    count={filteredCustomers.length}
-                    page={page}
-                    rowsPerPage={rowsPerPage}
-                    onPageChange={setPage}
-                    onRowsPerPageChange={(newR) => {
-                      setRowsPerPage(newR);
-                      setPage(1);
-                    }}
-                    rowsPerPageOptions={[10, 25, 50, 100]}
-                  />
-                </>
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               )}
+              <UnifiedPagination
+                count={filteredCustomers.length}
+                page={page}
+                rowsPerPage={rowsPerPage}
+                onPageChange={setPage}
+                onRowsPerPageChange={(newR) => {
+                  setRowsPerPage(newR);
+                  setPage(1);
+                }}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+              />
             </Paper>
-          </Grid>
+          </Box>
+        </Fade>
+      )}
 
-          {/* LEDGER PANEL */}
-          {selectedCustomer && !isMobile && showLedgerPanel && (
-            <Grid item xs={12} md={8}>
-              <Fade in>
-                <Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1, gap: 1 }}>
-                    <Button size="small" variant="outlined" startIcon={<Assessment />} onClick={() => setShowStatementDialog(true)}>
-                      Statement
-                    </Button>
-                    <Button size="small" variant="outlined" startIcon={<VerifiedUser />} onClick={verifyBalance} disabled={verifyingBalance}>
-                      {verifyingBalance ? 'Verifying...' : 'Verify'}
-                    </Button>
-                    <Tooltip title="Close Ledger Panel">
-                      <IconButton size="small" color="error" onClick={() => setShowLedgerPanel(false)}>
-                        <VisibilityOff fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
+      {/* ==================== TAB 1: CUSTOMER LEDGER & ACCOUNT CENTER ==================== */}
+      {recoveryEnabled && mainTab === 1 && (
+        <Fade in>
+          <Box>
+            {!selectedCustomer ? (
+              <Paper sx={{ p: 5, textAlign: 'center', bgcolor: '#ffffff', borderRadius: 2.5, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                <Person sx={{ fontSize: 60, color: '#94a3b8', mb: 1.5 }} />
+                <Typography variant="h6" fontWeight="bold" color="text.primary">No Customer Selected</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Please select a customer from the list or choose from the dropdown below to view their detailed ledger and transactions.
+                </Typography>
+                <Box sx={{ maxWidth: 420, mx: 'auto', mb: 3 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Select Customer to View Ledger</InputLabel>
+                    <Select
+                      label="Select Customer to View Ledger"
+                      value=""
+                      onChange={(e) => {
+                        const c = customers.find(x => String(x.id) === String(e.target.value));
+                        if (c) viewLedger(c);
+                      }}
+                    >
+                      {customers.map(c => (
+                        <MenuItem key={c.id} value={c.id}>
+                          {c.name} {parseFloat(c.current_balance || 0) > 0 ? `— Due: ${formatCurrency(c.current_balance)}` : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+                <Button variant="contained" onClick={() => setMainTab(0)} sx={{ bgcolor: '#1c2580', px: 3, py: 1, fontWeight: 'bold' }}>
+                  Browse Customers List
+                </Button>
+              </Paper>
+            ) : (
+              <Box>
+                {/* CUSTOMER EXECUTIVE HEADER CARD */}
+                <Card sx={{ mb: 2.5, bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderLeft: '6px solid #10b981', borderRadius: 2.5, boxShadow: '0 2px 4px rgba(0,0,0,0.04)' }}>
+                  <CardContent sx={{ p: isMobile ? 2 : 2.5, '&:last-child': { pb: isMobile ? 2 : 2.5 } }}>
+                    <Grid container spacing={2} alignItems="center">
+                      <Grid item xs={12} md={4}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Avatar sx={{ width: 50, height: 50, bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '1.25rem' }}>
+                            {(selectedCustomer.name || 'C')[0].toUpperCase()}
+                          </Avatar>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                              <Typography variant="h6" fontWeight="bold" noWrap color="#0f172a">
+                                {selectedCustomer.name}
+                              </Typography>
+                              <Chip 
+                                size="small" 
+                                color={selectedCustomer.customer_type === 'wholesale' ? 'info' : 'default'} 
+                                label={String(selectedCustomer.customer_type || 'retail').toUpperCase()} 
+                                sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold' }} 
+                              />
+                            </Box>
+                            <Typography variant="body2" color="text.secondary">
+                              {selectedCustomer.shop_name || 'Individual Customer'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.3 }}>
+                              <Phone sx={{ fontSize: 12 }} /> {selectedCustomer.phone || 'No phone'}
+                              {selectedCustomer.city && ` • ${selectedCustomer.city}`}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
 
-                  <Card variant="outlined" sx={{ mb: 2, borderLeft: '5px solid #10b981', bgcolor: '#f9fafb' }}>
-                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                      <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={3}>
-                          <Typography variant="h6" fontWeight="bold" color="primary.main">{selectedCustomer.name}</Typography>
-                          <Typography variant="body2" color="text.secondary">{selectedCustomer.shop_name || 'Individual Account'}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            <Phone sx={{ fontSize: 12, verticalAlign: 'middle', mr: 0.5 }} />
-                            {selectedCustomer.phone || '-'}
-                          </Typography>
-                          <CreditLimitWarning customer={selectedCustomer} />
-                        </Grid>
-                        <Grid item xs={6} md={2}>
-                          <Typography variant="caption" color="text.secondary" display="block">Total Sales</Typography>
-                          <Typography variant="h6" fontWeight="bold" color="error.main">
-                            {formatCurrency(ledgerSummary.totalDue)}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} md={2}>
-                          <Typography variant="caption" color="text.secondary" display="block">Total Paid</Typography>
-                          <Typography variant="h6" fontWeight="bold" color="success.main">
-                            {formatCurrency(ledgerSummary.totalReceived)}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} md={2}>
-                          <Typography variant="caption" color="text.secondary" display="block">Outstanding</Typography>
-                          <Typography variant="h5" fontWeight="bold" color={(selectedCustomer.current_balance || 0) > 0 ? 'error.main' : (selectedCustomer.current_balance || 0) < 0 ? 'warning.main' : 'success.main'}>
-                            {formatCurrency(selectedCustomer.current_balance)}
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} md={3}>
+                      {/* SWITCHER DROPDOWN */}
+                      <Grid item xs={12} md={3}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Switch Customer</InputLabel>
+                          <Select
+                            label="Switch Customer"
+                            value={selectedCustomer.id}
+                            onChange={(e) => {
+                              const c = customers.find(x => String(x.id) === String(e.target.value));
+                              if (c) viewLedger(c);
+                            }}
+                          >
+                            {customers.map(c => (
+                              <MenuItem key={c.id} value={c.id}>
+                                {c.name} {parseFloat(c.current_balance || 0) > 0 ? `(Rs. ${c.current_balance})` : ''}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+
+                      {/* ACTION BUTTONS */}
+                      <Grid item xs={12} md={5}>
+                        <Stack direction="row" spacing={1} justifyContent={{ xs: 'flex-start', md: 'flex-end' }} flexWrap="wrap">
                           <Button 
-                            fullWidth 
                             variant="contained" 
                             color="success" 
                             size="small" 
                             startIcon={<Payment />} 
                             onClick={handlePaymentOpen}
-                            disabled={selectedCustomer.current_balance <= 0}
-                            sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }}
+                            disabled={parseFloat(selectedCustomer.current_balance || 0) <= 0}
+                            sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, fontWeight: 'bold', py: 0.8, px: 2 }}
                           >
                             Receive Payment
                           </Button>
                           <Button 
-                            fullWidth 
                             variant="outlined" 
                             size="small" 
-                            startIcon={<FileDownload />} 
+                            startIcon={<Assessment />} 
                             onClick={() => setShowStatementDialog(true)}
-                            sx={{ mt: 1 }}
                           >
-                            Export Statement
+                            Statement
                           </Button>
-                        </Grid>
+                          <Button 
+                            variant="outlined" 
+                            size="small" 
+                            startIcon={<VerifiedUser />} 
+                            onClick={verifyBalance} 
+                            disabled={verifyingBalance}
+                          >
+                            {verifyingBalance ? 'Checking...' : 'Verify'}
+                          </Button>
+                          <Button 
+                            variant="outlined" 
+                            size="small" 
+                            onClick={() => setMainTab(0)}
+                          >
+                            ← Back to List
+                          </Button>
+                        </Stack>
                       </Grid>
-                      <AgingAnalysis customer={selectedCustomer} sales={sales} />
-                    </CardContent>
-                  </Card>
+                    </Grid>
 
-                  <Paper sx={{ border: '1px solid #e5e7eb' }}>
-                    <Box sx={{ p: 1.5, borderBottom: '1px solid #e5e7eb', bgcolor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-                      <Typography variant="subtitle2" fontWeight="bold">
-                        <History sx={{ verticalAlign: 'middle', mr: 0.5, fontSize: '1.1rem', color: '#10b981' }} /> 
-                        Transaction Ledger ({filteredLedger.length} entries)
-                      </Typography>
-                      <ToggleButtonGroup
-                        value={ledgerFilter}
-                        exclusive
-                        onChange={(e, val) => val && setLedgerFilter(val)}
-                        size="small"
-                      >
-                        <ToggleButton value="all" sx={{ fontSize: '0.65rem', py: 0.3 }}>All</ToggleButton>
-                        <ToggleButton value="sales" sx={{ fontSize: '0.65rem', py: 0.3 }}>Sales</ToggleButton>
-                        <ToggleButton value="payments" sx={{ fontSize: '0.65rem', py: 0.3 }}>Payments</ToggleButton>
-                      </ToggleButtonGroup>
-                    </Box>
-                    <TableContainer sx={{ maxHeight: 'calc(100vh - 520px)' }}>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow sx={{ bgcolor: '#1c2580' }}>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }}>Date</TableCell>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }}>Type</TableCell>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }}>Description</TableCell>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }}>Ref#</TableCell>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }} align="right">Debit</TableCell>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }} align="right">Credit</TableCell>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }} align="right">Balance</TableCell>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }} align="center">Items</TableCell>
-                            <TableCell sx={{ color: 'white', fontWeight: 'bold', fontSize: '0.8rem', py: 1.2 }} align="center">Action</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {filteredLedger.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
-                                <Typography color="text.secondary">No transactions found.</Typography>
-                              </TableCell>
+                    <CreditLimitWarning customer={selectedCustomer} />
+
+                    {/* 4 MINI STATS CARDS */}
+                    <Grid container spacing={1.5} sx={{ mt: 1 }}>
+                      <Grid item xs={6} sm={6} md={3}>
+                        <Box sx={{ p: 1.5, bgcolor: '#fef2f2', borderRadius: 2, border: '1px solid #fecaca' }}>
+                          <Typography variant="caption" color="error.dark" fontWeight="bold">Outstanding Balance</Typography>
+                          <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" color="error.dark" sx={{ mt: 0.5 }}>
+                            {formatCurrency(selectedCustomer.current_balance)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6} sm={6} md={3}>
+                        <Box sx={{ p: 1.5, bgcolor: '#eff6ff', borderRadius: 2, border: '1px solid #bfdbfe' }}>
+                          <Typography variant="caption" color="primary.dark" fontWeight="bold">Total Purchases</Typography>
+                          <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" color="primary.dark" sx={{ mt: 0.5 }}>
+                            {formatCurrency(customerSummary.totalInvoiced)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6} sm={6} md={3}>
+                        <Box sx={{ p: 1.5, bgcolor: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0' }}>
+                          <Typography variant="caption" color="success.dark" fontWeight="bold">Total Paid</Typography>
+                          <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" color="success.dark" sx={{ mt: 0.5 }}>
+                            {formatCurrency(customerSummary.totalPaid)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6} sm={6} md={3}>
+                        <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                          <Typography variant="caption" color="text.secondary" fontWeight="bold">Credit Limit</Typography>
+                          <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" sx={{ mt: 0.5 }}>
+                            {formatCurrency(selectedCustomer.credit_limit || 0)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+
+                {/* 5 CUSTOMER LEDGER SUB-TABS */}
+                <Paper sx={{ mb: 2, bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 2.5, overflow: 'hidden' }}>
+                  <Tabs 
+                    value={customerTab} 
+                    onChange={(e, val) => setCustomerTab(val)}
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    allowScrollButtonsMobile
+                    sx={{ px: { xs: 1, sm: 2 }, borderBottom: '1px solid #f1f5f9' }}
+                  >
+                    <Tab 
+                      icon={<History fontSize="small" />} 
+                      iconPosition="start" 
+                      label={`1. Ledger Statement (${ledger.length})`}
+                      value={0}
+                      sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}
+                    />
+                    <Tab 
+                      icon={<Receipt fontSize="small" />} 
+                      iconPosition="start" 
+                      label={`2. Sales & Invoices (${customerInvoices.length})`}
+                      value={1}
+                      sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}
+                    />
+                    <Tab 
+                      icon={<Payment fontSize="small" />} 
+                      iconPosition="start" 
+                      label={`3. Payments Received (${paymentHistory.length})`}
+                      value={2}
+                      sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}
+                    />
+                    <Tab 
+                      icon={<Timer fontSize="small" />} 
+                      iconPosition="start" 
+                      label="4. Aging Analysis"
+                      value={3}
+                      sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}
+                    />
+                    <Tab 
+                      icon={<Person fontSize="small" />} 
+                      iconPosition="start" 
+                      label="5. Customer Profile & Info"
+                      value={4}
+                      sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}
+                    />
+                  </Tabs>
+
+                  {/* SUB-TAB 0: LEDGER STATEMENT */}
+                  {customerTab === 0 && (
+                    <Box sx={{ p: isMobile ? 1 : 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
+                        <Typography variant="subtitle2" fontWeight="bold" color="text.primary">
+                          Transaction Entries ({filteredLedger.length})
+                        </Typography>
+                        <ToggleButtonGroup
+                          value={ledgerFilter}
+                          exclusive
+                          onChange={(e, val) => val && setLedgerFilter(val)}
+                          size="small"
+                        >
+                          <ToggleButton value="all" sx={{ fontSize: '0.7rem', py: 0.4 }}>All Entries</ToggleButton>
+                          <ToggleButton value="sales" sx={{ fontSize: '0.7rem', py: 0.4 }}>Sales / Debits</ToggleButton>
+                          <ToggleButton value="payments" sx={{ fontSize: '0.7rem', py: 0.4 }}>Payments / Credits</ToggleButton>
+                        </ToggleButtonGroup>
+                      </Box>
+
+                      <TableContainer sx={{ maxHeight: 'calc(100vh - 460px)', border: '1px solid #f1f5f9', borderRadius: 2, overflowX: 'auto', width: '100%' }}>
+                        <Table size="small" stickyHeader sx={{ minWidth: 800 }}>
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: '#1c2580' }}>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Date</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Type</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Description</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Reference #</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Debit (+)</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Credit (-)</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Balance</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="center">Items</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="center">Action</TableCell>
                             </TableRow>
-                          ) : (
-                            filteredLedger.map((entry) => (
-                              <TableRow key={entry.id} hover sx={{ bgcolor: entry.isOpening ? '#fef3c7' : 'inherit' }}>
-                                <TableCell sx={{ fontSize: '0.75rem' }}>{formatDate(entry.date)}</TableCell>
-                                <TableCell>
-                                  <Chip 
-                                    size="small" 
-                                    label={entry.type} 
-                                    color={entry.isOpening ? 'warning' : (entry.isDebit ? 'error' : 'success')} 
-                                    sx={{ height: 18, fontSize: '0.55rem', fontWeight: 'bold' }} 
-                                  />
-                                </TableCell>
-                                <TableCell sx={{ fontSize: '0.75rem' }}>{entry.description}</TableCell>
-                                <TableCell sx={{ fontSize: '0.7rem' }}>{entry.reference_no || '-'}</TableCell>
-                                <TableCell align="right" sx={{ color: 'red', fontWeight: 500, fontSize: '0.75rem' }}>
-                                  {entry.isDebit ? formatCurrency(entry.amount) : '-'}
-                                </TableCell>
-                                <TableCell align="right" sx={{ color: 'green', fontWeight: 500, fontSize: '0.75rem' }}>
-                                  {!entry.isDebit ? formatCurrency(entry.amount) : '-'}
-                                </TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>
-                                  {formatCurrency(entry.balance_after)}
-                                </TableCell>
-                                <TableCell align="center">
-                                  {entry.type === 'Sale' && entry.saleId && (
-                                    <Tooltip title="View Items">
-                                      <IconButton 
-                                        size="small" 
-                                        color="info" 
-                                        onClick={(e) => handleViewItems(e, entry.saleId)}
-                                      >
-                                        <ShoppingCart fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
-                                </TableCell>
-                                <TableCell align="center">
-                                  {!entry.isOpening && (
-                                    <Tooltip title="Delete Entry">
-                                      <IconButton 
-                                        size="small" 
-                                        color="error" 
-                                        onClick={() => handleDeleteLedgerEntry(entry)}
-                                      >
-                                        <Delete fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
+                          </TableHead>
+                          <TableBody>
+                            {filteredLedger.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
+                                  <History sx={{ fontSize: 40, color: '#cbd5e1', mb: 1 }} />
+                                  <Typography color="text.secondary">No transaction records found in this customer's ledger.</Typography>
                                 </TableCell>
                               </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </Paper>
+                            ) : (
+                              filteredLedger.map((entry) => (
+                                <TableRow key={entry.id} hover sx={{ bgcolor: entry.isOpening ? '#fefce8' : 'inherit' }}>
+                                  <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{formatDate(entry.date)}</TableCell>
+                                  <TableCell>
+                                    <Chip 
+                                      size="small" 
+                                      label={entry.type} 
+                                      color={entry.isOpening ? 'warning' : (entry.isDebit ? 'error' : 'success')} 
+                                      sx={{ height: 20, fontSize: '0.62rem', fontWeight: 'bold' }} 
+                                    />
+                                  </TableCell>
+                                  <TableCell sx={{ fontSize: '0.8rem' }}>{entry.description}</TableCell>
+                                  <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{entry.reference_no || '-'}</TableCell>
+                                  <TableCell align="right" sx={{ color: '#dc2626', fontWeight: 600, fontSize: '0.85rem' }}>
+                                    {entry.isDebit ? formatCurrency(entry.amount) : '-'}
+                                  </TableCell>
+                                  <TableCell align="right" sx={{ color: '#16a34a', fontWeight: 600, fontSize: '0.85rem' }}>
+                                    {!entry.isDebit ? formatCurrency(entry.amount) : '-'}
+                                  </TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '0.85rem', color: entry.balance_after > 0 ? '#b91c1c' : '#15803d' }}>
+                                    {formatCurrency(entry.balance_after)}
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    {entry.type === 'Sale' && entry.saleId && (
+                                      <Tooltip title="View Purchased Items">
+                                        <IconButton size="small" color="info" onClick={(e) => handleViewItems(e, entry.saleId)}>
+                                          <ShoppingCart fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                  </TableCell>
+                                  <TableCell align="center">
+                                    {!entry.isOpening && (
+                                      <Tooltip title="Delete Entry">
+                                        <IconButton size="small" color="error" onClick={() => handleDeleteLedgerEntry(entry)}>
+                                          <Delete fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )}
 
-                  {paymentHistory.length > 0 && (
-                    <Paper sx={{ mt: 2, border: '1px solid #e5e7eb' }}>
-                      <Box sx={{ p: 1.5, borderBottom: '1px solid #e5e7eb', bgcolor: '#f9fafb' }}>
-                        <Typography variant="subtitle2" fontWeight="bold">
-                          <Payment sx={{ verticalAlign: 'middle', mr: 0.5, fontSize: '1.1rem', color: '#10b981' }} /> 
-                          Payment History ({paymentHistory.length})
-                        </Typography>
-                      </Box>
+                  {/* SUB-TAB 1: SALES & INVOICES */}
+                  {customerTab === 1 && (
+                    <Box sx={{ p: isMobile ? 1 : 2 }}>
+                      <TableContainer sx={{ maxHeight: 'calc(100vh - 460px)', border: '1px solid #f1f5f9', borderRadius: 2, overflowX: 'auto', width: '100%' }}>
+                        <Table size="small" stickyHeader sx={{ minWidth: 720 }}>
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: '#1c2580' }}>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Invoice #</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Date</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Mode</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Bill Total</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Paid</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Due Balance</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="center">Status</TableCell>
+                              <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="center">Items</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {customerInvoices.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                                  <Receipt sx={{ fontSize: 40, color: '#cbd5e1', mb: 1 }} />
+                                  <Typography color="text.secondary">No invoices found for this customer.</Typography>
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              customerInvoices.map((inv) => {
+                                const due = parseFloat(inv.due_amount || 0);
+                                const paid = parseFloat(inv.paid_amount || 0);
+                                const total = parseFloat(inv.grand_total || 0);
+                                const status = due <= 0 ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'UNPAID');
+
+                                return (
+                                  <TableRow key={inv.id} hover>
+                                    <TableCell sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>{inv.invoice_no || `INV-${inv.id}`}</TableCell>
+                                    <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{formatDate(inv.date || inv.created_at)}</TableCell>
+                                    <TableCell>
+                                      <Chip size="small" label={String(inv.payment_mode || 'cash').toUpperCase()} sx={{ height: 18, fontSize: '0.6rem' }} />
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>{formatCurrency(total)}</TableCell>
+                                    <TableCell align="right" sx={{ color: '#16a34a', fontWeight: 600, fontSize: '0.85rem' }}>{formatCurrency(paid)}</TableCell>
+                                    <TableCell align="right" sx={{ color: due > 0 ? '#dc2626' : 'text.secondary', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                                      {formatCurrency(due)}
+                                    </TableCell>
+                                    <TableCell align="center">
+                                      <Chip 
+                                        size="small" 
+                                        label={status} 
+                                        color={status === 'PAID' ? 'success' : status === 'PARTIAL' ? 'warning' : 'error'} 
+                                        sx={{ height: 20, fontSize: '0.62rem', fontWeight: 'bold' }} 
+                                      />
+                                    </TableCell>
+                                    <TableCell align="center">
+                                      <Tooltip title="View Purchased Items">
+                                        <IconButton size="small" color="info" onClick={(e) => handleViewItems(e, inv.id)}>
+                                          <ShoppingCart fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )}
+
+                  {/* SUB-TAB 2: PAYMENTS RECEIVED */}
+                  {customerTab === 2 && (
+                    <Box sx={{ p: isMobile ? 1 : 2 }}>
                       <PaymentHistoryTable 
                         payments={paymentHistory} 
                         onPrint={(payment) => {
@@ -2188,115 +2602,258 @@ export default function RecoveryPage() {
                         }}
                         onDelete={handleDeletePayment}
                       />
-                    </Paper>
+                    </Box>
                   )}
-                </Box>
-              </Fade>
-            </Grid>
-          )}
 
-          {/* LEDGER PANEL CLOSED */}
-          {selectedCustomer && !isMobile && !showLedgerPanel && (
-            <Grid item xs={12} md={8}>
-              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px', bgcolor: '#f9fafb', borderRadius: 2, border: '2px dashed #d1d5db' }}>
-                <Button 
-                  variant="contained" 
-                  startIcon={<Visibility />} 
-                  onClick={() => setShowLedgerPanel(true)}
-                  sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' } }}
-                >
-                  Show Ledger Panel
-                </Button>
-              </Box>
-            </Grid>
-          )}
-        </Grid>
-      )}
-
-      {/* ===== MOBILE LEDGER DRAWER ===== */}
-      {isMobile && selectedCustomer && recoveryEnabled && (
-        <Drawer 
-          anchor="bottom" 
-          open={!!selectedCustomer} 
-          onClose={() => setSelectedCustomer(null)}
-          sx={{ '& .MuiDrawer-paper': { height: '90vh', maxHeight: '90vh' } }}
-        >
-          <Box sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Box>
-                <Typography variant="h6" fontWeight="bold" color="primary">
-                  {selectedCustomer?.name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {selectedCustomer?.shop_name || ''}
-                </Typography>
-              </Box>
-              <IconButton onClick={() => setSelectedCustomer(null)}>
-                <Close />
-              </IconButton>
-            </Box>
-
-            {selectedCustomer && (
-              <>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, p: 1.5, bgcolor: '#f9fafb', borderRadius: 1 }}>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">Outstanding</Typography>
-                    <Typography variant="h6" fontWeight="bold" color={(selectedCustomer.current_balance || 0) > 0 ? 'error.main' : (selectedCustomer.current_balance || 0) < 0 ? 'warning.main' : 'success.main'}>
-                      {formatCurrency(selectedCustomer.current_balance)}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button 
-                      variant="contained" 
-                      color="success" 
-                      size="small" 
-                      startIcon={<Payment />} 
-                      onClick={() => { setPaymentDialog(true); }}
-                      disabled={selectedCustomer.current_balance <= 0}
-                      sx={{ bgcolor: '#10b981' }}
-                    >
-                      Pay
-                    </Button>
-                    <IconButton size="small" color="error" onClick={() => handleDeleteCustomer(selectedCustomer)}>
-                      <Delete />
-                    </IconButton>
-                  </Box>
-                </Box>
-
-                <ToggleButtonGroup
-                  value={ledgerFilter}
-                  exclusive
-                  onChange={(e, val) => val && setLedgerFilter(val)}
-                  size="small"
-                  fullWidth
-                  sx={{ mb: 1 }}
-                >
-                  <ToggleButton value="all" sx={{ fontSize: '0.65rem' }}>All</ToggleButton>
-                  <ToggleButton value="sales" sx={{ fontSize: '0.65rem' }}>Sales</ToggleButton>
-                  <ToggleButton value="payments" sx={{ fontSize: '0.65rem' }}>Payments</ToggleButton>
-                </ToggleButtonGroup>
-
-                <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1 }}>
-                  <History sx={{ verticalAlign: 'middle', mr: 0.5, fontSize: '1rem' }} />
-                  Transaction History ({filteredLedger.length})
-                </Typography>
-
-                <List dense sx={{ maxHeight: 'calc(70vh - 160px)', overflow: 'auto' }}>
-                  {filteredLedger.length === 0 ? (
-                    <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-                      No transactions found
-                    </Typography>
-                  ) : (
-                    filteredLedger.map((entry, idx) => (
-                      <MobileLedgerEntry key={entry.id || idx} entry={entry} />
-                    ))
+                  {/* SUB-TAB 3: AGING ANALYSIS */}
+                  {customerTab === 3 && (
+                    <Box sx={{ p: isMobile ? 1.5 : 2.5 }}>
+                      <AgingAnalysis customer={selectedCustomer} sales={sales} />
+                      <Box sx={{ mt: 3, p: 2, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                        <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1 }}>
+                          ℹ️ About Aging Analysis
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          This analysis categorizes the customer&apos;s current outstanding balance ({formatCurrency(selectedCustomer.current_balance)}) based on invoice aging. Balances in the 0-30 day bracket are current, while balances exceeding 60-90 days require proactive recovery follow-up.
+                        </Typography>
+                      </Box>
+                    </Box>
                   )}
-                </List>
-              </>
+
+                  {/* SUB-TAB 4: CUSTOMER PROFILE & INFO */}
+                  {customerTab === 4 && (
+                    <Box sx={{ p: isMobile ? 2 : 3 }}>
+                      <Grid container spacing={2}>
+                        {[
+                          { label: 'Customer Name', value: selectedCustomer.name },
+                          { label: 'Shop / Business Name', value: selectedCustomer.shop_name || 'N/A' },
+                          { label: 'Phone Number', value: selectedCustomer.phone || 'N/A' },
+                          { label: 'Account Type', value: String(selectedCustomer.customer_type || 'Retail').toUpperCase() },
+                          { label: 'Credit Limit', value: formatCurrency(selectedCustomer.credit_limit || 0) },
+                          { label: 'City', value: selectedCustomer.city || 'N/A' },
+                          { label: 'District', value: selectedCustomer.district || 'N/A' },
+                          { label: 'Province', value: selectedCustomer.province || 'N/A' },
+                          { label: 'Address', value: selectedCustomer.address || 'N/A' },
+                          { label: 'CNIC', value: selectedCustomer.cnic || 'N/A' },
+                          { label: 'Payment Terms', value: selectedCustomer.payment_terms || 'Cash' },
+                          { label: 'Opening Balance', value: formatCurrency(selectedCustomer.opening_balance || 0) },
+                        ].map((item, idx) => (
+                          <Grid item xs={12} sm={6} md={4} key={idx}>
+                            <Box sx={{ p: 1.5, bgcolor: '#f8fafc', borderRadius: 1.5, border: '1px solid #e2e8f0' }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{item.label}</Typography>
+                              <Typography variant="body2" fontWeight="bold" sx={{ color: '#0f172a', mt: 0.3 }}>{item.value}</Typography>
+                            </Box>
+                          </Grid>
+                        ))}
+                      </Grid>
+                      {selectedCustomer.notes && (
+                        <Box sx={{ mt: 2, p: 2, bgcolor: '#fffbeb', borderRadius: 1.5, border: '1px solid #fef08a' }}>
+                          <Typography variant="caption" fontWeight="bold" color="#92400e">Notes:</Typography>
+                          <Typography variant="body2" color="#92400e" sx={{ mt: 0.5 }}>{selectedCustomer.notes}</Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+                </Paper>
+              </Box>
             )}
           </Box>
-        </Drawer>
+        </Fade>
       )}
+
+      {/* ==================== TAB 2: AGING & MARKET DEBT REPORT ==================== */}
+      {recoveryEnabled && mainTab === 2 && (
+        <Fade in>
+          <Box>
+            <Paper sx={{ p: 2.5, mb: 2.5, bgcolor: '#ffffff', borderRadius: 2.5, border: '1px solid #e2e8f0' }}>
+              <Typography variant="h6" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Assessment sx={{ color: '#10b981' }} />
+                Market Debt & Aging Analysis
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+                Comprehensive aging breakdown of outstanding customer balances across the business.
+              </Typography>
+
+              <Grid container spacing={2}>
+                <Grid item xs={6} sm={6} md={3}>
+                  <Box sx={{ p: 2, bgcolor: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                    <Typography variant="caption" color="success.dark" fontWeight="bold">0-30 Days (Current)</Typography>
+                    <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" color="success.dark" sx={{ mt: 0.5 }}>
+                      {formatCurrency(globalAging._0_30)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {globalAging.total > 0 ? `${Math.round((globalAging._0_30 / globalAging.total) * 100)}% of total market debt` : '0%'}
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={6} md={3}>
+                  <Box sx={{ p: 2, bgcolor: '#fefce8', borderRadius: 2, border: '1px solid #fef08a', textAlign: 'center' }}>
+                    <Typography variant="caption" color="warning.dark" fontWeight="bold">31-60 Days (1 - 2 Months)</Typography>
+                    <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" color="#ca8a04" sx={{ mt: 0.5 }}>
+                      {formatCurrency(globalAging._31_60)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {globalAging.total > 0 ? `${Math.round((globalAging._31_60 / globalAging.total) * 100)}% of total market debt` : '0%'}
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={6} md={3}>
+                  <Box sx={{ p: 2, bgcolor: '#fff7ed', borderRadius: 2, border: '1px solid #fed7aa', textAlign: 'center' }}>
+                    <Typography variant="caption" color="#c2410c" fontWeight="bold">61-90 Days (2 - 3 Months)</Typography>
+                    <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" color="#ea580c" sx={{ mt: 0.5 }}>
+                      {formatCurrency(globalAging._61_90)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {globalAging.total > 0 ? `${Math.round((globalAging._61_90 / globalAging.total) * 100)}% of total market debt` : '0%'}
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={6} md={3}>
+                  <Box sx={{ p: 2, bgcolor: '#fef2f2', borderRadius: 2, border: '1px solid #fecaca', textAlign: 'center' }}>
+                    <Typography variant="caption" color="error.dark" fontWeight="bold">90+ Days (Overdue)</Typography>
+                    <Typography variant={isMobile ? 'subtitle1' : 'h5'} fontWeight="bold" color="error.dark" sx={{ mt: 0.5 }}>
+                      {formatCurrency(globalAging._90plus)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {globalAging.total > 0 ? `${Math.round((globalAging._90plus / globalAging.total) * 100)}% of total market debt` : '0%'}
+                    </Typography>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* TOP DEBTORS TABLE */}
+            <Paper sx={{ border: '1px solid #e2e8f0', borderRadius: 2.5, overflow: 'hidden', bgcolor: '#ffffff' }}>
+              <Box sx={{ p: 2, borderBottom: '1px solid #e2e8f0', bgcolor: '#f8fafc' }}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  Top Customer Overdue Accounts
+                </Typography>
+              </Box>
+              <TableContainer sx={{ maxHeight: 'calc(100vh - 460px)', overflowX: 'auto', width: '100%' }}>
+                <Table size="small" sx={{ minWidth: 700 }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#1c2580' }}>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>#</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Customer Name</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Shop / Business</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Phone</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Account Type</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Outstanding Balance</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Action</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {topDebtors.length === 0 ? (
+                      <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4 }}>No parties with outstanding balances!</TableCell></TableRow>
+                    ) : (
+                      topDebtors.map((c, idx) => (
+                        <TableRow key={c.id} hover>
+                          <TableCell>{idx + 1}</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>{c.name}</TableCell>
+                          <TableCell>{c.shop_name || '-'}</TableCell>
+                          <TableCell>{c.phone || '-'}</TableCell>
+                          <TableCell>
+                            <Chip size="small" label={String(c.customer_type || 'retail').toUpperCase()} sx={{ height: 18, fontSize: '0.6rem' }} />
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: '#dc2626', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                            {formatCurrency(c.current_balance)}
+                          </TableCell>
+                          <TableCell align="center">
+                            <Button 
+                              size="small" 
+                              variant="contained" 
+                              onClick={() => viewLedger(c)} 
+                              sx={{ bgcolor: '#1c2580', fontSize: '0.7rem', py: 0.4 }}
+                            >
+                              View Ledger
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          </Box>
+        </Fade>
+      )}
+
+      {/* ==================== TAB 3: RECENT RECOVERY RECEIPTS ==================== */}
+      {recoveryEnabled && mainTab === 3 && (
+        <Fade in>
+          <Box>
+            <Paper sx={{ border: '1px solid #e2e8f0', borderRadius: 2.5, overflow: 'hidden', bgcolor: '#ffffff' }}>
+              <Box sx={{ p: 2, borderBottom: '1px solid #e2e8f0', bgcolor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="subtitle2" fontWeight="bold">
+                    All Recent Recovery & Payment Receipts ({allRecentPayments.length})
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Log of recent recovery payments with direct receipt printing.
+                  </Typography>
+                </Box>
+              </Box>
+              <TableContainer sx={{ maxHeight: 'calc(100vh - 380px)', overflowX: 'auto', width: '100%' }}>
+                <Table size="small" sx={{ minWidth: 650 }}>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#1c2580' }}>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Date</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Customer Name</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Reference #</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }}>Payment Mode</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="right">Amount</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.2 }} align="center">Action</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {allRecentPayments.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} align="center" sx={{ py: 6 }}>No recent payments recorded.</TableCell></TableRow>
+                    ) : (
+                      allRecentPayments.map((p, idx) => (
+                        <TableRow key={idx} hover>
+                          <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{formatDateTime(p.date)}</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}>{p.customer_name}</TableCell>
+                          <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{p.reference_no}</TableCell>
+                          <TableCell>
+                            <Chip 
+                              size="small" 
+                              icon={getPaymentModeIcon(p.payment_mode)} 
+                              label={String(p.payment_mode || 'cash').toUpperCase()} 
+                              color={getPaymentModeColor(p.payment_mode)}
+                              sx={{ height: 20, fontSize: '0.62rem' }}
+                            />
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: '#16a34a', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                            {formatCurrency(p.amount)}
+                          </TableCell>
+                          <TableCell align="center">
+                            <Button 
+                              size="small" 
+                              variant="outlined" 
+                              color="success" 
+                              startIcon={<Print fontSize="small" />} 
+                              onClick={() => {
+                                setLastPayment(p);
+                                setShowPaymentReceipt(true);
+                              }}
+                              sx={{ fontSize: '0.7rem', py: 0.3 }}
+                            >
+                              Print Receipt
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+          </Box>
+        </Fade>
+      )}
+
+
 
       {/* ===== FIX ORPHAN SALES DIALOG ===== */}
       <Dialog open={fixOrphanDialog} onClose={() => setFixOrphanDialog(false)} maxWidth="sm" fullWidth>

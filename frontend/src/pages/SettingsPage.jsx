@@ -30,6 +30,7 @@ import {
 } from '../role';
 import ThermalReceipt from '../components/receipt/ThermalReceipt';
 import { printReceiptDirect } from '../utils/receiptGenerator';
+import { printBarcodeJob, BARCODE_PRESETS, generateCode128Svg } from '../utils/barcodeGenerator';
 import {
   TOGGLEABLE_MODULES, BUSINESS_MODULE_DEFAULTS,
   getShopBusinessType, getBusinessTypeLabel, applyBusinessTypeDefaults,
@@ -142,18 +143,16 @@ const BarcodeDesignPreview = ({ barcodeSettings, shopProfile }) => {
             )}
 
             {barcodeSettings.showBarcode && (
-              <Box sx={{ bgcolor: '#ffffff', py: 0.5, px: 1, my: 0.5 }}>
-                {/* Visual Barcode SVG Simulation */}
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', height: 28, gap: '2px', mx: 'auto', maxWidth: 140 }}>
-                  {[3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 4, 1, 3, 2, 1, 3, 2, 4, 1, 2, 3].map((w, i) => (
-                    <Box key={i} sx={{ width: `${w}px`, height: '100%', bgcolor: '#000000' }} />
-                  ))}
-                </Box>
-                {barcodeSettings.showBarcodeText && (
-                  <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '2px', mt: 0.3, color: '#000' }}>
-                    8901234567890
-                  </Typography>
-                )}
+              <Box sx={{ bgcolor: '#ffffff', py: 0.5, px: 0.5, my: 0.5, width: '100%' }}>
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: generateCode128Svg('8901234567890', {
+                      height: 26,
+                      showText: barcodeSettings.showBarcodeText,
+                      fontSize: 8
+                    })
+                  }}
+                />
               </Box>
             )}
 
@@ -657,21 +656,37 @@ export default function SettingsPage({ initialTab } = {}) {
   };
 
   const handleBarcodePresetChange = (preset) => {
-    let width = 50;
-    let height = 30;
-    if (preset === '50x30mm') { width = 50; height = 30; }
-    else if (preset === '40x25mm') { width = 40; height = 25; }
-    else if (preset === '38x28mm') { width = 38; height = 28; }
-    else if (preset === '50x25mm') { width = 50; height = 25; }
-    else if (preset === '2x1inch') { width = 51; height = 25; }
-    else if (preset === '3x2inch') { width = 76; height = 51; }
-    
-    setBarcodeSettings(prev => ({
-      ...prev,
-      labelSize: preset,
-      labelWidth: preset === 'custom' ? prev.labelWidth : width,
-      labelHeight: preset === 'custom' ? prev.labelHeight : height,
-    }));
+    const found = BARCODE_PRESETS.find(p => p.id === preset);
+    if (found) {
+      setBarcodeSettings(prev => ({
+        ...prev,
+        labelSize: preset,
+        labelWidth: found.width,
+        labelHeight: found.height,
+        columns: found.columns,
+        gapMm: found.gap
+      }));
+    } else {
+      let width = 50;
+      let height = 30;
+      let cols = 1;
+      if (preset === '50x30mm') { width = 50; height = 30; cols = 1; }
+      else if (preset === '40x25mm') { width = 40; height = 25; cols = 1; }
+      else if (preset === '38x28mm') { width = 38; height = 28; cols = 2; }
+      else if (preset === '50x25mm') { width = 50; height = 25; cols = 1; }
+      else if (preset === '38x25mm') { width = 38; height = 25; cols = 2; }
+      else if (preset === '30x20mm') { width = 30; height = 20; cols = 3; }
+      else if (preset === '2x1inch') { width = 51; height = 25; cols = 1; }
+      else if (preset === '3x2inch') { width = 76; height = 51; cols = 1; }
+      
+      setBarcodeSettings(prev => ({
+        ...prev,
+        labelSize: preset,
+        labelWidth: preset === 'custom' ? prev.labelWidth : width,
+        labelHeight: preset === 'custom' ? prev.labelHeight : height,
+        columns: preset === 'custom' ? prev.columns : cols
+      }));
+    }
     setHasChanges(true);
   };
 
@@ -764,101 +779,35 @@ export default function SettingsPage({ initialTab } = {}) {
     }
   };
 
-  // ==================== TEST PRINT BARCODE HANDLER ====================
+  // ==================== TEST PRINT BARCODE HANDLER (ZERO-WASTE) ====================
   const handleTestPrintBarcode = async () => {
     try {
-      const widthMm = barcodeSettings.labelWidth || 50;
-      const heightMm = barcodeSettings.labelHeight || 30;
-      const columns = Math.min(3, Math.max(1, barcodeSettings.columns || 1));
-      const shopName = barcodeSettings.shopName || shopProfile.name || 'MY STORE';
-      const currency = barcodeSettings.currencySymbol || 'Rs.';
+      const testCols = Math.min(3, Math.max(1, barcodeSettings.columns || 1));
+      const sampleItem = {
+        name: 'Sample Product 500g',
+        barcode: '890123456789',
+        retail_price: 1250,
+        sku: 'PRD-0042'
+      };
 
-      const singleLabelHtml = `
-        <div class="label-card">
-          ${barcodeSettings.showShopName ? `<div class="shop-name">${shopName}</div>` : ''}
-          ${barcodeSettings.showProductName ? `<div class="product-name">Sample Product 500g</div>` : ''}
-          ${barcodeSettings.showBarcode ? `
-            <div class="barcode-box">
-              <svg class="barcode" jsbarcode-value="890123456789" jsbarcode-format="${barcodeSettings.barcodeType || 'CODE128'}" jsbarcode-width="1.3" jsbarcode-height="24" jsbarcode-fontsize="9" jsbarcode-displayvalue="${barcodeSettings.showBarcodeText}"></svg>
-            </div>
-          ` : ''}
-          ${barcodeSettings.showPrice ? `<div class="price">${currency} 1,250</div>` : ''}
-          ${barcodeSettings.showSku ? `<div class="sku">SKU: PRD-0042</div>` : ''}
-        </div>
-      `;
+      // Print exactly 1 full row (e.g. 2 stickers for 2 cols, 3 for 3 cols)
+      const res = await printBarcodeJob(sampleItem, {
+        ...barcodeSettings,
+        copies: testCols,
+        startColumn: 1
+      });
 
-      const rowHtml = Array.from({ length: columns }).map(() => singleLabelHtml).join('');
-
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Test Barcode Label</title>
-          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
-          <style>
-            @page {
-              size: ${widthMm * columns}mm ${heightMm}mm;
-              margin: 0;
-            }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body {
-              width: ${widthMm * columns}mm;
-              height: ${heightMm}mm;
-              margin: 0;
-              padding: ${barcodeSettings.marginMm || 2}mm;
-              display: flex;
-              align-items: center;
-              justify-content: space-around;
-              font-family: Arial, sans-serif;
-              background: #fff;
-            }
-            .label-card {
-              width: ${widthMm}mm;
-              height: ${heightMm}mm;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: space-between;
-              text-align: center;
-              padding: 1mm;
-              overflow: hidden;
-            }
-            .shop-name { font-size: 8px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
-            .product-name { font-size: 9px; font-weight: 600; line-height: 1.1; max-height: 20px; overflow: hidden; }
-            .barcode-box { display: flex; justify-content: center; }
-            .price { font-size: 11px; font-weight: bold; color: #000; }
-            .sku { font-size: 7px; color: #333; }
-          </style>
-        </head>
-        <body>
-          ${rowHtml}
-          <script>
-            try {
-              JsBarcode(".barcode").init();
-            } catch(e) {}
-          <\/script>
-        </body>
-        </html>
-      `;
-
-      if (window.electronAPI && window.electronAPI.printReceipt) {
-        await window.electronAPI.printReceipt(html, {
-          printerName: barcodeSettings.printerName || undefined,
-          pageSize: { width: Math.round(widthMm * 1000 * columns), height: Math.round(heightMm * 1000) },
-          silent: true
+      if (res?.success) {
+        setSnackbar({
+          open: true,
+          message: `Test barcode row (${testCols} label(s) on ${res.totalRows} row) sent to "${res.printerName}"!`,
+          severity: 'success'
         });
-        setSnackbar({ open: true, message: `Test barcode label sent to "${barcodeSettings.printerName || 'Default'}"!`, severity: 'success' });
       } else {
-        const win = window.open('', '_blank', `width=${widthMm * 4 * columns},height=${heightMm * 4}`);
-        win.document.write(html);
-        win.document.close();
-        win.focus();
-        setTimeout(() => win.print(), 500);
-        setSnackbar({ open: true, message: 'Browser print dialog opened for test barcode!', severity: 'info' });
+        setSnackbar({ open: true, message: res?.reason || 'Test print failed', severity: 'error' });
       }
     } catch (err) {
-      setSnackbar({ open: true, message: 'Barcode test print error: ' + err.message, severity: 'error' });
+      setSnackbar({ open: true, message: 'Barcode test print error: ' + (err.message || err), severity: 'error' });
     }
   };
 
@@ -2803,19 +2752,17 @@ export default function SettingsPage({ initialTab } = {}) {
                     >
                       <Stack spacing={isMobile ? 1.5 : 2}>
                         <FormControl fullWidth size="small">
-                          <InputLabel>Label Size Preset</InputLabel>
+                          <InputLabel>Label Size & Roll Preset</InputLabel>
                           <Select 
-                            value={barcodeSettings.labelSize || '50x30mm'} 
+                            value={barcodeSettings.labelSize || barcodeSettings.labelPreset || '38x25mm_2col'} 
                             onChange={(e) => handleBarcodePresetChange(e.target.value)} 
-                            label="Label Size Preset"
+                            label="Label Size & Roll Preset"
                           >
-                            <MenuItem value="50x30mm">50 x 30 mm (Standard Price Tag - Most Popular)</MenuItem>
-                            <MenuItem value="40x25mm">40 x 25 mm (Small Items / Jewelry)</MenuItem>
-                            <MenuItem value="38x28mm">38 x 28 mm (Retail Shelf Tag)</MenuItem>
-                            <MenuItem value="50x25mm">50 x 25 mm (Compact Sticker)</MenuItem>
-                            <MenuItem value="2x1inch">2" x 1" (51 x 25 mm US Standard)</MenuItem>
-                            <MenuItem value="3x2inch">3" x 2" (76 x 51 mm Shipping / Large)</MenuItem>
-                            <MenuItem value="custom">Custom Dimensions (Set Width & Height)</MenuItem>
+                            {BARCODE_PRESETS.map(p => (
+                              <MenuItem key={p.id} value={p.id}>
+                                {p.label}
+                              </MenuItem>
+                            ))}
                           </Select>
                         </FormControl>
 
@@ -2825,10 +2772,10 @@ export default function SettingsPage({ initialTab } = {}) {
                               fullWidth 
                               size="small" 
                               type="number" 
-                              label="Width (mm)" 
+                              label="Single Sticker Width (mm)" 
                               value={barcodeSettings.labelWidth} 
-                              onChange={(e) => handleBarcodeChange('labelWidth', parseFloat(e.target.value) || 50)} 
-                              inputProps={{ min: 20, max: 150 }} 
+                              onChange={(e) => handleBarcodeChange('labelWidth', parseFloat(e.target.value) || 38)} 
+                              inputProps={{ min: 15, max: 150 }} 
                             />
                           </Grid>
                           <Grid item xs={6}>
@@ -2836,10 +2783,10 @@ export default function SettingsPage({ initialTab } = {}) {
                               fullWidth 
                               size="small" 
                               type="number" 
-                              label="Height (mm)" 
+                              label="Single Sticker Height (mm)" 
                               value={barcodeSettings.labelHeight} 
-                              onChange={(e) => handleBarcodeChange('labelHeight', parseFloat(e.target.value) || 30)} 
-                              inputProps={{ min: 15, max: 150 }} 
+                              onChange={(e) => handleBarcodeChange('labelHeight', parseFloat(e.target.value) || 25)} 
+                              inputProps={{ min: 10, max: 150 }} 
                             />
                           </Grid>
                         </Grid>
@@ -2852,13 +2799,13 @@ export default function SettingsPage({ initialTab } = {}) {
                             label="Labels Per Row (Roll Columns)"
                           >
                             <MenuItem value={1}>1 Column (1 Label per row - Single Roll)</MenuItem>
-                            <MenuItem value={2}>2 Columns (2 Labels per row - 2-Up Roll)</MenuItem>
-                            <MenuItem value={3}>3 Columns (3 Labels per row - 3-Up Roll)</MenuItem>
+                            <MenuItem value={2}>2 Columns (2 Labels per row - Standard 2-Up Roll)</MenuItem>
+                            <MenuItem value={3}>3 Columns (3 Labels per row - Candela 3-Up Roll)</MenuItem>
                           </Select>
                         </FormControl>
 
                         <Grid container spacing={2}>
-                          <Grid item xs={6}>
+                          <Grid item xs={4}>
                             <TextField 
                               fullWidth 
                               size="small" 
@@ -2869,15 +2816,26 @@ export default function SettingsPage({ initialTab } = {}) {
                               inputProps={{ min: 1, max: 100 }} 
                             />
                           </Grid>
-                          <Grid item xs={6}>
+                          <Grid item xs={4}>
                             <TextField 
                               fullWidth 
                               size="small" 
                               type="number" 
                               label="Label Margin (mm)" 
-                              value={barcodeSettings.marginMm !== undefined ? barcodeSettings.marginMm : 2} 
+                              value={barcodeSettings.marginMm !== undefined ? barcodeSettings.marginMm : 1.5} 
                               onChange={(e) => handleBarcodeChange('marginMm', parseFloat(e.target.value) || 0)} 
-                              inputProps={{ min: 0, max: 10 }} 
+                              inputProps={{ min: 0, max: 10, step: 0.5 }} 
+                            />
+                          </Grid>
+                          <Grid item xs={4}>
+                            <TextField 
+                              fullWidth 
+                              size="small" 
+                              type="number" 
+                              label="Col Gap (mm)" 
+                              value={barcodeSettings.gapMm !== undefined ? barcodeSettings.gapMm : 2} 
+                              onChange={(e) => handleBarcodeChange('gapMm', parseFloat(e.target.value) || 0)} 
+                              inputProps={{ min: 0, max: 10, step: 0.5 }} 
                             />
                           </Grid>
                         </Grid>

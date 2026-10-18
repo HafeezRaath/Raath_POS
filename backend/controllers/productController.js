@@ -425,6 +425,12 @@ exports.updateVariant = async (req, res, next) => {
       WHERE tenant_id = ? AND id = ? AND is_deleted = 0
     `;
     await query(sql, [actualName, actualName, sku, barcode, purchase_price, actualPrice, retail_price, wholesale_price, minimum_retail_price, actualStock, actualStock, stock_alert_quantity, image_url, description, tenantId, id]);
+    if (actualStock !== undefined && actualStock !== null) {
+      await query(
+        'UPDATE products SET stock = ? WHERE tenant_id = ? AND id = (SELECT product_id FROM product_variants WHERE id = ?)',
+        [actualStock, tenantId, id]
+      );
+    }
     const updated = await query('SELECT * FROM product_variants WHERE tenant_id = ? AND id = ?', [tenantId, id]);
     res.json({ success: true, data: updated[0] });
   } catch (error) {

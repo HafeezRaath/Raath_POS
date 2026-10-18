@@ -47,6 +47,8 @@ import { formatShoeStock, formatThaanStock, formatKurtaStock, formatLooseWeightS
 import StationeryModeForm from '../components/bookshop/StationeryModeForm';
 import UniformSizeMatrix from '../components/bookshop/UniformSizeMatrix';
 import BundleManager from '../components/bookshop/BundleManager';
+import BarcodePrintModal from '../components/common/BarcodePrintModal';
+import { printBarcodeJob } from '../utils/barcodeGenerator';
 
 // ==================== CONSTANTS ====================
 const PRODUCT_TYPES = [
@@ -416,6 +418,8 @@ const [copies, setCopies] = useState(1);
   const [selectedOfferProduct, setSelectedOfferProduct] = useState(null);
   const [selectedOfferVariant, setSelectedOfferVariant] = useState(null);
   const [offerVariantPrice, setOfferVariantPrice] = useState('');
+  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
+  const [barcodeModalProduct, setBarcodeModalProduct] = useState(null);
 
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
@@ -1215,177 +1219,28 @@ const [copies, setCopies] = useState(1);
     return `${prefix}-${timestamp}${random}`;
   };
 
-  // ====== PRINT BARCODE LABEL ======
-  // ====== PRINT BARCODE LABEL (DYNAMIC SETTINGS + ELECTRON PRINTER SUPPORT) ======
-  const handlePrintBarcode = async (product, options = {}) => {
+  // ====== PRINT BARCODE LABEL (ZERO-WASTE MULTI-COLUMN ENGINE) ======
+  const handlePrintBarcode = (product, options = {}) => {
     if (!product || !product.barcode) {
       setSnackbar({ open: true, message: 'Is product ka barcode nahi hai! Please product edit karke barcode add ya generate karein.', severity: 'warning' });
       return;
     }
 
-    let savedBarcodeSettings = {};
-    try {
-      const raw = localStorage.getItem('barcode_settings');
-      if (raw) savedBarcodeSettings = JSON.parse(raw);
-    } catch (e) {}
-
-    let shopProfile = {};
-    try {
-      const rawShop = localStorage.getItem('shop_profile');
-      if (rawShop) shopProfile = JSON.parse(rawShop);
-    } catch (e) {}
-
-    const cfg = {
-      printerName: options.printerName || savedBarcodeSettings.printerName || '',
-      labelSize: options.labelSize || savedBarcodeSettings.labelSize || '50x30mm',
-      labelWidth: options.labelWidth || savedBarcodeSettings.labelWidth || 50,
-      labelHeight: options.labelHeight || savedBarcodeSettings.labelHeight || 30,
-      columns: options.columns || savedBarcodeSettings.columns || 1,
-      showShopName: options.showShopName !== undefined ? options.showShopName : (savedBarcodeSettings.showShopName !== false),
-      shopName: options.shopName || savedBarcodeSettings.shopName || shopProfile.name || 'My Store',
-      showProductName: options.showProductName !== undefined ? options.showProductName : (savedBarcodeSettings.showProductName !== false),
-      showPrice: options.showPrice !== undefined ? options.showPrice : (savedBarcodeSettings.showPrice !== false),
-      currencySymbol: savedBarcodeSettings.currencySymbol || 'Rs.',
-      showBarcode: options.showBarcode !== undefined ? options.showBarcode : (savedBarcodeSettings.showBarcode !== false),
-      showBarcodeText: options.showBarcodeText !== undefined ? options.showBarcodeText : (savedBarcodeSettings.showBarcodeText !== false),
-      showSku: options.showSku !== undefined ? options.showSku : (savedBarcodeSettings.showSku !== false),
-      barcodeType: options.barcodeType || savedBarcodeSettings.barcodeType || 'CODE128',
-      copies: options.copies || savedBarcodeSettings.copies || 1,
-      marginMm: savedBarcodeSettings.marginMm || 2,
-      ...options
-    };
-
-    // Calculate dimensions in mm
-    let widthMm = cfg.labelWidth;
-    let heightMm = cfg.labelHeight;
-    if (cfg.labelSize === '50x30mm') { widthMm = 50; heightMm = 30; }
-    else if (cfg.labelSize === '40x25mm') { widthMm = 40; heightMm = 25; }
-    else if (cfg.labelSize === '38x28mm') { widthMm = 38; heightMm = 28; }
-    else if (cfg.labelSize === '50x25mm') { widthMm = 50; heightMm = 25; }
-    else if (cfg.labelSize === '2x1') { widthMm = 50.8; heightMm = 25.4; }
-    else if (cfg.labelSize === '3x2') { widthMm = 76.2; heightMm = 50.8; }
-    else if (cfg.labelSize === '4x3') { widthMm = 101.6; heightMm = 76.2; }
-
-    const barcodeText = product.barcode;
-    const productName = product.product_name || product.name || 'Product';
-    const retailPrice = Number(product.retail_price || 0).toLocaleString();
-    const copiesCount = Math.max(1, cfg.copies || 1);
-
-    const singleLabelHtml = (idx) => `
-      <div class="label-item" style="
-        width: ${widthMm}mm;
-        height: ${heightMm}mm;
-        padding: ${cfg.marginMm}mm;
-        box-sizing: border-box;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        align-items: center;
-        text-align: center;
-        background: #ffffff;
-        overflow: hidden;
-        page-break-inside: avoid;
-      ">
-        ${cfg.showShopName ? `<div style="font-size: 8px; font-weight: 800; color: #333; text-transform: uppercase; letter-spacing: 1px; line-height: 1;">${cfg.shopName}</div>` : ''}
-        ${cfg.showProductName ? `<div style="font-size: 9px; font-weight: bold; color: #000; line-height: 1.1; max-height: 20px; overflow: hidden; margin-top: 1px;">${productName}</div>` : ''}
-        ${cfg.showBarcode ? `
-          <div style="width: 100%; display: flex; flex-direction: column; align-items: center; margin: 1px 0;">
-            <svg id="bc-${idx}" style="max-width: 95%; height: ${Math.max(24, heightMm * 0.9)}px;"></svg>
-            ${cfg.showBarcodeText ? `<div style="font-family: monospace; font-size: 9px; font-weight: bold; letter-spacing: 2px; margin-top: 1px; color: #000;">${barcodeText}</div>` : ''}
-          </div>
-        ` : ''}
-        ${cfg.showPrice ? `<div style="font-size: 13px; font-weight: 900; color: #000; line-height: 1;">${cfg.currencySymbol} ${retailPrice}</div>` : ''}
-        ${cfg.showSku && product.sku ? `<div style="font-size: 7px; color: #666; line-height: 1;">SKU: ${product.sku}</div>` : ''}
-      </div>
-    `;
-
-    const labelsListHtml = Array.from({ length: copiesCount }, (_, i) => singleLabelHtml(i)).join('');
-
-    const printPageHtml = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Barcode — ${productName}</title>
-          <style>
-            @page {
-              size: ${widthMm}mm ${heightMm}mm;
-              margin: 0;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            }
-            .labels-container {
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-            }
-            @media print {
-              body { margin: 0; padding: 0; }
-              .label-item { page-break-after: always; }
-              .label-item:last-child { page-break-after: avoid; }
-            }
-          </style>
-          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
-        </head>
-        <body>
-          <div class="labels-container">
-            ${labelsListHtml}
-          </div>
-          <script>
-            window.onload = function() {
-              ${Array.from({ length: copiesCount }, (_, c) => `
-                try {
-                  JsBarcode("#bc-${c}", "${barcodeText}", {
-                    format: "${cfg.barcodeType || 'CODE128'}",
-                    lineColor: "#000000",
-                    width: ${widthMm < 45 ? 1.2 : 1.5},
-                    height: ${Math.max(22, Math.round(heightMm * 0.9))},
-                    displayValue: false,
-                    margin: 0
-                  });
-                } catch (e) {
-                  console.warn("JsBarcode error:", e);
-                }
-              `).join('')}
-              setTimeout(function() {
-                window.print();
-              }, 400);
-            };
-          <\/script>
-        </body>
-      </html>
-    `;
-
-    // Try Electron direct print first
-    if (window.electronAPI && window.electronAPI.printReceipt) {
-      try {
-        const pName = cfg.printerName || '';
-        setSnackbar({ open: true, message: `Printing ${copiesCount} label(s) to ${pName || 'Default Printer'}...`, severity: 'info' });
-        await window.electronAPI.printReceipt(printPageHtml, {
-          printerName: pName,
-          pageSize: { width: Math.round(widthMm * 1000), height: Math.round(heightMm * 1000) },
-          copies: 1
+    if (options && options.directPrint) {
+      printBarcodeJob(product, options)
+        .then(res => {
+          if (res?.success) {
+            setSnackbar({ open: true, message: `Printed ${res.totalQuantity} barcode label(s) across ${res.totalRows} row(s)!`, severity: 'success' });
+          }
+        })
+        .catch(err => {
+          setSnackbar({ open: true, message: err?.message || 'Print failed', severity: 'error' });
         });
-        setSnackbar({ open: true, message: `Printed ${copiesCount} barcode label(s) successfully!`, severity: 'success' });
-        return;
-      } catch (err) {
-        console.error('Electron barcode print error:', err);
-      }
-    }
-
-    // Fallback: Browser Popup Print
-    const printWindow = window.open('', '_blank', `width=${Math.max(360, widthMm * 4)},height=${Math.max(400, heightMm * 4)}`);
-    if (!printWindow) {
-      setSnackbar({ open: true, message: 'Popup blocked! Please allow popups for barcode printing.', severity: 'error' });
       return;
     }
-    printWindow.document.write(printPageHtml);
-    printWindow.document.close();
-    setSnackbar({ open: true, message: `Barcode print dialog opened for ${copiesCount} label(s)`, severity: 'success' });
+
+    setBarcodeModalProduct(product);
+    setBarcodeModalOpen(true);
   };
 
   const handleAutoBarcode = () => {
@@ -4627,6 +4482,20 @@ const [copies, setCopies] = useState(1);
 
       {/* Bookshop: class bundles */}
       <BundleManager open={bundleManagerOpen} onClose={() => setBundleManagerOpen(false)} />
+
+      {/* Barcode Label Print Modal (Zero-Waste Multi-Column) */}
+      <BarcodePrintModal
+        open={barcodeModalOpen}
+        onClose={() => setBarcodeModalOpen(false)}
+        product={barcodeModalProduct}
+        onSuccess={(res) => {
+          setSnackbar({
+            open: true,
+            message: `Printed ${res.totalQuantity} barcode label(s) across ${res.totalRows} row(s) to "${res.printerName}"!`,
+            severity: 'success'
+          });
+        }}
+      />
 
       {/* SNACKBAR */}
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: isMobile ? 'center' : 'right' }} sx={{ mb: isMobile ? 8 : 0 }}>

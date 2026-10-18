@@ -45,6 +45,16 @@ class DatabaseClient {
     return res.data || [];
   }
 
+  async updateVariant(id, data) {
+    const res = await api.put(`/products/variants/${id}`, data);
+    return res.data;
+  }
+
+  async updateVariantStock(id, current_stock) {
+    const res = await api.put(`/products/variants/${id}`, { current_stock: Number(current_stock) });
+    return res.data;
+  }
+
   async getLowStock() {
     const res = await api.get('/products/low-stock');
     return res.data || [];
@@ -411,6 +421,10 @@ class DatabaseClient {
     return res.data || [];
   }
 
+  async getAllAccounts() {
+    return this.getAccounts();
+  }
+
   async getAccountById(id) {
     const res = await api.get(`/accounts/${id}`);
     return res.data;
@@ -435,9 +449,19 @@ class DatabaseClient {
     return res.success;
   }
 
-  async getAccountTransactions(accountId) {
-    const res = await api.get(`/accounts/${accountId}/transactions`);
+  async getAccountTransactions(accountId, params = {}) {
+    const url = (accountId && accountId !== 'all' && accountId !== 'undefined') ? `/accounts/${accountId}/transactions` : '/accounts/transactions';
+    const res = await api.get(url, params);
     return res.data || [];
+  }
+
+  async createAccountTransaction(data) {
+    const res = await api.post('/accounts/transactions', data);
+    return res.data;
+  }
+
+  async createTransaction(data) {
+    return this.createAccountTransaction(data);
   }
 
   async transferFunds(data) {
@@ -1189,35 +1213,102 @@ class DatabaseClient {
     return true;
   }
 
-  async getAllAccountTransactions(accountId) {
-    const res = await api.get(`/accounts/${accountId}/transactions`).catch(() => ({ data: [] }));
+  async getAllAccountTransactions(accountIdOrParams = {}, maybeParams = {}) {
+    let accountId = null;
+    let params = {};
+    if (typeof accountIdOrParams === 'object' && accountIdOrParams !== null) {
+      params = accountIdOrParams;
+      accountId = params.accountId || null;
+    } else {
+      accountId = accountIdOrParams;
+      params = maybeParams || {};
+    }
+    const url = (accountId && accountId !== 'all' && accountId !== 'undefined') ? `/accounts/${accountId}/transactions` : '/accounts/transactions';
+    const res = await api.get(url, params).catch(() => ({ data: [] }));
     return res.data || [];
   }
 
   async getAccountStatement(accountId, from, to) {
+    // 1. Try backend statement endpoint
+    try {
+      const res = await api.get(`/accounts/${accountId}/statement`, {
+        params: { startDate: from, endDate: to }
+      });
+      if (res && res.data) {
+        return res.data;
+      }
+    } catch (e) {
+      // Fallback to client-side computation
+    }
+
+    // Fallback:
     const txs = await this.getAllAccountTransactions(accountId);
     const account = await this.getAccountById(accountId).catch(() => null);
-    const opening = Number(account?.opening_balance || 0);
-    const filteredTxs = (txs || []).filter(t => {
-      if (!from && !to) return true;
-      const d = new Date(t.date || 0);
-      const f = from ? new Date(from) : new Date('2000-01-01');
-      const tDate = to ? new Date(to) : new Date('2099-12-31');
-      tDate.setHours(23, 59, 59, 999);
-      return d >= f && d <= tDate;
-    }).sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    const initialOp = Number(account?.opening_balance || 0);
 
-    const totalCredits = filteredTxs.filter(t => t.type === 'credit' || t.transaction_type === 'credit').reduce((s, t) => s + Number(t.amount || 0), 0);
-    const totalDebits = filteredTxs.filter(t => t.type === 'debit' || t.transaction_type === 'debit').reduce((s, t) => s + Number(t.amount || 0), 0);
-    const closing = Number(account?.current_balance !== undefined ? account.current_balance : (opening + totalCredits - totalDebits));
+    const f = from ? new Date(from) : new Date('2000-01-01');
+    const tDate = to ? new Date(to) : new Date('2099-12-31');
+    tDate.setHours(23, 59, 59, 999);
+
+    // Compute opening balance before 'from'
+    const priorTxs = (txs || []).filter(t => {
+      const d = new Date(t.date || 0);
+      return d < f;
+    });
+    const priorCredits = priorTxs.filter(t => t.type === 'credit' || t.transaction_type === 'credit').reduce((s, t) => s + Number(t.amount || 0), 0);
+    const priorDebits = priorTxs.filter(t => t.type === 'debit' || t.transaction_type === 'debit').reduce((s, t) => s + Number(t.amount || 0), 0);
+    const opening = Number((initialOp + priorCredits - priorDebits).toFixed(2));
+
+    const inRange = (txs || []).filter(t => {
+      const d = new Date(t.date || 0);
+      return d >= f && d <= tDate;
+    }).sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0) || (Number(a.id || 0) - Number(b.id || 0)));
+
+    let running = opening;
+    let totalCredits = 0;
+    let totalDebits = 0;
+    const items = inRange.map((tx, idx) => {
+      const isCredit = (tx.type === 'credit' || tx.transaction_type === 'credit');
+      const amt = Number(tx.amount || 0);
+      if (isCredit) {
+        totalCredits += amt;
+        running += amt;
+      } else {
+        totalDebits += amt;
+        running -= amt;
+      }
+      return {
+        ...tx,
+        index: idx + 1,
+        id: tx.id,
+        amount: amt,
+        transaction_type: isCredit ? 'credit' : 'debit',
+        running_balance: Number(running.toFixed(2)),
+        balance_after: Number(running.toFixed(2))
+      };
+    });
+
+    const closing = Number(running.toFixed(2));
 
     return {
+      account,
       opening_balance: opening,
       closing_balance: closing,
-      total_credits: totalCredits,
-      total_debits: totalDebits,
-      transactions: filteredTxs
+      total_credits: Number(totalCredits.toFixed(2)),
+      total_debits: Number(totalDebits.toFixed(2)),
+      net_change: Number((closing - opening).toFixed(2)),
+      transactions: items
     };
+  }
+
+  async getDailyAccountsSummary(date) {
+    try {
+      const res = await api.get('/accounts/daily-summary', { params: { date } });
+      if (res && res.data) return res.data;
+    } catch (e) {
+      console.warn('Failed to fetch daily summary from API:', e.message);
+    }
+    return { date, accounts: [], totals: { total_opening: 0, total_credits: 0, total_debits: 0, total_closing: 0, net_change: 0 } };
   }
 
   async adjustAccountBalance(data) {
@@ -1247,8 +1338,14 @@ class DatabaseClient {
     return res.data || data;
   }
 
-  async setDailyOpeningBalance(balance) {
-    return true;
+  async setDailyOpeningBalance(data) {
+    try {
+      const res = await api.post('/accounts/daily-opening', data);
+      return res.data;
+    } catch (e) {
+      console.warn('Failed to set daily opening balance:', e.message);
+      return false;
+    }
   }
 
   async clearCheque(id) {
@@ -1262,6 +1359,16 @@ class DatabaseClient {
 
   // ==================== CUSTOMER & SUPPLIER EXTRAS ====================
   async addCustomerLedgerEntry(entry) {
+    if (!entry) return entry;
+    if (entry.type === 'payment' || entry.amount < 0 || !entry.isDebit) {
+      return this.addCustomerPayment(entry.customer_id, {
+        amount: Math.abs(entry.amount),
+        payment_mode: entry.payment_mode || 'cash',
+        reference_no: entry.reference_no,
+        description: entry.description,
+        date: entry.date
+      });
+    }
     return entry;
   }
 
@@ -1282,7 +1389,7 @@ class DatabaseClient {
   }
 
   async getSupplierPurchaseLedger(supplierId) {
-    return this.query('SELECT * FROM supplier_ledger WHERE supplier_id = ? ORDER BY id DESC', [supplierId]);
+    return this.getSupplierLedger(supplierId);
   }
 
   // ==================== DISTRIBUTORS ====================

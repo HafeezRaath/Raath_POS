@@ -27,6 +27,7 @@ const SalesHistory = lazy(() => import('./pages/SalesHistory'));
 const ReturnsPage = lazy(() => import('./pages/ReturnsPage'));
 const StockTrackingPage = lazy(() => import('./pages/StockTrackingPage'));
 const AccountsPage = lazy(() => import('./pages/AccountsPage'));
+const AccountStatementPage = lazy(() => import('./pages/AccountStatementPage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const BackupPage = lazy(() => import('./pages/BackupPage'));
 const HistoryPage = lazy(() => import('./pages/HistoryPage'));
@@ -148,6 +149,8 @@ const AppRoutes = React.memo(function AppRoutes() {
         <Route path="/expenses" element={<ProtectedRoute pageId="expenses"><MainLayout><ExpensesPage /></MainLayout></ProtectedRoute>} />
         <Route path="/recovery" element={<ProtectedRoute pageId="customers"><MainLayout><RecoveryPage /></MainLayout></ProtectedRoute>} />
         <Route path="/accounts" element={<ProtectedRoute pageId="reports"><MainLayout><AccountsPage /></MainLayout></ProtectedRoute>} />
+        <Route path="/accounts/statement" element={<ProtectedRoute pageId="reports"><MainLayout><AccountStatementPage /></MainLayout></ProtectedRoute>} />
+        <Route path="/accounts/:id/statement" element={<ProtectedRoute pageId="reports"><MainLayout><AccountStatementPage /></MainLayout></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute pageId="reports"><MainLayout><ReportsPage /></MainLayout></ProtectedRoute>} />
         <Route path="/history" element={<ProtectedRoute pageId="reports"><MainLayout><HistoryPage /></MainLayout></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute pageId="settings"><MainLayout><SettingsPage /></MainLayout></ProtectedRoute>} />

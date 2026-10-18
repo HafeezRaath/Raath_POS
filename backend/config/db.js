@@ -38,7 +38,8 @@ async function testConnection() {
 // Helper: Run queries safely
 async function query(sql, params = []) {
   try {
-    const [results] = await pool.query(sql, params);
+    const cleanParams = Array.isArray(params) ? params.map(p => p === undefined ? null : p) : params;
+    const [results] = await pool.query(sql, cleanParams);
     return results;
   } catch (error) {
     console.error('[MySQL Query Error]:', error.message, '\nSQL:', sql, '\nParams:', params);

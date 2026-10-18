@@ -175,6 +175,8 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'work_orders', '`labor_amount` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'work_orders', '`parts_amount` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'work_orders', '`commission_percent` DECIMAL(5,2) DEFAULT 0');
+    await addColumnIfMissing(connection, 'work_orders', '`commission_type` VARCHAR(50) NULL');
+    await addColumnIfMissing(connection, 'work_orders', '`commission_credited` TINYINT(1) DEFAULT 0');
     // Staff table: tenant scoping (getStaff filters by tenant_id)
     await addColumnIfMissing(connection, 'staff', '`tenant_id` VARCHAR(100) DEFAULT \'tenant_default\'');
     await addColumnIfMissing(connection, 'staff', '`base_salary` DECIMAL(15,2) DEFAULT 0');
@@ -206,6 +208,16 @@ async function initializeDatabase() {
 
     await addColumnIfMissing(connection, 'purchases', '`purchase_no` VARCHAR(100)');
     await addColumnIfMissing(connection, 'purchases', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
+
+    await addColumnIfMissing(connection, 'customers', '`district` VARCHAR(100) NULL');
+    await addColumnIfMissing(connection, 'customers', '`province` VARCHAR(100) NULL');
+    await addColumnIfMissing(connection, 'customers', '`shop_name` VARCHAR(150) NULL');
+    await addColumnIfMissing(connection, 'customers', '`customer_type` VARCHAR(50) DEFAULT "retail"');
+    await addColumnIfMissing(connection, 'customers', '`payment_terms` VARCHAR(50) DEFAULT "cash"');
+    await addColumnIfMissing(connection, 'customers', '`notes` TEXT NULL');
+    await addColumnIfMissing(connection, 'customers', '`reference_name` VARCHAR(150) NULL');
+    await addColumnIfMissing(connection, 'customers', '`reference_phone` VARCHAR(50) NULL');
+    await addColumnIfMissing(connection, 'customers', '`updated_at` DATETIME NULL');
 
     await addColumnIfMissing(connection, 'salesmen', '`commission_percent` DECIMAL(5,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'salesmen', '`base_salary` DECIMAL(15,2) DEFAULT 0');

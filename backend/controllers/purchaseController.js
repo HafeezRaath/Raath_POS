@@ -50,7 +50,13 @@ exports.getPurchaseById = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    const purchases = await query('SELECT * FROM purchases WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    const purchases = await query(`
+      SELECT p.*, COALESCE(p.supplier_name, s.name) AS supplier_name, s.phone AS supplier_phone, w.name AS warehouse_name
+      FROM purchases p
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      LEFT JOIN warehouses w ON p.warehouse_id = w.id
+      WHERE p.tenant_id = ? AND p.id = ? AND p.is_deleted = 0
+    `, [tenantId, id]);
     if (purchases.length === 0) {
       return res.status(404).json({ success: false, error: 'Purchase not found' });
     }
@@ -68,18 +74,25 @@ exports.createPurchase = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const {
       purchase_number,
+      purchase_no,
       supplier_id = null,
       supplier_name = '',
       warehouse_id = null,
       items = [],
       subtotal = 0,
+      total_amount = 0,
       discount = 0,
+      discount_amount = 0,
       tax = 0,
+      tax_amount = 0,
       shipping_cost = 0,
+      shipping_charges = 0,
       grand_total,
       paid_amount = 0,
-      due_amount = 0,
+      due_amount,
       payment_method = 'cash',
+      payment_mode = 'cash',
+      payment_status,
       account_id = null,
       split_payments = null,
       notes = '',
@@ -91,22 +104,38 @@ exports.createPurchase = async (req, res, next) => {
     }
 
     const calculatedTotal = parseFloat(grand_total) || 0;
-    const poNum = purchase_number || generatePONumber();
+    const finalPaid = parseFloat(paid_amount) || 0;
+    let finalDue = (due_amount !== undefined && due_amount !== null && !isNaN(parseFloat(due_amount)))
+      ? parseFloat(due_amount)
+      : Math.max(0, calculatedTotal - finalPaid);
+
+    const poNum = purchase_no || purchase_number || generatePONumber();
+    const finalPaymentMode = payment_mode || payment_method || 'cash';
+    const finalPaymentStatus = finalDue <= 0 ? 'paid' : (finalPaid > 0 ? 'partial' : 'due');
 
     const createdId = await transaction(async (conn) => {
-      // 1. Insert into purchases
+      // Auto-fetch supplier_name if not provided but supplier_id exists
+      let finalSupplierName = supplier_name ? String(supplier_name).trim() : '';
+      if (supplier_id && !finalSupplierName) {
+        const [supRows] = await conn.query('SELECT name FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, supplier_id]);
+        if (supRows && supRows.length > 0 && supRows[0].name) {
+          finalSupplierName = supRows[0].name;
+        }
+      }
+
+      // 1. Insert into purchases (populate both purchase_number and purchase_no)
       const insertSql = `
         INSERT INTO purchases (
-          tenant_id, purchase_number, supplier_id, supplier_name, warehouse_id,
+          tenant_id, purchase_no, purchase_number, supplier_id, supplier_name, warehouse_id,
           subtotal, discount, tax, shipping_cost, grand_total,
-          paid_amount, due_amount, payment_method, account_id,
+          paid_amount, due_amount, payment_method, payment_mode, payment_status, account_id,
           notes, purchase_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()))
       `;
       const [pRes] = await conn.query(insertSql, [
-        tenantId, poNum, supplier_id || null, supplier_name, warehouse_id || null,
-        subtotal, discount, tax, shipping_cost, calculatedTotal,
-        paid_amount, due_amount, payment_method, account_id || null,
+        tenantId, poNum, poNum, supplier_id || null, finalSupplierName, warehouse_id || null,
+        subtotal || total_amount || 0, discount || discount_amount || 0, tax || tax_amount || 0, shipping_cost || shipping_charges || 0, calculatedTotal,
+        finalPaid, finalDue, finalPaymentMode, finalPaymentMode, finalPaymentStatus, account_id || null,
         notes, purchase_date || null
       ]);
 
@@ -120,7 +149,7 @@ exports.createPurchase = async (req, res, next) => {
         }
         const qty = parseFloat(it.quantity) || 1;
         const unitCost = parseFloat(it.unit_cost || it.purchase_price) || 0;
-        const total = parseFloat(it.total) || (qty * unitCost);
+        const total = parseFloat(it.total || it.sub_total) || (qty * unitCost);
         const itemExpiry = it.expiry_date || null;
 
         await conn.query(
@@ -135,31 +164,55 @@ exports.createPurchase = async (req, res, next) => {
           [qty, unitCost, itemExpiry, tenantId, prodId]
         );
 
-        // Also update variant stock if variant specified (H1 fix: variant stock was drifting)
+        // Also update variant stock (both stock and current_stock)
         const variantId = it.product_variant_id || it.variant_id;
         if (variantId) {
           await conn.query(
-            'UPDATE product_variants SET stock = stock + ? WHERE tenant_id = ? AND id = ?',
-            [qty, tenantId, variantId]
+            'UPDATE product_variants SET stock = stock + ?, current_stock = COALESCE(current_stock, 0) + ? WHERE tenant_id = ? AND id = ?',
+            [qty, qty, tenantId, variantId]
+          );
+        } else {
+          await conn.query(
+            'UPDATE product_variants SET stock = stock + ?, current_stock = COALESCE(current_stock, 0) + ? WHERE tenant_id = ? AND product_id = ?',
+            [qty, qty, tenantId, prodId]
           );
         }
       }
 
-      // 3. Update Supplier balance & ledger if due
-      if (supplier_id && due_amount > 0) {
+      // 3. Update Supplier balance & ledger if supplier assigned and due amount > 0
+      if (supplier_id && finalDue > 0) {
         await conn.query(
           'UPDATE suppliers SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?',
-          [due_amount, tenantId, supplier_id]
+          [finalDue, tenantId, supplier_id]
         );
 
         await conn.query(
-          `INSERT INTO supplier_ledger (tenant_id, supplier_id, description, debit, credit, balance, reference_type, reference_id)
-           VALUES (?, ?, 0, ?, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'purchase', ?)`,
-          [tenantId, supplier_id, `Purchase #${poNum}`, due_amount, tenantId, supplier_id, purchaseId]
+          `INSERT INTO supplier_ledger (
+            tenant_id, supplier_id, date, type, amount, description, debit, credit, balance, reference_type, reference_id
+          ) VALUES (?, ?, COALESCE(?, NOW()), 'purchase', ?, ?, 0, ?, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'purchase', ?)`,
+          [
+            tenantId, supplier_id, purchase_date || null, finalDue,
+            `Purchase #${poNum}${finalPaid > 0 ? ` (Total: ${calculatedTotal}, Paid: ${finalPaid})` : ''}`,
+            finalDue, tenantId, supplier_id, purchaseId
+          ]
         );
       }
 
-      // 4. Deduct payment from Account(s) if paid
+      // 4. Record advance/on-the-spot payment in payments table if supplier_id & paid_amount > 0
+      if (supplier_id && finalPaid > 0) {
+        await conn.query(
+          `INSERT INTO payments (
+            tenant_id, supplier_id, amount, type, payment_mode, note, date, account_id, reference_no
+          ) VALUES (?, ?, ?, 'purchase_payment', ?, ?, COALESCE(?, NOW()), ?, ?)`,
+          [
+            tenantId, supplier_id, finalPaid, finalPaymentMode,
+            `Paid at purchase #${poNum}`,
+            purchase_date || null, account_id || null, poNum
+          ]
+        );
+      }
+
+      // 5. Deduct payment from Account(s) if paid
       // Split payment: debit each account separately
       if (Array.isArray(split_payments) && split_payments.length > 0) {
         for (const sp of split_payments) {
@@ -176,23 +229,24 @@ exports.createPurchase = async (req, res, next) => {
             [tenantId, spAccountId, spAmount, tenantId, spAccountId, `Purchase (split): ${poNum}`, purchaseId]
           );
         }
-      } else if (account_id && paid_amount > 0) {
+      } else if (account_id && finalPaid > 0) {
         await conn.query(
           'UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?',
-          [paid_amount, tenantId, account_id]
+          [finalPaid, tenantId, account_id]
         );
 
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
            VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'purchase', ?, CURDATE())`,
-          [tenantId, account_id, paid_amount, tenantId, account_id, `Purchase: ${poNum}`, purchaseId]
+          [tenantId, account_id, finalPaid, tenantId, account_id, `Purchase: ${poNum}`, purchaseId]
         );
       }
 
       return purchaseId;
     });
 
-    const [finalPurchase] = await query('SELECT * FROM purchases WHERE tenant_id = ? AND id = ?', [tenantId, createdId]);
+    const purchases = await query('SELECT * FROM purchases WHERE tenant_id = ? AND id = ?', [tenantId, createdId]);
+    const finalPurchase = purchases[0] || {};
     const finalItems = await query('SELECT * FROM purchase_items WHERE tenant_id = ? AND purchase_id = ?', [tenantId, createdId]);
     finalPurchase.items = finalItems;
 
@@ -231,12 +285,12 @@ exports.deletePurchase = async (req, res, next) => {
     const { id } = req.params;
 
     // Get purchase details for reversal
-    const [purchases] = await query('SELECT * FROM purchases WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    const purchases = await query('SELECT * FROM purchases WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
     if (purchases.length === 0) {
       return res.status(404).json({ success: false, error: 'Purchase not found' });
     }
     const purchase = purchases[0];
-    const [items] = await query('SELECT * FROM purchase_items WHERE tenant_id = ? AND purchase_id = ?', [tenantId, id]);
+    const items = await query('SELECT * FROM purchase_items WHERE tenant_id = ? AND purchase_id = ?', [tenantId, id]);
 
     await query('START TRANSACTION');
     try {
@@ -245,16 +299,31 @@ exports.deletePurchase = async (req, res, next) => {
         const qty = parseFloat(item.quantity) || 0;
         if (item.product_id) {
           await query('UPDATE products SET stock = GREATEST(0, stock - ?) WHERE tenant_id = ? AND id = ?', [qty, tenantId, item.product_id]);
+          await query('UPDATE product_variants SET stock = GREATEST(0, stock - ?), current_stock = GREATEST(0, COALESCE(current_stock, 0) - ?) WHERE tenant_id = ? AND product_id = ?', [qty, qty, tenantId, item.product_id]);
         }
       }
 
       // 2. Reverse supplier balance
-      if (purchase.supplier_id && purchase.due_amount > 0) {
-        await query('UPDATE suppliers SET balance = balance - ? WHERE tenant_id = ? AND id = ?', [purchase.due_amount, tenantId, purchase.supplier_id]);
+      if (purchase.supplier_id && parseFloat(purchase.due_amount) > 0) {
+        const dueAmt = parseFloat(purchase.due_amount);
+        await query('UPDATE suppliers SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [dueAmt, tenantId, purchase.supplier_id]);
+        await query(
+          `INSERT INTO supplier_ledger (tenant_id, supplier_id, date, type, amount, description, debit, credit, balance, reference_type, reference_id)
+           VALUES (?, ?, NOW(), 'purchase_cancel', ?, ?, ?, 0, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'purchase_cancel', ?)`,
+          [tenantId, purchase.supplier_id, dueAmt, `Reversal of Purchase #${purchase.purchase_number || purchase.purchase_no}`, dueAmt, tenantId, purchase.supplier_id, id]
+        );
+      }
+
+      // Reverse payment record if any
+      if (purchase.supplier_id && parseFloat(purchase.paid_amount) > 0) {
+        await query(
+          'UPDATE payments SET is_deleted = 1, deleted_at = NOW() WHERE tenant_id = ? AND supplier_id = ? AND reference_no = ?',
+          [tenantId, purchase.supplier_id, purchase.purchase_number || purchase.purchase_no]
+        );
       }
 
       // 3. Reverse account debit (if paid via account)
-      if (purchase.account_id && purchase.paid_amount > 0) {
+      if (purchase.account_id && parseFloat(purchase.paid_amount) > 0) {
         await query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [purchase.paid_amount, tenantId, purchase.account_id]);
         await query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
@@ -264,7 +333,7 @@ exports.deletePurchase = async (req, res, next) => {
       }
 
       // 4. Mark as deleted
-      await query('UPDATE purchases SET is_deleted = 1 WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+      await query('UPDATE purchases SET is_deleted = 1, deleted_at = NOW() WHERE tenant_id = ? AND id = ?', [tenantId, id]);
 
       await query('COMMIT');
     } catch (txErr) {
@@ -472,17 +541,18 @@ exports.convertPOToPurchase = async (req, res, next) => {
     const purchaseNum = generatePONumber();
 
     const purchaseId = await transaction(async (conn) => {
-      // 1. Insert into purchases
+      // 1. Insert into purchases (both purchase_no and purchase_number)
       const [pRes] = await conn.query(
         `INSERT INTO purchases (
-          tenant_id, purchase_number, supplier_id, supplier_name, subtotal,
+          tenant_id, purchase_no, purchase_number, supplier_id, supplier_name, subtotal,
           tax, shipping_cost, grand_total, paid_amount, due_amount,
-          payment_method, account_id, notes, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received')`,
+          payment_method, payment_mode, payment_status, account_id, notes, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received')`,
         [
-          tenantId, purchaseNum, po.supplier_id, po.supplier_name, po.subtotal,
+          tenantId, purchaseNum, purchaseNum, po.supplier_id, po.supplier_name, po.subtotal,
           po.tax, po.shipping_cost, po.total_amount, paid_amount, dueAmount,
-          payment_method, account_id || null, `Converted from PO: ${po.po_no}`
+          payment_method, payment_method, (dueAmount <= 0 ? 'paid' : (paid_amount > 0 ? 'partial' : 'due')),
+          account_id || null, `Converted from PO: ${po.po_no}`
         ]
       );
 
@@ -504,9 +574,15 @@ exports.convertPOToPurchase = async (req, res, next) => {
         }
       }
 
-      // 3. Update supplier balance if due
+      // 3. Update supplier balance & ledger if due
       if (po.supplier_id && dueAmount > 0) {
         await conn.query('UPDATE suppliers SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [dueAmount, tenantId, po.supplier_id]);
+        await conn.query(
+          `INSERT INTO supplier_ledger (
+            tenant_id, supplier_id, date, type, amount, description, debit, credit, balance, reference_type, reference_id
+          ) VALUES (?, ?, NOW(), 'purchase', ?, ?, 0, ?, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'purchase', ?)`,
+          [tenantId, po.supplier_id, dueAmount, `Purchase #${purchaseNum} (Converted from PO ${po.po_no})`, dueAmount, tenantId, po.supplier_id, newPurchId]
+        );
       }
 
       // 4. Mark PO as received

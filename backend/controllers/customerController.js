@@ -33,7 +33,9 @@ exports.createCustomer = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const {
       name, phone = '', email = '', address = '', city = '',
-      cnic = '', credit_limit = 0, opening_balance = 0, status = 'active'
+      district = '', province = '', shop_name = '', customer_type = 'retail',
+      cnic = '', credit_limit = 0, opening_balance = 0, payment_terms = 'cash',
+      notes = '', reference_name = '', reference_phone = '', status = 'active'
     } = req.body;
 
     if (!name || !name.trim()) {
@@ -42,9 +44,16 @@ exports.createCustomer = async (req, res, next) => {
 
     const opBal = parseFloat(opening_balance) || 0;
     const result = await query(
-      `INSERT INTO customers (tenant_id, name, phone, email, address, city, cnic, credit_limit, opening_balance, current_balance, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tenantId, name.trim(), phone, email, address, city, cnic, credit_limit, opBal, opBal, status]
+      `INSERT INTO customers (
+        tenant_id, name, phone, email, address, city, district, province,
+        shop_name, customer_type, cnic, credit_limit, opening_balance, current_balance,
+        payment_terms, notes, reference_name, reference_phone, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenantId, name.trim(), phone, email, address, city, district, province,
+        shop_name, customer_type, cnic, credit_limit, opBal, opBal,
+        payment_terms, notes, reference_name, reference_phone, status
+      ]
     );
 
     if (opBal !== 0) {
@@ -67,7 +76,11 @@ exports.updateCustomer = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    const { name, phone, email, address, city, district, province, shop_name, customer_type, cnic, credit_limit, payment_terms, status, notes } = req.body;
+    const { 
+      name, phone, email, address, city, district, province, 
+      shop_name, customer_type, cnic, credit_limit, current_balance, 
+      payment_terms, status, notes, reference_name, reference_phone, updated_at 
+    } = req.body;
 
     await query(
       `UPDATE customers SET
@@ -82,11 +95,22 @@ exports.updateCustomer = async (req, res, next) => {
         customer_type = COALESCE(?, customer_type),
         cnic = COALESCE(?, cnic),
         credit_limit = COALESCE(?, credit_limit),
+        current_balance = COALESCE(?, current_balance),
         payment_terms = COALESCE(?, payment_terms),
         status = COALESCE(?, status),
-        notes = COALESCE(?, notes)
+        notes = COALESCE(?, notes),
+        reference_name = COALESCE(?, reference_name),
+        reference_phone = COALESCE(?, reference_phone),
+        updated_at = COALESCE(?, NOW())
        WHERE tenant_id = ? AND id = ? AND is_deleted = 0`,
-      [name, phone, email, address, city, district, province, shop_name, customer_type, cnic, credit_limit, payment_terms, status, notes, tenantId, id]
+      [
+        name, phone, email, address, city, district, province, 
+        shop_name, customer_type, cnic, credit_limit, 
+        current_balance !== undefined ? parseFloat(current_balance) : null, 
+        payment_terms, status, notes, reference_name, reference_phone,
+        updated_at ? new Date(updated_at) : null, 
+        tenantId, id
+      ]
     );
 
     const updated = await query('SELECT * FROM customers WHERE tenant_id = ? AND id = ?', [tenantId, id]);
@@ -109,8 +133,9 @@ exports.deleteCustomer = async (req, res, next) => {
 
 exports.getCustomerLedger = async (req, res, next) => {
   try {
-    const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
+    const custLookup = await query('SELECT tenant_id FROM customers WHERE id = ?', [id]);
+    const tenantId = (custLookup && custLookup[0] && custLookup[0].tenant_id) ? custLookup[0].tenant_id : (req.tenant_id || 'tenant_default');
 
     // 1. Backfill any sales for this customer missing from customer_ledger
     try {
@@ -194,9 +219,10 @@ exports.getCustomerLedger = async (req, res, next) => {
 
 exports.addCustomerPayment = async (req, res, next) => {
   try {
-    const tenantId = req.tenant_id || 'tenant_default';
     const rawId = req.params.id;
     const customerId = (rawId && rawId !== '[object Object]') ? rawId : req.body.customer_id || req.body.id;
+    const custLookup = await query('SELECT tenant_id FROM customers WHERE id = ?', [customerId]);
+    const tenantId = (custLookup && custLookup[0] && custLookup[0].tenant_id) ? custLookup[0].tenant_id : (req.tenant_id || 'tenant_default');
     const { 
       amount, 
       payment_method, 
@@ -256,6 +282,28 @@ exports.addCustomerPayment = async (req, res, next) => {
          VALUES (?, ?, ?, ?, 'customer_payment', ?, ?, ?, ?)`,
         [tenantId, customerId, account_id || null, paidAmount, paymentMethod, noteText, paymentDate, refNo]
       );
+
+      // 5. Automatically allocate payment against open sales for this customer (FIFO)
+      let rem = paidAmount;
+      const [openSales] = await conn.query(
+        'SELECT id, grand_total, paid_amount, due_amount FROM sales WHERE tenant_id = ? AND customer_id = ? AND due_amount > 0 AND is_deleted = 0 ORDER BY date ASC, id ASC',
+        [tenantId, customerId]
+      );
+      if (Array.isArray(openSales)) {
+        for (const s of openSales) {
+          if (rem <= 0) break;
+          const currentDue = parseFloat(s.due_amount) || 0;
+          const alloc = Math.min(currentDue, rem);
+          const newPaid = (parseFloat(s.paid_amount) || 0) + alloc;
+          const newDue = currentDue - alloc;
+          const newStatus = newDue <= 0 ? 'paid' : 'partial';
+          await conn.query(
+            'UPDATE sales SET paid_amount = ?, due_amount = ?, status = ? WHERE tenant_id = ? AND id = ?',
+            [newPaid, newDue, newStatus, tenantId, s.id]
+          );
+          rem -= alloc;
+        }
+      }
     });
 
     const [updatedCust] = await query('SELECT * FROM customers WHERE tenant_id = ? AND id = ?', [tenantId, customerId]);

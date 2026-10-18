@@ -66,13 +66,43 @@ export const getEffectiveReceiptSettings = () => {
  * Get current saved shop profile from localStorage with safe fallback
  */
 export const getEffectiveShopProfile = () => {
+  let shop = {};
   try {
     const raw = localStorage.getItem('shop_profile');
-    if (raw) {
-      return { ...DEFAULT_SHOP_PROFILE, ...JSON.parse(raw) };
-    }
+    if (raw) shop = JSON.parse(raw);
   } catch (e) {}
-  return { ...DEFAULT_SHOP_PROFILE };
+
+  let user = {};
+  try {
+    const rawUser = localStorage.getItem('current_user');
+    if (rawUser) user = JSON.parse(rawUser);
+  } catch (e) {}
+
+  const rawShopName = localStorage.getItem('raath_shop_name');
+
+  const resolvedName = shop.name || shop.shop_name || shop.shopName || user.shop_name || rawShopName || DEFAULT_SHOP_PROFILE.name;
+  const resolvedAddress = [shop.address || shop.shop_address || user.shop_address || DEFAULT_SHOP_PROFILE.address, shop.city || user.city].filter(Boolean).join(', ');
+  const resolvedPhone = shop.phone || user.phone || DEFAULT_SHOP_PROFILE.phone;
+  const resolvedEmail = shop.email || user.email || DEFAULT_SHOP_PROFILE.email;
+  const resolvedTagline = shop.tagline || DEFAULT_SHOP_PROFILE.tagline;
+  const resolvedNtn = shop.taxNumber || shop.registrationNumber || shop.ntn || DEFAULT_SHOP_PROFILE.taxNumber;
+  const resolvedLogo = shop.logoPreview || shop.logo || DEFAULT_SHOP_PROFILE.logo;
+  const resolvedFooter = shop.receiptFooter || DEFAULT_SHOP_PROFILE.receiptFooter;
+
+  return {
+    ...DEFAULT_SHOP_PROFILE,
+    ...shop,
+    name: resolvedName,
+    shopName: resolvedName,
+    address: resolvedAddress,
+    phone: resolvedPhone,
+    email: resolvedEmail,
+    tagline: resolvedTagline,
+    taxNumber: resolvedNtn,
+    logo: resolvedLogo,
+    logoPreview: resolvedLogo,
+    receiptFooter: resolvedFooter
+  };
 };
 
 /**
@@ -277,7 +307,15 @@ export const generateReceiptHTML = (data = {}, options = {}) => {
   const buildItemsHTML = (styleType) => {
     if (isService && serviceDetails) {
       const parts = serviceDetails.parts_used || [];
-      const serviceFee = Number(serviceDetails.service_fee || (grandTotal - parts.reduce((s, p) => s + (p.cost * p.quantity), 0))) || 0;
+      const billableParts = parts.filter(p => !p.is_included);
+      const includedParts = parts.filter(p => p.is_included);
+      const billablePartsSum = billableParts.reduce((s, p) => s + (Number(p.cost || 0) * Number(p.quantity || 1)), 0);
+      const serviceFee = Number(
+        serviceDetails.service_fee !== undefined && serviceDetails.service_fee !== null
+          ? serviceDetails.service_fee
+          : Math.max(0, grandTotal - billablePartsSum)
+      );
+
       return `
         <div style="margin: 4px 0;">
           <table>
@@ -289,20 +327,40 @@ export const generateReceiptHTML = (data = {}, options = {}) => {
               </tr>
             </thead>
             <tbody>
+              ${serviceFee > 0 ? `
               <tr style="border-bottom: 1px dashed #000;">
-                <td class="bold">Labor: ${serviceDetails.service_name || 'Repair'}</td>
+                <td class="bold">Labor / Service: ${serviceDetails.service_name || 'Repair'}</td>
                 <td class="text-center bold">1</td>
                 <td class="text-right bold">${formatMoney(serviceFee)}</td>
               </tr>
-              ${parts.map(p => `
-                <tr style="border-bottom: 1px dashed #000;">
-                  <td style="font-weight: 600;">${p.name || 'Part'}</td>
-                  <td class="text-center" style="font-weight: 600;">${p.quantity || 1}</td>
-                  <td class="text-right bold">${formatMoney((p.cost || 0) * (p.quantity || 1))}</td>
-                </tr>
-              `).join('')}
+              ` : ''}
+              ${parts.map(p => {
+                const isInc = Boolean(p.is_included);
+                const pName = p.name || p.product_name || 'Part';
+                const pQty = Number(p.quantity || 1);
+                const pCost = Number(p.cost || 0);
+                const pTotal = isInc ? 0 : (pCost * pQty);
+                return `
+                  <tr style="border-bottom: 1px dashed #000;">
+                    <td style="font-weight: 600;">
+                      ${pName}
+                      <div style="font-size: ${dims.smallSizePx}px; font-weight: 600; font-style: italic;">
+                        ${isInc ? '[Package Included - Rs. 0]' : `[Extra Part${p.is_external ? ' - Market' : ''}]`}
+                      </div>
+                    </td>
+                    <td class="text-center" style="font-weight: 600;">${pQty}</td>
+                    <td class="text-right bold">${isInc ? 'INCLUDED' : formatMoney(pTotal)}</td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
           </table>
+          ${(includedParts.length > 0 || billableParts.length > 0) ? `
+            <div style="font-size: ${dims.smallSizePx}px; font-weight: 600; margin-top: 4px; padding: 3px 4px; border: 1px dashed #000;">
+              ${includedParts.length > 0 ? `<div>• <strong>Package Parts:</strong> Covered in service price (Rs. 0 extra charge).</div>` : ''}
+              ${billableParts.length > 0 ? `<div>• <strong>Extra Parts:</strong> Billed separately for additional repair work.</div>` : ''}
+            </div>
+          ` : ''}
         </div>
       `;
     }

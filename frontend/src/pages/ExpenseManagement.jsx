@@ -449,19 +449,7 @@ export default function ExpensesPage() {
         setSnackbar({ open: true, message: 'Expense added!', severity: 'success' });
       }
 
-      // Expense save hone ke baad account se paisa deduct karo
-      if (!editingExpense && selectedPaymentAccount?.id) {
-        await db.createTransaction({
-          account_id: selectedPaymentAccount.id,
-          transaction_type: 'debit',
-          amount: Number(formData.amount),
-          description: `Expense: ${formData.title}`,
-          payment_mode: formData.payment_mode,
-          reference_no: formData.receipt_no || `EXP-${Date.now()}`,
-          date: new Date().toISOString(),
-          reference_type: 'expense'
-        });
-      }
+
 
       setExpenseDialog(false);
       setEditingExpense(null);
@@ -932,8 +920,11 @@ export default function ExpensesPage() {
               </Typography>
             )}
           </DialogTitle>
-          <form onSubmit={handleSaveExpense}>
-            <DialogContent sx={{ pt: 2 }}>
+          <form 
+            onSubmit={handleSaveExpense}
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}
+          >
+            <DialogContent sx={{ pt: 2, flex: 1, overflowY: 'auto' }}>
               <Grid container spacing={isMobile ? 1.5 : 2}>
                 <Grid item xs={12} md={6}>
                   <TextField
@@ -1081,12 +1072,19 @@ export default function ExpensesPage() {
                 </Grid>
               </Grid>
             </DialogContent>
-            <DialogActions sx={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 0 }}>
-              <Button fullWidth={isMobile} onClick={() => setExpenseDialog(false)} startIcon={<Close />}>
+            <DialogActions sx={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 1 : 1.5, p: 2, bgcolor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+              <Button fullWidth={isMobile} onClick={() => setExpenseDialog(false)} startIcon={<Close />} variant="outlined">
                 Cancel (Esc)
               </Button>
-              <Button fullWidth={isMobile} type="submit" variant="contained" startIcon={<Save />} sx={{ bgcolor: '#10b981' }} disabled={loading}>
-                {loading ? 'Saving...' : editingExpense ? 'Update' : 'Save'}
+              <Button 
+                fullWidth={isMobile} 
+                type="submit" 
+                variant="contained" 
+                startIcon={<Save />} 
+                sx={{ bgcolor: '#10b981', color: 'white', '&:hover': { bgcolor: '#059669' }, px: 3, py: 1, fontWeight: 'bold' }} 
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : editingExpense ? 'Update Expense' : 'Add Expense'}
               </Button>
             </DialogActions>
           </form>

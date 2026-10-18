@@ -40,9 +40,10 @@ function registerPrintHandlers() {
       const silent = options?.silent !== undefined ? options.silent : true;
       const copies = options?.copies || 1;
 
+      const windowWidth = Math.max(600, options?.pageSize?.width ? Math.round(options.pageSize.width / 200) : 400);
       const printWindow = new BrowserWindow({
-        width: 350,
-        height: 600,
+        width: windowWidth,
+        height: 800,
         show: false,
         webPreferences: {
           nodeIntegration: false,

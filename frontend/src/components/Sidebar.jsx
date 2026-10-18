@@ -61,6 +61,7 @@ const PATH_PERMISSION_MAP = {
   '/expenses': 'expenses',
   '/recovery': 'customers',
   '/accounts': 'reports',
+  '/accounts/statement': 'reports',
   '/reports': 'reports',
   '/history': 'reports',
   '/purchases': 'purchases',

@@ -80,8 +80,17 @@ class ApiClient {
     }
   }
 
-  get(endpoint, params = {}) {
-    const query = new URLSearchParams(params).toString();
+  get(endpoint, paramsOrOptions = {}) {
+    let rawParams = paramsOrOptions && typeof paramsOrOptions === 'object' && paramsOrOptions.params 
+      ? paramsOrOptions.params 
+      : (paramsOrOptions || {});
+    const cleanParams = {};
+    for (const [key, value] of Object.entries(rawParams)) {
+      if (value !== undefined && value !== null && value !== '') {
+        cleanParams[key] = value;
+      }
+    }
+    const query = new URLSearchParams(cleanParams).toString();
     const url = query ? `${endpoint}?${query}` : endpoint;
     return this.request(url, { method: 'GET' });
   }

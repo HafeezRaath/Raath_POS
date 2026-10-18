@@ -112,7 +112,19 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [period, setPeriod] = useState('today');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [chartView, setChartView] = useState('area'); // 'area' or 'bar'
+
+  const handlePeriodChange = (pId) => {
+    if (pId === 'custom') {
+      const today = new Date().toISOString().split('T')[0];
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+      if (!customStartDate) setCustomStartDate(startOfMonth);
+      if (!customEndDate) setCustomEndDate(today);
+    }
+    setPeriod(pId);
+  };
 
   const [stats, setStats] = useState({
     todaySales: 0,
@@ -181,13 +193,17 @@ export default function Dashboard() {
         endDate = endOfLastMonth.toISOString().split('T')[0];
         break;
       }
+      case 'custom':
+        startDate = customStartDate || today;
+        endDate = customEndDate || today;
+        break;
       default:
         startDate = today;
         endDate = today;
     }
 
     return { startDate, endDate, today };
-  }, [period]);
+  }, [period, customStartDate, customEndDate]);
 
   const loadAllData = useCallback(async () => {
     setLoading(true);
@@ -630,7 +646,7 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+        <div className="flex items-center gap-2 self-stretch sm:self-auto flex-wrap">
           {/* Period Selector Tabs */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
             {[
@@ -638,11 +654,12 @@ export default function Dashboard() {
               { id: 'week', label: 'Week' },
               { id: 'month', label: 'Month' },
               { id: 'lastMonth', label: 'Last Mo.' },
+              { id: 'custom', label: 'Custom' },
             ].map((p) => (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setPeriod(p.id)}
+                onClick={() => handlePeriodChange(p.id)}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
                   period === p.id
                     ? 'bg-white text-indigo-600 shadow-xs font-bold'
@@ -653,6 +670,27 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
+
+          {/* Date Range Inputs for Custom Period */}
+          {period === 'custom' && (
+            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200 text-xs shadow-2xs">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-2 py-1 text-xs border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 font-medium"
+                title="From Date"
+              />
+              <span className="text-xs text-slate-400 font-bold">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-2 py-1 text-xs border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 font-medium"
+                title="To Date"
+              />
+            </div>
+          )}
 
           <Button
             variant="outline"

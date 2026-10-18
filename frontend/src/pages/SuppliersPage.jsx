@@ -502,7 +502,7 @@ export default function SuppliersPage() {
           date: p.purchase_date || p.created_at,
           displayDate: formatDate(p.purchase_date || p.created_at),
           type: 'PURCHASE',
-          ref: p.purchase_no || '-',
+          ref: p.purchase_no || p.purchase_number || ('PUR-' + String(p.id).padStart(5, '0')),
           description: `Purchase Invoice (${(p.payment_status || 'due').toUpperCase()})`,
           debit: Number(p.grand_total || 0),
           credit: 0,
@@ -1391,7 +1391,7 @@ export default function SuppliersPage() {
                                   >
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                       <Typography fontWeight="bold" fontSize={{ xs: '0.8rem', sm: '0.875rem' }}>
-                                        {p.purchase_no}
+                                        {p.purchase_no || p.purchase_number || ('PUR-' + String(p.id).padStart(5, '0'))}
                                       </Typography>
                                       {getActivityDateBadge(p.purchase_date || p.created_at)}
                                     </Box>
@@ -1761,7 +1761,7 @@ export default function SuppliersPage() {
                         const due = Number(p.grand_total || 0) - Number(p.paid_amount || 0);
                         return (
                         <TableRow key={p.id}>
-                          <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>{p.purchase_no}</TableCell>
+                          <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>{p.purchase_no || p.purchase_number || ('PUR-' + String(p.id).padStart(5, '0'))}</TableCell>
                           <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>{formatDate(p.purchase_date)}</TableCell>
                           <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                             <Chip size="small" label={p.payment_mode?.toUpperCase() || 'CASH'} sx={{ fontSize: '0.6rem', height: 20 }} />

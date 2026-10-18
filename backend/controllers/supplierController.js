@@ -95,7 +95,15 @@ exports.getSupplierLedger = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    const rows = await query('SELECT * FROM supplier_ledger WHERE tenant_id = ? AND supplier_id = ? ORDER BY id DESC', [tenantId, id]);
+    const rows = await query(
+      `SELECT sl.*,
+              COALESCE(sl.type, sl.reference_type, 'transaction') AS type,
+              COALESCE(sl.amount, GREATEST(sl.debit, sl.credit), 0) AS amount
+       FROM supplier_ledger sl
+       WHERE sl.tenant_id = ? AND sl.supplier_id = ?
+       ORDER BY sl.id DESC`,
+      [tenantId, id]
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     next(error);
@@ -108,6 +116,7 @@ exports.addSupplierPayment = async (req, res, next) => {
     const rawId = req.params.id;
     const supplierId = (rawId && rawId !== '[object Object]') ? rawId : req.body.supplier_id || req.body.id;
     const { 
+      purchase_id,
       amount, 
       payment_method, 
       payment_mode, 
@@ -132,13 +141,13 @@ exports.addSupplierPayment = async (req, res, next) => {
 
     await transaction(async (conn) => {
       // 1. Deduct supplier payable balance
-      await conn.query('UPDATE suppliers SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [paidAmount, tenantId, supplierId]);
+      await conn.query('UPDATE suppliers SET current_balance = GREATEST(0, current_balance - ?) WHERE tenant_id = ? AND id = ?', [paidAmount, tenantId, supplierId]);
 
-      // 2. Add ledger entry
+      // 2. Add ledger entry (Debit reduces liability, Credit is 0)
       await conn.query(
-        `INSERT INTO supplier_ledger (tenant_id, supplier_id, description, debit, credit, balance, reference_type)
-         VALUES (?, ?, ?, 0, ?, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'payment')`,
-        [tenantId, supplierId, noteText, paidAmount, tenantId, supplierId]
+        `INSERT INTO supplier_ledger (tenant_id, supplier_id, date, type, amount, description, debit, credit, balance, reference_type)
+         VALUES (?, ?, ?, 'payment', ?, ?, ?, 0, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'payment')`,
+        [tenantId, supplierId, paymentDate, paidAmount, noteText, paidAmount, tenantId, supplierId]
       );
 
       // 3. Deduct from account if specified
@@ -151,12 +160,56 @@ exports.addSupplierPayment = async (req, res, next) => {
         );
       }
 
+      // Determine purchase reference if available
+      let refNo = null;
+      if (purchase_id) {
+        const [poRows] = await conn.query('SELECT purchase_no, purchase_number FROM purchases WHERE tenant_id = ? AND id = ?', [tenantId, purchase_id]);
+        if (poRows.length > 0) {
+          refNo = poRows[0].purchase_no || poRows[0].purchase_number;
+        }
+      }
+
       // 4. Record into payments table
       await conn.query(
-        `INSERT INTO payments (tenant_id, supplier_id, amount, type, payment_mode, note, date)
-         VALUES (?, ?, ?, 'supplier_payment', ?, ?, ?)`,
-        [tenantId, supplierId, paidAmount, paymentMethod, noteText, paymentDate]
+        `INSERT INTO payments (tenant_id, supplier_id, amount, type, payment_mode, note, date, account_id, reference_no)
+         VALUES (?, ?, ?, 'supplier_payment', ?, ?, ?, ?, ?)`,
+        [tenantId, supplierId, paidAmount, paymentMethod, noteText, paymentDate, account_id || null, refNo]
       );
+
+      // 5. UPDATE PURCHASES so purchase paid/due stays 100% synchronized with supplier balance!
+      if (purchase_id) {
+        const [pRows] = await conn.query('SELECT * FROM purchases WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, purchase_id]);
+        if (pRows.length > 0) {
+          const p = pRows[0];
+          const newPaid = (parseFloat(p.paid_amount) || 0) + paidAmount;
+          const newDue = Math.max(0, (parseFloat(p.grand_total) || 0) - newPaid);
+          const newStatus = newDue <= 0 ? 'paid' : (newPaid > 0 ? 'partial' : 'due');
+          await conn.query(
+            'UPDATE purchases SET paid_amount = ?, due_amount = ?, payment_status = ? WHERE tenant_id = ? AND id = ?',
+            [newPaid, newDue, newStatus, tenantId, purchase_id]
+          );
+        }
+      } else {
+        // General payment: Allocate to unpaid / partially paid purchases of this supplier (FIFO)
+        let remainingToAllocate = paidAmount;
+        const [unpaidPurchases] = await conn.query(
+          'SELECT * FROM purchases WHERE tenant_id = ? AND supplier_id = ? AND is_deleted = 0 AND due_amount > 0 ORDER BY purchase_date ASC, id ASC',
+          [tenantId, supplierId]
+        );
+        for (const p of unpaidPurchases) {
+          if (remainingToAllocate <= 0) break;
+          const pDue = parseFloat(p.due_amount) || 0;
+          const alloc = Math.min(pDue, remainingToAllocate);
+          const newPaid = (parseFloat(p.paid_amount) || 0) + alloc;
+          const newDue = Math.max(0, (parseFloat(p.grand_total) || 0) - newPaid);
+          const newStatus = newDue <= 0 ? 'paid' : (newPaid > 0 ? 'partial' : 'due');
+          await conn.query(
+            'UPDATE purchases SET paid_amount = ?, due_amount = ?, payment_status = ? WHERE tenant_id = ? AND id = ?',
+            [newPaid, newDue, newStatus, tenantId, p.id]
+          );
+          remainingToAllocate -= alloc;
+        }
+      }
     });
 
     const [updatedSup] = await query('SELECT * FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, supplierId]);

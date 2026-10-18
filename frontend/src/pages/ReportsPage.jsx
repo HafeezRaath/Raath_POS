@@ -2283,26 +2283,6 @@ export default function ReportsPage() {
                 />
               ))}
             </Stack>
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<Download fontSize="small" />}
-                onClick={exportCurrentReportPDF}
-                sx={{ bgcolor: '#1c2580', '&:hover': { bgcolor: '#151d66' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Download PDF
-              </Button>
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<Download fontSize="small" />}
-                onClick={exportCurrentReportCSV}
-                sx={{ bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Export CSV
-              </Button>
-            </Stack>
           </Box>
           <Grid container spacing={isMobile ? 1 : 2} alignItems="flex-end">
             <Grid item xs={12} md={4}>
@@ -2510,36 +2490,6 @@ export default function ReportsPage() {
                 sx={{ fontWeight: 'bold' }}
               />
             </Box>
-
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportCurrentReportPDF}
-                sx={{ bgcolor: '#1c2580', '&:hover': { bgcolor: '#151d66' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Download PDF
-              </Button>
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportCurrentReportCSV}
-                sx={{ bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Invoices CSV
-              </Button>
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportItemBreakdownCSV}
-                sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Items CSV
-              </Button>
-            </Stack>
           </Box>
 
           <Grid container spacing={isMobile ? 1 : 2} alignItems="flex-end">
@@ -2625,14 +2575,25 @@ export default function ReportsPage() {
                 Period me kaunsa item kitna sale howa (Units, Revenue, Profit)
               </Typography>
             </Box>
-            <TextField 
-              size="small" 
-              placeholder="Search items..." 
-              value={itemBreakdownSearch} 
-              onChange={(e) => { setItemBreakdownSearch(e.target.value); setItemBreakdownPage(0); }}
-              InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray', fontSize: 18 }} /> }}
-              sx={{ minWidth: isMobile ? '100%' : 220 }}
-            />
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+              <TextField 
+                size="small" 
+                placeholder="Search items..." 
+                value={itemBreakdownSearch} 
+                onChange={(e) => { setItemBreakdownSearch(e.target.value); setItemBreakdownPage(0); }}
+                InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'gray', fontSize: 18 }} /> }}
+                sx={{ minWidth: isMobile ? '100%' : 220 }}
+              />
+              <Button 
+                variant="outlined" 
+                size="small" 
+                startIcon={<Download fontSize="small" />} 
+                onClick={exportItemBreakdownCSV}
+                sx={{ borderColor: '#10b981', color: '#047857', fontWeight: 'bold', height: 38 }}
+              >
+                Export Items CSV
+              </Button>
+            </Box>
           </Box>
 
           <TableContainer sx={{ maxHeight: 320 }}>
@@ -2759,27 +2720,6 @@ export default function ReportsPage() {
               <Chip label="Last 30 Days" clickable size="small" variant="outlined" onClick={() => handleQuickDate(setPurchaseFrom, setPurchaseTo, '30d')} sx={{ fontWeight: 'bold' }} />
               <Chip label="All Time" clickable size="small" variant="outlined" onClick={() => handleQuickDate(setPurchaseFrom, setPurchaseTo, 'all')} sx={{ fontWeight: 'bold' }} />
             </Box>
-
-            <Stack direction="row" spacing={1}>
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportCurrentReportPDF}
-                sx={{ bgcolor: '#1c2580', '&:hover': { bgcolor: '#151d66' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Download PDF
-              </Button>
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportCurrentReportCSV}
-                sx={{ bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Export CSV
-              </Button>
-            </Stack>
           </Box>
 
           <Grid container spacing={isMobile ? 1 : 2} alignItems="flex-end">
@@ -2908,27 +2848,6 @@ export default function ReportsPage() {
               <Chip label="Last 30 Days" clickable size="small" variant="outlined" onClick={() => handleQuickDate(setCustomerFrom, setCustomerTo, '30d')} sx={{ fontWeight: 'bold' }} />
               <Chip label="All Time" clickable size="small" variant="outlined" onClick={() => handleQuickDate(setCustomerFrom, setCustomerTo, 'all')} sx={{ fontWeight: 'bold' }} />
             </Box>
-
-            <Stack direction="row" spacing={1}>
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportCurrentReportPDF}
-                sx={{ bgcolor: '#1c2580', '&:hover': { bgcolor: '#151d66' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Download PDF
-              </Button>
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportCurrentReportCSV}
-                sx={{ bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Export CSV
-              </Button>
-            </Stack>
           </Box>
 
           <Grid container spacing={isMobile ? 1 : 2} alignItems="flex-end">
@@ -3061,27 +2980,6 @@ export default function ReportsPage() {
               }} sx={{ fontWeight: 'bold' }} />
               <Chip label="All Time" clickable size="small" variant="outlined" onClick={() => handleQuickDate(setPlFrom, setPlTo, 'all')} sx={{ fontWeight: 'bold' }} />
             </Box>
-
-            <Stack direction="row" spacing={1}>
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportCurrentReportPDF}
-                sx={{ bgcolor: '#1c2580', '&:hover': { bgcolor: '#151d66' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Download PDF
-              </Button>
-              <Button 
-                variant="contained" 
-                size="small" 
-                startIcon={<Download fontSize="small" />} 
-                onClick={exportCurrentReportCSV}
-                sx={{ bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Export CSV
-              </Button>
-            </Stack>
           </Box>
 
           <Grid container spacing={isMobile ? 1 : 2} alignItems="flex-end">
@@ -3274,29 +3172,11 @@ export default function ReportsPage() {
             </Grid>
             <Grid item xs={12} sm={6} md={7} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
               <Button
-                variant="contained"
-                size="small"
-                startIcon={<Download fontSize="small" />}
-                onClick={exportCurrentReportPDF}
-                sx={{ height: 38, bgcolor: '#1c2580', '&:hover': { bgcolor: '#151d66' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Download PDF
-              </Button>
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<Download fontSize="small" />}
-                onClick={exportCurrentReportCSV}
-                sx={{ height: 38, bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' }, color: '#fff', fontWeight: 'bold' }}
-              >
-                Export CSV
-              </Button>
-              <Button
                 variant="outlined"
                 startIcon={<Refresh />}
                 onClick={loadStockAnalytics}
                 size="small"
-                sx={{ height: 38, borderColor: '#10b981', color: '#10b981' }}
+                sx={{ height: 38, borderColor: '#10b981', color: '#10b981', fontWeight: 'bold' }}
               >
                 Refresh
               </Button>
@@ -3418,27 +3298,6 @@ export default function ReportsPage() {
                 <Chip label="Last 30 Days" clickable size="small" variant="outlined" onClick={() => handleQuickDate(setExpFrom, setExpTo, '30d')} sx={{ fontWeight: 'bold' }} />
                 <Chip label="All Time" clickable size="small" variant="outlined" onClick={() => handleQuickDate(setExpFrom, setExpTo, 'all')} sx={{ fontWeight: 'bold' }} />
               </Box>
-
-              <Stack direction="row" spacing={1}>
-                <Button 
-                  variant="contained" 
-                  size="small" 
-                  startIcon={<Download fontSize="small" />} 
-                  onClick={exportCurrentReportPDF}
-                  sx={{ bgcolor: '#1c2580', '&:hover': { bgcolor: '#151d66' }, color: '#fff', fontWeight: 'bold' }}
-                >
-                  Download PDF
-                </Button>
-                <Button 
-                  variant="contained" 
-                  size="small" 
-                  startIcon={<Download fontSize="small" />} 
-                  onClick={exportCurrentReportCSV}
-                  sx={{ bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' }, color: '#fff', fontWeight: 'bold' }}
-                >
-                  Export CSV
-                </Button>
-              </Stack>
             </Box>
 
             <Grid container spacing={isMobile ? 1 : 2} alignItems="flex-end">
@@ -3660,35 +3519,17 @@ export default function ReportsPage() {
                 />
               </Box>
 
-              <Stack direction="row" spacing={1} flexWrap="wrap">
-                <Button 
-                  variant="contained" 
-                  size="small" 
-                  startIcon={<Download fontSize="small" />} 
-                  onClick={exportCurrentReportPDF}
-                  sx={{ bgcolor: '#1c2580', '&:hover': { bgcolor: '#151d66' }, color: '#fff', fontWeight: 'bold' }}
-                >
-                  Download PDF
-                </Button>
-                <Button 
-                  variant="contained" 
-                  size="small" 
-                  startIcon={<Download fontSize="small" />} 
-                  onClick={exportCurrentReportCSV}
-                  sx={{ bgcolor: '#0284c7', '&:hover': { bgcolor: '#0369a1' }, color: '#fff', fontWeight: 'bold' }}
-                >
-                  Export CSV
-                </Button>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                 <Button 
                   variant="outlined" 
                   size="small" 
                   startIcon={<Refresh />} 
                   onClick={loadExpiryReport} 
-                  sx={{ height: 32, borderColor: '#10b981', color: '#10b981' }}
+                  sx={{ height: 32, borderColor: '#10b981', color: '#10b981', fontWeight: 'bold' }}
                 >
                   Refresh
                 </Button>
-              </Stack>
+              </Box>
             </Box>
 
             <Grid container spacing={isMobile ? 1 : 2} alignItems="center">

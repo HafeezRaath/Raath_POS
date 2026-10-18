@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Paper, Typography, Button, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle,
@@ -336,12 +337,15 @@ const StatCard = React.memo(({ title, amount, icon, color, isMobile }) => (
 
 // ==================== MAIN COMPONENT ====================
 export default function AccountsPage() {
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // ==================== STATE ====================
   const [activeTab, setActiveTab] = useState(0);
   const [accounts, setAccounts] = useState([]);
+  const accountsRef = useRef(accounts);
+  accountsRef.current = accounts;
   const [transactions, setTransactions] = useState([]);
   const [ledgerData, setLedgerData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -364,21 +368,64 @@ export default function AccountsPage() {
   const [filterType, setFilterType] = useState('');
   const [filterTxAccount, setFilterTxAccount] = useState('');
   const [filterTxType, setFilterTxType] = useState('');
-  const [filterDateFrom, setFilterDateFrom] = useState(getStartOfMonth());
-  const [filterDateTo, setFilterDateTo] = useState(getToday());
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [searchTx, setSearchTx] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
   // Account Pagination
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(isMobile ? 10 : 25);
 
-  // Transactions Pagination
+  // Transactions Pagination & Filtered Data
   const [txPage, setTxPage] = useState(1);
   const [txRowsPerPage, setTxRowsPerPage] = useState(25);
+
+  const displayTransactions = useMemo(() => {
+    if (!searchTx || !searchTx.trim()) return transactions;
+    const q = searchTx.toLowerCase().trim();
+    return transactions.filter(t => 
+      (t.description && t.description.toLowerCase().includes(q)) ||
+      (t.account_name && t.account_name.toLowerCase().includes(q)) ||
+      (t.reference_no && t.reference_no.toLowerCase().includes(q)) ||
+      (t.reference_type && t.reference_type.toLowerCase().includes(q)) ||
+      String(t.amount || '').includes(q)
+    );
+  }, [transactions, searchTx]);
+
   const paginatedTransactions = useMemo(() => {
     const start = (txPage - 1) * txRowsPerPage;
-    return transactions.slice(start, start + txRowsPerPage);
-  }, [transactions, txPage, txRowsPerPage]);
+    return displayTransactions.slice(start, start + txRowsPerPage);
+  }, [displayTransactions, txPage, txRowsPerPage]);
+
+  const txSummary = useMemo(() => {
+    let totalIn = 0;
+    let totalOut = 0;
+    displayTransactions.forEach(t => {
+      const amt = Number(t.amount || 0);
+      const isCredit = (t.transaction_type || t.type) === 'credit';
+      if (isCredit) {
+        totalIn += amt;
+      } else {
+        totalOut += amt;
+      }
+    });
+    return {
+      count: displayTransactions.length,
+      totalIn,
+      totalOut,
+      net: totalIn - totalOut
+    };
+  }, [displayTransactions]);
+
+  const handleResetTxFilters = useCallback(() => {
+    setFilterTxAccount('');
+    setFilterTxType('');
+    setFilterDateFrom('');
+    setFilterDateTo('');
+    setSearchTx('');
+    setTxPage(1);
+  }, []);
 
   // Trial Balance Pagination
   const [trialPage, setTrialPage] = useState(0);
@@ -498,7 +545,7 @@ export default function AccountsPage() {
         const amt = Number(entry.amount || 0);
         const debit = entry.debit !== undefined ? Number(entry.debit) : (txType === 'debit' ? amt : 0);
         const credit = entry.credit !== undefined ? Number(entry.credit) : (txType === 'credit' ? amt : 0);
-        const acc = (accounts || []).find(a => String(a.id) === String(entry.account_id));
+        const acc = (accountsRef.current || []).find(a => String(a.id) === String(entry.account_id));
         return {
           ...entry,
           debit,
@@ -532,7 +579,7 @@ export default function AccountsPage() {
     } finally {
       setLoading(false);
     }
-  }, [accounts, ledgerFilterType, ledgerFrom, ledgerTo]);
+  }, [ledgerFilterType, ledgerFrom, ledgerTo]);
 
   // ==================== BULLETPROOF LOAD ACCOUNT DATA ====================
   // ==================== BULLETPROOF LOAD ACCOUNT DATA ====================
@@ -548,62 +595,63 @@ export default function AccountsPage() {
       }
 
       const activeAccounts = (allAccounts || []).filter(a => !a.is_deleted);
-      setAccounts(activeAccounts);
+      setAccounts(prev => {
+        if (prev.length === activeAccounts.length && prev.every((a, i) => a.id === activeAccounts[i].id && a.current_balance === activeAccounts[i].current_balance)) {
+          return prev;
+        }
+        return activeAccounts;
+      });
 
       const totalBalance = round2(activeAccounts.reduce((sum, a) => sum + Number(a.current_balance || 0), 0));
       setStats(prev => ({ ...prev, totalAccounts: activeAccounts.length, totalBalance }));
 
       const txFilters = {};
-      if (filterTxAccount) txFilters.accountId = filterTxAccount;
-      if (filterTxType) txFilters.type = filterTxType;
-      if (filterDateFrom) txFilters.fromDate = filterDateFrom;
-      if (filterDateTo) txFilters.toDate = filterDateTo;
+      if (filterTxAccount && filterTxAccount !== 'all') txFilters.accountId = filterTxAccount;
+      if (filterTxType && filterTxType !== 'all') txFilters.type = filterTxType;
+      if (filterDateFrom) txFilters.startDate = filterDateFrom;
+      if (filterDateTo) txFilters.endDate = filterDateTo;
 
-      let allTransactions = [];
-
-      if (filterTxAccount) {
-        let txs = [];
-        if (db && typeof db.getAccountTransactions === 'function') {
-          txs = await db.getAccountTransactions(filterTxAccount, txFilters).catch(() => []);
-        }
-        if (!txs || !txs.length) {
-          const allTxs = await safeIdbQuery('account_transactions', []);
-          txs = allTxs.filter(t => String(t.account_id) === String(filterTxAccount));
-        }
-        const acc = activeAccounts.find(a => String(a.id) === String(filterTxAccount));
-        allTransactions = (txs || []).map(t => ({ ...t, account_name: acc?.name || `Account #${filterTxAccount}` }));
-      } else {
-        // Fast batch load in a single query
-        let allTxs = [];
-        if (db && typeof db.getAllAccountTransactions === 'function') {
-          allTxs = await db.getAllAccountTransactions().catch(() => []);
-        }
-        if (!allTxs || !allTxs.length) {
-          allTxs = await safeIdbQuery('account_transactions', []);
-        }
-        const accMap = new Map(activeAccounts.map(a => [String(a.id), a.name]));
-        allTransactions = (allTxs || [])
-          .filter(t => {
-            if (filterTxType && t.transaction_type !== filterTxType) return false;
-            if (filterDateFrom && String(t.date || '').substring(0, 10) < filterDateFrom) return false;
-            if (filterDateTo && String(t.date || '').substring(0, 10) > filterDateTo) return false;
-            return true;
-          })
-          .map(t => ({
-            ...t,
-            account_name: accMap.get(String(t.account_id)) || `Account #${t.account_id}`
-          }));
-        allTransactions.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      let allTxs = [];
+      if (db && typeof db.getAllAccountTransactions === 'function') {
+        allTxs = await db.getAllAccountTransactions(txFilters).catch(() => []);
+      } else if (db && typeof db.getAccountTransactions === 'function') {
+        allTxs = await db.getAccountTransactions(filterTxAccount, txFilters).catch(() => []);
+      }
+      if (!allTxs || !allTxs.length) {
+        allTxs = await safeIdbQuery('account_transactions', []);
       }
 
-      setTransactions(allTransactions);
+      const accMap = new Map(activeAccounts.map(a => [String(a.id), a.name]));
+      const formattedTxs = (allTxs || []).map(t => {
+        const type = t.transaction_type || t.type || 'credit';
+        return {
+          ...t,
+          transaction_type: type,
+          type: type,
+          account_name: t.account_name || accMap.get(String(t.account_id)) || (t.account_id ? `Account #${t.account_id}` : '-')
+        };
+      });
+
+      // In-memory filter fallback
+      const filtered = formattedTxs.filter(t => {
+        if (filterTxAccount && filterTxAccount !== 'all' && String(t.account_id) !== String(filterTxAccount)) return false;
+        if (filterTxType && filterTxType !== 'all' && t.transaction_type !== filterTxType) return false;
+        if (filterDateFrom && String(t.date || '').substring(0, 10) < filterDateFrom) return false;
+        if (filterDateTo && String(t.date || '').substring(0, 10) > filterDateTo) return false;
+        return true;
+      });
+
+      filtered.sort((a, b) => new Date(b.date || b.created_at || 0) - new Date(a.date || a.created_at || 0));
+
+      setTransactions(filtered);
 
       const todayStr = getToday();
       let todayCredits = 0, todayDebits = 0;
-      const todayTxs = allTransactions.filter(t => String(t.date || '').substring(0, 10) === todayStr);
-      todayTxs.forEach(t => {
-        if (t.transaction_type === 'credit') todayCredits += Number(t.amount || 0);
-        else todayDebits += Number(t.amount || 0);
+      formattedTxs.forEach(t => {
+        if (String(t.date || '').substring(0, 10) === todayStr) {
+          if (t.transaction_type === 'credit') todayCredits += Number(t.amount || 0);
+          else todayDebits += Number(t.amount || 0);
+        }
       });
 
       setStats({ totalAccounts: activeAccounts.length, totalBalance, todayCredits, todayDebits });
@@ -802,16 +850,20 @@ export default function AccountsPage() {
   useSyncListener(loadAllData);
 
   useEffect(() => {
-    if (activeTab === 7) loadGeneralLedger();
-    else if (activeTab >= 1 && activeTab <= 6) {
+    if (activeTab === 7) {
+      loadGeneralLedger();
+    } else if (activeTab === 2) {
+      loadAccountData();
+    } else if (activeTab >= 1 && activeTab <= 6) {
       loadFinancialData();
     }
-  }, [activeTab, loadGeneralLedger, loadFinancialData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     const timer = setTimeout(() => loadFinancialData(), 600);
     return () => clearTimeout(timer);
-  }, [loadFinancialData]);
+  }, []);
 
   // ==================== ACCOUNT CRUD ====================
   const openAddAccount = () => {
@@ -930,13 +982,12 @@ export default function AccountsPage() {
   };
 
   // ==================== STATEMENT ====================
-  const openStatement = async (account) => {
-    setStatementAccount(account);
-    setStatementFrom(getStartOfMonth());
-    setStatementTo(getToday());
-    setStatementData(null);
-    setStatementDialog(true);
-    loadStatement(account.id, getStartOfMonth(), getToday());
+  const openStatement = (account) => {
+    if (account && account.id) {
+      navigate(`/accounts/${account.id}/statement`);
+    } else {
+      navigate('/accounts/statement');
+    }
   };
 
   const loadStatement = async (accountId, from, to) => {
@@ -990,16 +1041,16 @@ export default function AccountsPage() {
 
   const handleSaveLedgerEntry = async () => {
     try {
-      if (!ledgerEntryForm.account_id) throw new Error('Account select karein');
+      if (!ledgerEntryForm.account_id) throw new Error('Please select an account');
       const amt = round2(ledgerEntryForm.amount);
-      if (!amt || amt <= 0) throw new Error('Sahi amount daalein');
-      if (!ledgerEntryForm.description.trim()) throw new Error('Reason / Description zaroori hai');
+      if (!amt || amt <= 0) throw new Error('Please enter a valid amount');
+      if (!ledgerEntryForm.description.trim()) throw new Error('Description / reason is required');
       await db.createTransaction({
         account_id: ledgerEntryForm.account_id, date: ledgerEntryForm.date || new Date().toISOString(),
         transaction_type: ledgerEntryForm.type, amount: amt, description: ledgerEntryForm.description.trim(),
         payment_mode: ledgerEntryForm.payment_mode, reference_no: ledgerEntryForm.reference_no || '', reference_type: 'manual_entry'
       });
-      setSnackbar({ open: true, message: `${ledgerEntryForm.type === 'credit' ? 'Incoming (Aaya)' : 'Outgoing (Gaya)'} entry saved!`, severity: 'success' });
+      setSnackbar({ open: true, message: `${ledgerEntryForm.type === 'credit' ? 'Incoming (Credit)' : 'Outgoing (Debit)'} entry saved!`, severity: 'success' });
       setLedgerEntryDialog(false);
       await loadAllData();
       if (activeTab === 7) loadGeneralLedger();
@@ -1008,60 +1059,13 @@ export default function AccountsPage() {
     }
   };
 
-  // ==================== PDF / PRINT ====================
+  // ==================== PDF / STATEMENT NAVIGATION ====================
   const handleDownloadPDF = () => {
-    if (!statementData || !statementAccount) return;
-    const printWindow = window.open('', '_blank');
-    const rowsHtml = statementData.transactions.map((tx, i) => `
-      <tr>
-        <td style="padding:6px;border-bottom:1px solid #e5e7eb;">${i + 1}</td>
-        <td style="padding:6px;border-bottom:1px solid #e5e7eb;">${formatDate(tx.date)}</td>
-        <td style="padding:6px;border-bottom:1px solid #e5e7eb;">${tx.description || tx.reference_type || '-'}</td>
-        <td style="padding:6px;border-bottom:1px solid #e5e7eb;text-align:right;color:${tx.transaction_type === 'credit' ? '#10b981' : 'inherit'};">${tx.transaction_type === 'credit' ? formatCurrency(tx.amount) : '-'}</td>
-        <td style="padding:6px;border-bottom:1px solid #e5e7eb;text-align:right;color:${tx.transaction_type === 'debit' ? '#ef4444' : 'inherit'};">${tx.transaction_type === 'debit' ? formatCurrency(tx.amount) : '-'}</td>
-        <td style="padding:6px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:bold;">${formatCurrency(tx.balance_after)}</td>
-      </tr>
-    `).join('');
-
-    printWindow.document.write(`
-      <html><head><title>Account Statement — ${statementAccount.name}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 30px; color: #374151; }
-        .header { text-align: center; border-bottom: 3px solid #10b981; padding-bottom: 15px; margin-bottom: 20px; }
-        .header h1 { margin: 0; color: #111827; font-size: 22px; }
-        .header p { margin: 5px 0 0; color: #6b7280; font-size: 13px; }
-        .meta { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 13px; }
-        .meta-box { background: #f3f4f6; padding: 10px 15px; border-radius: 6px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th { background: #10b981; color: white; text-align: left; padding: 8px; }
-        .summary { margin-top: 20px; display: flex; justify-content: space-between; }
-        .summary-box { text-align: center; padding: 15px; border-radius: 6px; flex: 1; margin: 0 5px; }
-        .footer { text-align: center; margin-top: 30px; font-size: 11px; color: #9ca3af; }
-      </style></head><body>
-        <div class="header"><h1>ACCOUNT STATEMENT</h1><p>${statementAccount.name} — ${getAccountTypeLabel(statementAccount.type)}</p></div>
-        <div class="meta">
-          <div class="meta-box"><strong>Period:</strong> ${statementFrom} to ${statementTo}<br><strong>Account #:</strong> ${statementAccount.account_number || 'N/A'}</div>
-          <div class="meta-box"><strong>Generated:</strong> ${formatDate(new Date().toISOString())}</div>
-        </div>
-        <table><thead><tr><th>#</th><th>Date</th><th>Description</th><th style="text-align:right">In (Credit)</th><th style="text-align:right">Out (Debit)</th><th style="text-align:right">Balance</th></tr></thead>
-        <tbody>
-          <tr style="background:#f9fafb;font-weight:bold;"><td colspan="5" style="padding:6px;">Opening Balance</td><td style="text-align:right;padding:6px;">${formatCurrency(statementData.opening_balance)}</td></tr>
-          ${rowsHtml}
-          <tr style="background:#ecfdf5;font-weight:bold;"><td colspan="3" style="padding:6px;">Closing Balance</td>
-            <td style="text-align:right;padding:6px;color:#10b981;">+${formatCurrency(statementData.total_credits)}</td>
-            <td style="text-align:right;padding:6px;color:#ef4444;">-${formatCurrency(statementData.total_debits)}</td>
-            <td style="text-align:right;padding:6px;">${formatCurrency(statementData.closing_balance)}</td></tr>
-        </tbody></table>
-        <div class="summary">
-          <div class="summary-box" style="background:#ecfdf5;"><div style="font-size:18px;font-weight:bold;color:#10b981;">${formatCurrency(statementData.total_credits)}</div><div style="font-size:11px;color:#065f46;">Total Money In</div></div>
-          <div class="summary-box" style="background:#fef2f2;"><div style="font-size:18px;font-weight:bold;color:#ef4444;">${formatCurrency(statementData.total_debits)}</div><div style="font-size:11px;color:#991b1b;">Total Money Out</div></div>
-          <div class="summary-box" style="background:#eff6ff;"><div style="font-size:18px;font-weight:bold;color:#3b82f6;">${formatCurrency(statementData.closing_balance)}</div><div style="font-size:11px;color:#1e40af;">Closing Balance</div></div>
-        </div>
-        <div class="footer">Powered by Raath Developers • This is a computer generated statement.</div>
-      </body></html>
-    `);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 300);
+    if (statementAccount) {
+      navigate(`/accounts/${statementAccount.id}/statement`);
+    } else {
+      navigate('/accounts/statement');
+    }
   };
 
   // ==================== HANDLERS ====================
@@ -1150,6 +1154,15 @@ export default function AccountsPage() {
           <Button variant="outlined" size="small" color="warning" startIcon={<SwapHoriz />} onClick={openTransfer}>
             {isMobile ? 'Transfer' : 'Transfer'}
           </Button>
+          <Button
+            variant="contained"
+            size="small"
+            sx={{ bgcolor: '#1c2580', '&:hover': { bgcolor: '#151c60' }, color: '#ffffff', fontWeight: 600 }}
+            startIcon={<Visibility />}
+            onClick={() => navigate('/accounts/statement')}
+          >
+            {isMobile ? 'Statement' : 'Account Statement & Ledger'}
+          </Button>
         </Stack>
       </Box>
 
@@ -1236,35 +1249,7 @@ export default function AccountsPage() {
                 </Grid>
               </>
             )}
-            {activeTab === 2 && (
-              <>
-                <Grid item xs={12} md={3}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Account</InputLabel>
-                    <Select value={filterTxAccount} onChange={(e) => setFilterTxAccount(e.target.value)} label="Account">
-                      <MenuItem value="">All Accounts</MenuItem>
-                      {accounts.map(a => <MenuItem key={a.id} value={a.id}>{a.name}</MenuItem>)}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={6} md={3}>
-                  <TextField fullWidth size="small" type="date" label="From" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={6} md={3}>
-                  <TextField fullWidth size="small" type="date" label="To" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} InputLabelProps={{ shrink: true }} />
-                </Grid>
-                <Grid item xs={12} md={3}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Transaction Type</InputLabel>
-                    <Select value={filterTxType} onChange={(e) => setFilterTxType(e.target.value)} label="Transaction Type">
-                      <MenuItem value="">All</MenuItem>
-                      <MenuItem value="credit">Money In (Credit)</MenuItem>
-                      <MenuItem value="debit">Money Out (Debit)</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </>
-            )}
+
           </Grid>
         </Paper>
       )}
@@ -1387,73 +1372,320 @@ export default function AccountsPage() {
       {/* ==================== TAB 2: TRANSACTIONS ==================== */}
       {activeTab === 2 && (
         <Fade in>
-          {isMobile ? (
-            <Box>
-              {loading ? (
-                <Box sx={{ textAlign: 'center', py: 4 }}><LinearProgress /><Typography sx={{ mt: 2 }}>Loading...</Typography></Box>
-              ) : transactions.length === 0 ? (
-                <Paper sx={{ p: 4, textAlign: 'center' }}>
-                  <TrendingUp sx={{ fontSize: 48, color: '#d1d5db' }} />
-                  <Typography color="text.secondary">No transactions found</Typography>
-                </Paper>
-              ) : (
-                transactions.map((tx, idx) => <MobileTransactionCard key={tx.id || idx} tx={tx} index={idx + 1} />)
-              )}
+          <Box>
+            {/* SUMMARY KPIS */}
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' },
+              gap: isMobile ? 1 : 2,
+              mb: 2
+            }}>
+              <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #1c2580', borderRadius: 2 }}>
+                <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase' }}>Transactions</Typography>
+                  <Typography variant="h6" fontWeight="bold" color="#1c2580">{txSummary.count}</Typography>
+                </CardContent>
+              </Card>
+              <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #10b981', borderRadius: 2 }}>
+                <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase' }}>Total Inflow (Credit)</Typography>
+                  <Typography variant="h6" fontWeight="bold" color="#10b981">+{formatCurrency(txSummary.totalIn)}</Typography>
+                </CardContent>
+              </Card>
+              <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #ef4444', borderRadius: 2 }}>
+                <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase' }}>Total Outflow (Debit)</Typography>
+                  <Typography variant="h6" fontWeight="bold" color="#ef4444">-{formatCurrency(txSummary.totalOut)}</Typography>
+                </CardContent>
+              </Card>
+              <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: `4px solid ${txSummary.net >= 0 ? '#10b981' : '#ef4444'}`, borderRadius: 2 }}>
+                <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ textTransform: 'uppercase' }}>Net Movement</Typography>
+                  <Typography variant="h6" fontWeight="bold" color={txSummary.net >= 0 ? '#10b981' : '#ef4444'}>
+                    {formatCurrency(txSummary.net)}
+                  </Typography>
+                </CardContent>
+              </Card>
             </Box>
-          ) : (
-            <Paper>
-              <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
-                <Table size="small" stickyHeader>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: '#1c2580' }}>
-                      <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>#</TableCell>
-                      <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Date</TableCell>
-                      <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Account</TableCell>
-                      <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Description</TableCell>
-                      <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Type</TableCell>
-                      <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">Amount</TableCell>
-                      <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">Balance</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {paginatedTransactions.map((tx, idx) => (
-                      <TableRow key={tx.id || idx} hover>
-                        <TableCell>{(txPage - 1) * txRowsPerPage + idx + 1}</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>{formatDate(tx.date)}</TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="500">{tx.account_name || `Account #${tx.account_id}`}</Typography>
-                          {tx.reference_no && <Typography variant="caption" fontFamily="monospace">{tx.reference_no}</Typography>}
-                        </TableCell>
-                        <TableCell><Typography variant="body2">{tx.description || tx.reference_type || '-'}</Typography></TableCell>
-                        <TableCell>
-                          <Chip size="small" color={tx.transaction_type === 'credit' ? 'success' : 'error'} 
-                            icon={tx.transaction_type === 'credit' ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
-                            label={tx.transaction_type === 'credit' ? 'IN' : 'OUT'} sx={{ height: 20, fontWeight: 'bold' }} />
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold', color: tx.transaction_type === 'credit' ? 'success.main' : 'error.main' }}>
-                          {tx.transaction_type === 'credit' ? '+' : '-'}{formatCurrency(tx.amount)}
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(tx.balance_after)}</TableCell>
-                      </TableRow>
-                    ))}
-                    {transactions.length === 0 && (
-                      <TableRow><TableCell colSpan={7} align="center" sx={{ py: 8 }}><Typography color="text.secondary">No transactions found</Typography></TableCell></TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              <UnifiedPagination
-                count={transactions.length}
-                page={txPage}
-                rowsPerPage={txRowsPerPage}
-                onPageChange={setTxPage}
-                onRowsPerPageChange={(newR) => {
-                  setTxRowsPerPage(newR);
-                  setTxPage(1);
-                }}
-              />
+
+            {/* FILTER TOOLBAR */}
+            <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2, border: '1px solid #e2e8f0', borderRadius: 2 }}>
+              <Grid container spacing={isMobile ? 1.5 : 2} alignItems="center">
+                {/* Account Filter Dropdown */}
+                <Grid item xs={12} sm={6} md={3}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="tx-filter-account-label">Account</InputLabel>
+                    <Select
+                      labelId="tx-filter-account-label"
+                      value={filterTxAccount}
+                      onChange={(e) => { setFilterTxAccount(e.target.value); setTxPage(1); }}
+                      label="Account"
+                    >
+                      <MenuItem value="">
+                        <em>All Accounts ({accounts.length})</em>
+                      </MenuItem>
+                      {accounts.map(a => (
+                        <MenuItem key={a.id} value={a.id}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                            <span>{a.name}</span>
+                            <Chip 
+                              size="small" 
+                              label={formatCurrency(a.current_balance)} 
+                              sx={{ 
+                                height: 20, 
+                                fontSize: '0.7rem', 
+                                fontWeight: 'bold',
+                                bgcolor: Number(a.current_balance) >= 0 ? '#e6f4ea' : '#fce8e6', 
+                                color: Number(a.current_balance) >= 0 ? '#137333' : '#c5221f' 
+                              }} 
+                            />
+                          </Box>
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Transaction Type Filter */}
+                <Grid item xs={12} sm={6} md={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="tx-filter-type-label">Type</InputLabel>
+                    <Select
+                      labelId="tx-filter-type-label"
+                      value={filterTxType}
+                      onChange={(e) => { setFilterTxType(e.target.value); setTxPage(1); }}
+                      label="Type"
+                    >
+                      <MenuItem value="">All Types</MenuItem>
+                      <MenuItem value="credit">Money In (Credit)</MenuItem>
+                      <MenuItem value="debit">Money Out (Debit)</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Search Box */}
+                <Grid item xs={12} sm={6} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search ref #, description..."
+                    value={searchTx}
+                    onChange={(e) => { setSearchTx(e.target.value); setTxPage(1); }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Search fontSize="small" sx={{ color: '#1c2580' }} />
+                        </InputAdornment>
+                      ),
+                      endAdornment: searchTx ? (
+                        <InputAdornment position="end">
+                          <IconButton size="small" onClick={() => { setSearchTx(''); setTxPage(1); }}>
+                            <Close fontSize="small" />
+                          </IconButton>
+                        </InputAdornment>
+                      ) : null
+                    }}
+                  />
+                </Grid>
+
+                {/* Date From */}
+                <Grid item xs={6} sm={3} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="date"
+                    label="From"
+                    value={filterDateFrom}
+                    onChange={(e) => { setFilterDateFrom(e.target.value); setTxPage(1); }}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+
+                {/* Date To */}
+                <Grid item xs={6} sm={3} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="date"
+                    label="To"
+                    value={filterDateTo}
+                    onChange={(e) => { setFilterDateTo(e.target.value); setTxPage(1); }}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+              </Grid>
+
+              {/* Quick Date Pills & Action Buttons */}
+              <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" sx={{ mt: 1.5, flexWrap: 'wrap', gap: 1 }}>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 0.5 }}>
+                  <Button 
+                    size="small" 
+                    variant={filterDateFrom === getToday() && filterDateTo === getToday() ? 'contained' : 'outlined'} 
+                    sx={{ fontSize: '0.75rem', py: 0.25, px: 1, textTransform: 'none' }}
+                    onClick={() => { setFilterDateFrom(getToday()); setFilterDateTo(getToday()); setTxPage(1); }}
+                  >
+                    Today
+                  </Button>
+                  <Button 
+                    size="small" 
+                    variant={filterDateFrom === getStartOfMonth() && filterDateTo === getToday() ? 'contained' : 'outlined'} 
+                    sx={{ fontSize: '0.75rem', py: 0.25, px: 1, textTransform: 'none' }}
+                    onClick={() => { setFilterDateFrom(getStartOfMonth()); setFilterDateTo(getToday()); setTxPage(1); }}
+                  >
+                    This Month
+                  </Button>
+                  <Button 
+                    size="small" 
+                    variant={!filterDateFrom && !filterDateTo ? 'contained' : 'outlined'} 
+                    sx={{ fontSize: '0.75rem', py: 0.25, px: 1, textTransform: 'none' }}
+                    onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setTxPage(1); }}
+                  >
+                    All Time
+                  </Button>
+                </Stack>
+
+                <Stack direction="row" spacing={1}>
+                  {(filterTxAccount || filterTxType || filterDateFrom || filterDateTo || searchTx) && (
+                    <Button 
+                      size="small" 
+                      color="secondary" 
+                      startIcon={<Close fontSize="small" />} 
+                      onClick={handleResetTxFilters}
+                      sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
+                  <Button 
+                    size="small" 
+                    variant="outlined" 
+                    startIcon={<Refresh fontSize="small" />} 
+                    onClick={() => loadAccountData()}
+                    sx={{ fontSize: '0.75rem', textTransform: 'none' }}
+                  >
+                    Refresh
+                  </Button>
+                </Stack>
+              </Stack>
             </Paper>
-          )}
+
+            {/* TRANSACTIONS TABLE / CARDS */}
+            {isMobile ? (
+              <Box>
+                {loading ? (
+                  <Box sx={{ textAlign: 'center', py: 4 }}><LinearProgress /><Typography sx={{ mt: 2 }}>Loading transactions...</Typography></Box>
+                ) : displayTransactions.length === 0 ? (
+                  <Paper sx={{ p: 4, textAlign: 'center' }}>
+                    <TrendingUp sx={{ fontSize: 48, color: '#d1d5db', mb: 1 }} />
+                    <Typography color="text.secondary">No transactions found</Typography>
+                    {(filterTxAccount || filterTxType || filterDateFrom || filterDateTo || searchTx) && (
+                      <Button size="small" variant="outlined" sx={{ mt: 2 }} onClick={handleResetTxFilters}>
+                        Clear Filters
+                      </Button>
+                    )}
+                  </Paper>
+                ) : (
+                  <>
+                    {paginatedTransactions.map((tx, idx) => (
+                      <MobileTransactionCard key={tx.id || idx} tx={tx} index={(txPage - 1) * txRowsPerPage + idx + 1} />
+                    ))}
+                    <UnifiedPagination
+                      count={displayTransactions.length}
+                      page={txPage}
+                      rowsPerPage={txRowsPerPage}
+                      onPageChange={setTxPage}
+                      onRowsPerPageChange={(newR) => {
+                        setTxRowsPerPage(newR);
+                        setTxPage(1);
+                      }}
+                    />
+                  </>
+                )}
+              </Box>
+            ) : (
+              <Paper sx={{ border: '1px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+                <TableContainer sx={{ maxHeight: 'calc(100vh - 380px)' }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: '#1c2580' }}>
+                        <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>#</TableCell>
+                        <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Date</TableCell>
+                        <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Account</TableCell>
+                        <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Description</TableCell>
+                        <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Type</TableCell>
+                        <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">Amount</TableCell>
+                        <TableCell sx={{ bgcolor: '#1c2580', color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">Balance</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {paginatedTransactions.map((tx, idx) => {
+                        const isCredit = (tx.transaction_type || tx.type) === 'credit';
+                        return (
+                          <TableRow key={tx.id || idx} hover>
+                            <TableCell sx={{ color: 'text.secondary', fontWeight: 'bold' }}>{(txPage - 1) * txRowsPerPage + idx + 1}</TableCell>
+                            <TableCell sx={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{formatDate(tx.date)}</TableCell>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight="600" color="#1c2580">{tx.account_name || `Account #${tx.account_id}`}</Typography>
+                              {tx.reference_no && (
+                                <Chip label={tx.reference_no} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem', mt: 0.3 }} />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">{tx.description || tx.reference_type || '-'}</Typography>
+                              {tx.reference_type && tx.description && (
+                                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize', display: 'block' }}>
+                                  Ref: {tx.reference_type.replace(/_/g, ' ')}
+                                </Typography>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Chip 
+                                size="small" 
+                                color={isCredit ? 'success' : 'error'} 
+                                icon={isCredit ? <TrendingUp fontSize="small" /> : <TrendingDown fontSize="small" />}
+                                label={isCredit ? 'IN' : 'OUT'} 
+                                sx={{ height: 22, fontWeight: 'bold' }} 
+                              />
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', color: isCredit ? 'success.main' : 'error.main', fontSize: '0.9rem' }}>
+                              {isCredit ? '+' : '-'}{formatCurrency(tx.amount)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', color: '#1e293b' }}>
+                              {tx.balance_after !== null && tx.balance_after !== undefined ? formatCurrency(tx.balance_after) : '-'}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {displayTransactions.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={7} align="center" sx={{ py: 8 }}>
+                            <TrendingUp sx={{ fontSize: 48, color: '#d1d5db', mb: 1 }} />
+                            <Typography variant="h6" color="text.secondary" fontWeight="500">No transactions found</Typography>
+                            <Typography variant="body2" color="text.secondary">Try clearing or adjusting your filters</Typography>
+                            {(filterTxAccount || filterTxType || filterDateFrom || filterDateTo || searchTx) && (
+                              <Button size="small" variant="outlined" sx={{ mt: 2 }} onClick={handleResetTxFilters}>
+                                Clear All Filters
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <UnifiedPagination
+                  count={displayTransactions.length}
+                  page={txPage}
+                  rowsPerPage={txRowsPerPage}
+                  onPageChange={setTxPage}
+                  onRowsPerPageChange={(newR) => {
+                    setTxRowsPerPage(newR);
+                    setTxPage(1);
+                  }}
+                />
+              </Paper>
+            )}
+          </Box>
         </Fade>
       )}
 
@@ -1707,6 +1939,26 @@ export default function AccountsPage() {
       {activeTab === 6 && (
         <Fade in>
           <Paper sx={{ p: isMobile ? 1.5 : 2 }}>
+            <Paper sx={{ p: 2, mb: 2.5, bgcolor: '#f0fdf4', border: '1px solid #86efac', borderRadius: 2 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems="center" spacing={2}>
+                <Box>
+                  <Typography variant="subtitle1" fontWeight="bold" color="#166534">
+                    Account Statement & Daily Balance Page
+                  </Typography>
+                  <Typography variant="body2" color="#15803d">
+                    View complete account statements with transaction IDs, accurate opening and closing balances, progressive running ledger, and full-page print/export.
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  onClick={() => navigate('/accounts/statement')}
+                  sx={{ bgcolor: '#166534', '&:hover': { bgcolor: '#14532d' }, whiteSpace: 'nowrap', textTransform: 'none', fontWeight: 600 }}
+                >
+                  Open Full Statement Page
+                </Button>
+              </Stack>
+            </Paper>
+
             <Typography variant="h6" fontWeight="bold" color="primary" gutterBottom>
               <Visibility sx={{ verticalAlign: 'middle', mr: 1 }} />Account Statements
             </Typography>
@@ -1777,7 +2029,7 @@ export default function AccountsPage() {
                 <Grid item xs={6} md={3}>
                   <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #1c2580', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                     <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
-                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: isMobile ? '0.75rem' : '0.85rem', mb: 0.5 }} noWrap>Aaj Kitna Aaya (Incoming)</Typography>
+                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: isMobile ? '0.75rem' : '0.85rem', mb: 0.5 }} noWrap>Today Incoming (Credits)</Typography>
                       <Typography variant="h6" fontWeight="bold" color="#1c2580" sx={{ fontSize: isMobile ? '1.05rem' : '1.25rem', lineHeight: 1.2 }} noWrap>{formatCurrency(todayLedgerStats.incoming)}</Typography>
                     </CardContent>
                   </Card>
@@ -1785,7 +2037,7 @@ export default function AccountsPage() {
                 <Grid item xs={6} md={3}>
                   <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #1c2580', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                     <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
-                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: isMobile ? '0.75rem' : '0.85rem', mb: 0.5 }} noWrap>Aaj Kitna Gaya (Outgoing)</Typography>
+                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: isMobile ? '0.75rem' : '0.85rem', mb: 0.5 }} noWrap>Today Outgoing (Debits)</Typography>
                       <Typography variant="h6" fontWeight="bold" color="#1c2580" sx={{ fontSize: isMobile ? '1.05rem' : '1.25rem', lineHeight: 1.2 }} noWrap>{formatCurrency(todayLedgerStats.outgoing)}</Typography>
                     </CardContent>
                   </Card>
@@ -1801,7 +2053,7 @@ export default function AccountsPage() {
                 <Grid item xs={6} md={3}>
                   <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #1c2580', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                     <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
-                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: isMobile ? '0.75rem' : '0.85rem', mb: 0.5 }} noWrap>Total Entries (Aaj)</Typography>
+                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: isMobile ? '0.75rem' : '0.85rem', mb: 0.5 }} noWrap>Total Entries (Today)</Typography>
                       <Typography variant="h6" fontWeight="bold" color="#1c2580" sx={{ fontSize: isMobile ? '1.05rem' : '1.25rem', lineHeight: 1.2 }} noWrap>{todayLedgerStats.count}</Typography>
                     </CardContent>
                   </Card>
@@ -1809,7 +2061,7 @@ export default function AccountsPage() {
               </Grid>
               {Object.keys(todayLedgerStats.byMode).length > 0 && (
                 <Box sx={{ mt: 2 }}>
-                  <Typography variant="caption" fontWeight="bold" color="text.secondary" display="block" gutterBottom>Payment Mode Breakdown (Aaj ka):</Typography>
+                  <Typography variant="caption" fontWeight="bold" color="text.secondary" display="block" gutterBottom>Payment Mode Breakdown (Today):</Typography>
                   <Grid container spacing={1}>
                     {Object.entries(todayLedgerStats.byMode).map(([mode, vals]) => (
                       <Grid item xs={6} md={4} key={mode}>
@@ -2039,103 +2291,7 @@ export default function AccountsPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Statement Dialog */}
-      <Dialog open={statementDialog} onClose={() => setStatementDialog(false)} maxWidth="md" fullWidth fullScreen={isMobile}>
-        <DialogTitle><Visibility sx={{ verticalAlign: 'middle', mr: 1 }} />Account Statement — {statementAccount?.name}</DialogTitle>
-        <DialogContent>
-          <Stack direction={isMobile ? 'column' : 'row'} spacing={2} sx={{ mb: 2 }}>
-            <TextField type="date" label="From" size="small" value={statementFrom} onChange={(e) => setStatementFrom(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={isMobile} />
-            <TextField type="date" label="To" size="small" value={statementTo} onChange={(e) => setStatementTo(e.target.value)} InputLabelProps={{ shrink: true }} fullWidth={isMobile} />
-            <Button variant="contained" size="small" startIcon={<Refresh />} onClick={handleLoadStatement} fullWidth={isMobile}>Load</Button>
-            <Button variant="outlined" size="small" startIcon={<PrintIcon />} onClick={handleDownloadPDF} disabled={!statementData} fullWidth={isMobile}>Print / PDF</Button>
-          </Stack>
-
-          {statementData && (
-            <Box>
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={12} sm={4}>
-                  <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #1c2580', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                    <CardContent sx={{ p: 1.5, textAlign: 'center' }}>
-                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 0.5 }}>Opening Balance</Typography>
-                      <Typography variant="h6" fontWeight="bold" color="#1c2580">{formatCurrency(statementData.opening_balance)}</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #1c2580', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                    <CardContent sx={{ p: 1.5, textAlign: 'center' }}>
-                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 0.5 }}>Closing Balance</Typography>
-                      <Typography variant="h6" fontWeight="bold" color="#1c2580">{formatCurrency(statementData.closing_balance)}</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Card sx={{ bgcolor: '#ffffff', border: '1px solid #e2e8f0', borderTop: '4px solid #1c2580', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                    <CardContent sx={{ p: 1.5, textAlign: 'center' }}>
-                      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 0.5 }}>Net Change</Typography>
-                      <Typography variant="h6" fontWeight="bold" color="#1c2580">{formatCurrency(statementData.closing_balance - statementData.opening_balance)}</Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-
-              <TableContainer component={Paper} variant="outlined">
-                <Table size="small">
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: '#1c2580' }}>
-                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>#</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Date</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }}>Description</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">In (Cr)</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">Out (Dr)</TableCell>
-                      <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: '0.875rem' }} align="right">Balance</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    <TableRow sx={{ bgcolor: 'grey.50' }}>
-                      <TableCell colSpan={5} sx={{ fontWeight: 'bold' }}>Opening Balance</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(statementData.opening_balance)}</TableCell>
-                    </TableRow>
-                    {(statementData.transactions || []).map((tx, i) => (
-                      <TableRow key={tx.id || i} hover>
-                        <TableCell>{i + 1}</TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>{formatDate(tx.date)}</TableCell>
-                        <TableCell>
-                          <Typography variant="body2">{tx.description || tx.reference_type || '-'}</Typography>
-                          {tx.reference_no && <Typography variant="caption" fontFamily="monospace">{tx.reference_no}</Typography>}
-                        </TableCell>
-                        <TableCell align="right" sx={{ color: 'success.main', fontWeight: tx.transaction_type === 'credit' ? 'bold' : 'normal' }}>
-                          {tx.transaction_type === 'credit' ? formatCurrency(tx.amount) : '-'}
-                        </TableCell>
-                        <TableCell align="right" sx={{ color: 'error.main', fontWeight: tx.transaction_type === 'debit' ? 'bold' : 'normal' }}>
-                          {tx.transaction_type === 'debit' ? formatCurrency(tx.amount) : '-'}
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>{formatCurrency(tx.balance_after)}</TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow sx={{ bgcolor: 'grey.50', fontWeight: 'bold' }}>
-                      <TableCell colSpan={3}>Totals</TableCell>
-                      <TableCell align="right" sx={{ color: 'success.main' }}>{formatCurrency(statementData.total_credits)}</TableCell>
-                      <TableCell align="right" sx={{ color: 'error.main' }}>{formatCurrency(statementData.total_debits)}</TableCell>
-                      <TableCell align="right">{formatCurrency(statementData.closing_balance)}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          )}
-
-          {!statementData && !loading && (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <Visibility sx={{ fontSize: 48, color: '#d1d5db' }} />
-              <Typography color="text.secondary">Select date range and click Load to view statement</Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setStatementDialog(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      {/* Note: Account Statement is now on full dedicated page /accounts/:id/statement */}
 
       {/* ==================== ADD LEDGER ENTRY DIALOG ==================== */}
       <Dialog open={ledgerEntryDialog} onClose={() => setLedgerEntryDialog(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
@@ -2160,8 +2316,8 @@ export default function AccountsPage() {
               <FormControl fullWidth>
                 <InputLabel>Type *</InputLabel>
                 <Select value={ledgerEntryForm.type} onChange={(e) => setLedgerEntryForm({ ...ledgerEntryForm, type: e.target.value })} label="Type *">
-                  <MenuItem value="debit">Money Out (Debit) — Paisa Gaya</MenuItem>
-                  <MenuItem value="credit">Money In (Credit) — Paisa Aaya</MenuItem>
+                  <MenuItem value="debit">Money Out (Debit)</MenuItem>
+                  <MenuItem value="credit">Money In (Credit)</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
