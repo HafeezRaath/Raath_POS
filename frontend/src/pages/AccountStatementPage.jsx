@@ -731,7 +731,10 @@ export default function AccountStatementPage() {
             {
               title: "Opening Balance",
               value: statementData.opening_balance,
-              label: "Start of Period"
+              // QA-053: daily override laga ho to wazeh karo (list me master opening dikhta hai)
+              label: statementData.opening_source === 'daily'
+                ? `Daily set (master: Rs. ${Number(statementData.master_opening_balance || 0).toLocaleString()})`
+                : "Start of Period"
             },
             {
               title: "Period Total In",

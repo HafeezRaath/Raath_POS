@@ -391,8 +391,11 @@ exports.getAccountStatement = async (req, res, next) => {
     ).catch(() => []);
 
     let openingBalance = initialOp;
+    // QA-053: kaunsa opening use hua — UI me wazeh ho taa ke list vs statement mismatch samajh aaye
+    let openingSource = 'computed';
     if (dailyRows && dailyRows.length > 0 && dailyRows[0].opening_balance !== null && dailyRows[0].opening_balance !== undefined) {
       openingBalance = parseFloat(dailyRows[0].opening_balance) || 0;
+      openingSource = 'daily';
     } else {
       const priorRows = await query(
         `SELECT 
@@ -406,6 +409,8 @@ exports.getAccountStatement = async (req, res, next) => {
       const priorDebits = parseFloat(priorRows?.[0]?.prior_debits) || 0;
       openingBalance = initialOp + priorCredits - priorDebits;
     }
+    // QA-053: list me account ka master opening_balance dikhta hai — reference ke liye bhejo
+    const masterOpening = Number(initialOp.toFixed(2));
 
     // 2. Fetch all transactions between fromDate and toDate in chronological order
     const txRows = await query(
@@ -455,6 +460,8 @@ exports.getAccountStatement = async (req, res, next) => {
         startDate: fromDate,
         endDate: toDate,
         opening_balance: Number(openingBalance.toFixed(2)),
+        opening_source: openingSource,
+        master_opening_balance: masterOpening,
         closing_balance: closingBalance,
         total_credits: Number(totalCredits.toFixed(2)),
         total_debits: Number(totalDebits.toFixed(2)),
