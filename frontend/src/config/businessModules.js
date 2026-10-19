@@ -128,18 +128,44 @@ export function getModuleDefaults(businessType) {
 // Business-type defaults apply karo (localStorage; Sidebar isi ko parhta hai).
 // Pehle se save ki hui baaki pages ki setting preserve rehti hai;
 // sirf 3 toggleable modules template ke mutabiq set hote hain.
-export function applyBusinessTypeDefaults(businessType) {
+// QA-063: force=true par hi user ki maujooda choice overwrite ho — warna
+// sirf un modules par default lagao jin par user ne kabhi haath nahi lagaya.
+export function applyBusinessTypeDefaults(businessType, force = false) {
   try {
     const saved = JSON.parse(localStorage.getItem('page_visibility') || '{}');
     const tpl = BUSINESS_MODULE_DEFAULTS[businessType] || BUSINESS_MODULE_DEFAULTS.other;
     const next = { ...getModuleDefaults(businessType), ...saved };
-    TOGGLEABLE_MODULES.forEach(m => { next[m.id] = !!tpl[m.id]; });
+    TOGGLEABLE_MODULES.forEach(m => {
+      if (force || saved[m.id] === undefined) next[m.id] = !!tpl[m.id];
+    });
     localStorage.setItem('page_visibility', JSON.stringify(next));
-    localStorage.setItem('page_visibility_source', 'auto:' + businessType);
+    localStorage.setItem('page_visibility_source', (force ? 'reset:' : 'auto:') + businessType);
     return next;
   } catch {
     return null;
   }
+}
+
+// QA-063: login par pehle server (system_settings) se saved page_visibility
+// restore karo — user ki "Visible" choice har fresh session me barqarar rahe.
+// Server par kuch save nahi to business-type defaults lagao.
+// apiGet: (path) => Promise — taa ke ye module apiClient par depend na kare.
+export async function restoreOrApplyModuleVisibility(businessType, apiGet) {
+  try {
+    if (localStorage.getItem('page_visibility')) return; // pehle se set — chhedo mat
+    let restored = null;
+    try {
+      const res = await apiGet('/settings');
+      const pv = res && res.data ? res.data.page_visibility : null;
+      if (pv && typeof pv === 'object' && Object.keys(pv).length) restored = pv;
+    } catch { /* offline/error — defaults par jao */ }
+    if (restored) {
+      localStorage.setItem('page_visibility', JSON.stringify(restored));
+      localStorage.setItem('page_visibility_source', 'server');
+    } else {
+      applyBusinessTypeDefaults(businessType);
+    }
+  } catch { /* non-blocking */ }
 }
 
 // Kya ye module is waqt enabled hai? (default: visible)

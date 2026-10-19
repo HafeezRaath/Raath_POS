@@ -742,29 +742,45 @@ export default function ReturnsPage() {
   // ==================== PRINT RETURN ====================
   const handlePrintReturn = (ret) => {
     const printWindow = window.open('', '_blank');
-    const itemsHtml = returnItemsView.map((item, i) => `
+    // QA-048: shop branding + robust fallbacks (no "undefined", no Rs0.00)
+    let shopName = 'RAATH POS', shopPhone = '', shopAddress = '';
+    try {
+      const sp = JSON.parse(localStorage.getItem('shop_profile') || '{}');
+      shopName = sp.shop_name || sp.name || shopName;
+      shopPhone = sp.phone || sp.shop_phone || '';
+      shopAddress = sp.address || sp.shop_address || '';
+    } catch (_) {}
+    const itemsHtml = returnItemsView.map((item, i) => {
+      const name = item.product_name || item.name || `Item #${item.product_id || ''}`.trim() || 'Item';
+      const variant = item.variant_name || item.variant_sku || '';
+      const qty = item.quantity || item.returned_quantity || 0;
+      const refund = item.unit_price || item.price || item.refund_price || (qty > 0 ? (Number(item.total) || 0) / qty : 0);
+      return `
       <tr>
         <td>${i + 1}</td>
-        <td>${item.product_name} [${item.variant_name || 'Default'}]</td>
-        <td>${item.quantity || item.returned_quantity}</td>
-        <td>${formatCurrency(item.price || item.refund_price)}</td>
-      </tr>
-    `).join('');
+        <td>${name}${variant ? ` [${variant}]` : ''}</td>
+        <td>${qty}</td>
+        <td>${formatCurrency(refund)}</td>
+      </tr>`;
+    }).join('');
 
     printWindow.document.write(`
       <html>
         <head><title>Return Slip #${ret.id}</title></head>
         <body style="font-family: monospace; padding: 15px; width: 58mm; font-size: 11px;">
-          <h3 style="text-align: center; margin: 0;">RETURN RECEIPT</h3>
+          <h3 style="text-align: center; margin: 0;">${shopName}</h3>
+          ${shopAddress ? `<p style="text-align: center; margin: 2px 0; font-size: 10px;">${shopAddress}</p>` : ''}
+          ${shopPhone ? `<p style="text-align: center; margin: 2px 0; font-size: 10px;">${shopPhone}</p>` : ''}
+          <h4 style="text-align: center; margin: 6px 0 0;">RETURN RECEIPT</h4>
           <hr style="border-top: 1px dashed #000;">
-          <p>Slip RET-${ret.id}<br>Original Invoice: ${ret.invoice_no || ret.original_invoice}<br>Date: ${formatDate(ret.return_date)}</p>
+          <p>Slip RET-${ret.id}<br>Original Invoice: ${ret.invoice_no || ret.original_invoice || '-'}<br>Date: ${formatDate(ret.return_date)}<br>Reason: ${ret.reason || '-'}</p>
           <hr style="border-top: 1px dashed #000;">
           <table width="100%" style="font-size: 11px; text-align: left;">
             <thead><tr><th>Item</th><th>Qty</th><th>Refund</th></tr></thead>
             <tbody>${itemsHtml}</tbody>
           </table>
           <hr style="border-top: 1px dashed #000;">
-          <h4 style="text-align: right; margin: 5px 0;">Total Refunded: ${formatCurrency(ret.refund_amount)}</h4>
+          <h4 style="text-align: right; margin: 5px 0;">Total Refunded: ${formatCurrency(ret.total_refund || ret.refund_amount || 0)}</h4>
           <p style="text-align: center; font-size: 9px; margin-top: 15px;">Powered by Raath Developers</p>
         </body>
       </html>

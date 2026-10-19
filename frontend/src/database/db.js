@@ -892,7 +892,7 @@ class DatabaseClient {
   // ==================== SALE RETURN ITEMS ====================
   async getAllSaleReturnItems(returnId) {
     const res = await this.query(
-      'SELECT * FROM sale_return_items' + (returnId ? ' WHERE sale_return_id = ?' : '') + ' ORDER BY id DESC',
+      'SELECT sri.*, p.name AS product_name, pv.sku AS variant_sku FROM sale_return_items sri LEFT JOIN products p ON p.id = sri.product_id LEFT JOIN product_variants pv ON pv.id = sri.product_variant_id' + (returnId ? ' WHERE sri.sale_return_id = ?' : '') + ' ORDER BY sri.id DESC',
       returnId ? [returnId] : []
     );
     return res || [];

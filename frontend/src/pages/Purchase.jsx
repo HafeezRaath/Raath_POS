@@ -1074,7 +1074,8 @@ export default function PurchasePage() {
         purchase_price: Number(item.purchase_price),
         tax_percentage: Number(item.tax_percentage),
         sub_total: Number(item.sub_total || (item.quantity * item.purchase_price)),
-        expiry_date: item.expiry_date || null
+        expiry_date: item.expiry_date || null,
+        imei_list: item.imeiList || ''
       }))
     };
 
@@ -3226,6 +3227,28 @@ const handleProcessReturn = async () => {
                     fontSize: '0.7rem',
                     padding: '2px 4px',
                     height: '36px'
+                  },
+                  '& .MuiInputLabel-root': {
+                    fontSize: '0.65rem'
+                  }
+                }}
+              />
+            </Box>
+            {/* QA-028: IMEI entry for serialized stock at purchase time */}
+            <Box sx={{ flex: '1 1 200px', minWidth: '180px' }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="IMEI Numbers (comma or new line separated)"
+                placeholder="e.g. 351234569513781, 351234564405207"
+                value={currentItem.imeiList || ''}
+                onChange={(e) => setCurrentItem(prev => ({ ...prev, imeiList: e.target.value }))}
+                multiline
+                rows={2}
+                sx={{
+                  '& .MuiInputBase-root': {
+                    fontSize: '0.7rem',
+                    padding: '2px 4px'
                   },
                   '& .MuiInputLabel-root': {
                     fontSize: '0.65rem'

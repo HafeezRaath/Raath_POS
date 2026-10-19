@@ -111,15 +111,13 @@ export function AuthProvider({ children }) {
       localStorage.setItem('raath_tenant_id', tenantId);
       localStorage.setItem('raath_shop_name', userData.shop_name || 'RAATH POS Store');
 
-      // Business-type ke hisaab se module defaults lagao (sirf pehli baar —
-      // agar shop ne pehle se apni visibility customize ki hai to usay chhedo mat)
+      // QA-063: pehle server se saved page_visibility restore karo (user ki choice),
+      // na mile to business-type defaults — taa ke fresh session me "Visible"
+      // modules dashboard par redirect na hon
       try {
-        const already = localStorage.getItem('page_visibility');
-        if (!already) {
-          const { applyBusinessTypeDefaults } = await import('./config/businessModules');
-          const btype = String(userData.business_type || 'retail').toLowerCase();
-          applyBusinessTypeDefaults(btype);
-        }
+        const { restoreOrApplyModuleVisibility } = await import('./config/businessModules');
+        const btype = String(userData.business_type || 'retail').toLowerCase();
+        await restoreOrApplyModuleVisibility(btype, (p) => api.get(p));
       } catch { /* non-blocking */ }
 
       setUser(userData);
@@ -174,12 +172,13 @@ export function AuthProvider({ children }) {
         localStorage.setItem('current_user', JSON.stringify(userData));
         localStorage.setItem('raath_tenant_id', tenantId);
         localStorage.setItem('raath_shop_name', userData.shop_name || 'RAATH POS Store');
-        // Nayi shop: business-type ke mutabiq module defaults (pehli baar hi)
+        // QA-063: nayi shop — pehle server se saved visibility, na mile to defaults
         try {
-          if (!localStorage.getItem('page_visibility')) {
-            const { applyBusinessTypeDefaults } = await import('./config/businessModules');
-            applyBusinessTypeDefaults(String(userData.business_type || 'retail').toLowerCase());
-          }
+          const { restoreOrApplyModuleVisibility } = await import('./config/businessModules');
+          await restoreOrApplyModuleVisibility(
+            String(userData.business_type || 'retail').toLowerCase(),
+            (p) => api.get(p)
+          );
         } catch { /* non-blocking */ }
         setUser(userData);
         setIsAuthenticated(true);

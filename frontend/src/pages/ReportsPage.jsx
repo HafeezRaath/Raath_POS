@@ -787,6 +787,14 @@ export default function ReportsPage() {
           ? s.items 
           : (saleItemsMap.get(String(s.id)) || (s.invoice_no ? saleItemsMap.get(String(s.invoice_no)) : []) || []);
         
+        // QA-037: allocate the bill's grand_total across its items proportionally,
+        // so the item breakdown always reconciles with the headline (bill-level
+        // discounts/taxes no longer inflate the item revenue total).
+        const itemsGross = items.reduce((sum, i) => sum + (Number(i.total) || 0), 0);
+        const billTotal = Number(s.grand_total) || 0;
+        const factor = itemsGross > 0 ? billTotal / itemsGross : 0;
+        items = items.map(i => ({ ...i, _adjTotal: round2((Number(i.total) || 0) * factor) }));
+
         return {
           ...s,
           total_items: items.length,
@@ -809,6 +817,18 @@ export default function ReportsPage() {
       };
       summary.gross_profit = round2(summary.total_sales - summary.total_cost);
 
+      // QA-038: returns reduce revenue — net sales after refunds
+      const allReturns = await db.getSaleReturns().catch(() => []);
+      const totalReturns = round2((allReturns || []).filter(r => {
+        if (r.is_deleted) return false;
+        const rd = extractDateOnly(r.return_date || r.created_at);
+        if (fromStr && rd < fromStr) return false;
+        if (toStr && rd > toStr) return false;
+        return true;
+      }).reduce((sum, r) => sum + (Number(r.total_refund) || Number(r.refund_amount) || Number(r.total_amount) || 0), 0));
+      summary.total_returns = totalReturns;
+      summary.net_sales = round2(summary.total_sales - totalReturns);
+
       setSalesSummary(summary);
 
       // Item-Wise Sales Breakdown
@@ -819,8 +839,8 @@ export default function ReportsPage() {
           const name = item.product_name || item.name || 'Product';
           const sku = item.sku || '-';
           const qty = Number(item.quantity || item.qty || 0);
-          const price = Number(item.price || 0);
-          const total = round2(Number(item.total) || (qty * price));
+          const price = Number(item.unit_price || item.price || 0);
+          const total = round2(Number(item._adjTotal ?? item.total) || (qty * price));
           const unitCost = Number(item.unit_cost || item.purchase_price || 0);
           const cost = round2(unitCost * qty);
 
@@ -1083,7 +1103,7 @@ export default function ReportsPage() {
           price: item.price,
           total: item.total,
           customer_name: parentSale?.customer_name || 'Walk-in',
-          total_profit: round2(((Number(item.price) || 0) - (Number(item.unit_cost) || Number(item.purchase_price) || 0)) * (Number(item.quantity) || Number(item.qty) || 0))
+          total_profit: round2(((Number(item.unit_price) || Number(item.price) || 0) - (Number(item.unit_cost) || Number(item.purchase_price) || 0)) * (Number(item.quantity) || Number(item.qty) || 0))
         };
       }).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 50);
 
@@ -2541,8 +2561,11 @@ export default function ReportsPage() {
           <Grid item xs={6} md={3}>
             <Card sx={{ bgcolor: '#ffffff', borderTop: '4px solid #1c2580', border: '1px solid #e2e8f0', borderRadius: 2, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>Total Revenue</Typography>
-                <Typography variant={isMobile ? 'h6' : 'h5'} sx={{ fontWeight: 800, color: '#1c2580', mt: 0.5 }}>{formatCurrency(salesSummary.total_sales)}</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase' }}>Total Revenue (Net)</Typography>
+                <Typography variant={isMobile ? 'h6' : 'h5'} sx={{ fontWeight: 800, color: '#1c2580', mt: 0.5 }}>{formatCurrency(salesSummary.net_sales ?? salesSummary.total_sales)}</Typography>
+                {(salesSummary.total_returns || 0) > 0 && (
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>Gross {formatCurrency(salesSummary.total_sales)} − Returns {formatCurrency(salesSummary.total_returns)}</Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>

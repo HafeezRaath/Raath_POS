@@ -148,20 +148,34 @@ exports.createSale = async (req, res, next) => {
       // 2. Insert items & deduct inventory
       for (const item of rawItems) {
         const isBundle = !!(item.is_bundle || item.isBundle);
-        const prodId = isBundle ? null : (item.product_id || item.productId || item.id);
+        let prodId = isBundle ? null : (item.product_id || item.productId || item.id);
         const variantId = isBundle ? null : (item.product_variant_id || item.variant_id || item.variantId || null);
+        // QA-055: resolve product_id from variant when missing — never skip stock deduction silently
+        if (!prodId && variantId) {
+          const [pvRows] = await conn.query(`SELECT product_id FROM product_variants WHERE tenant_id = ? AND id = ?`, [tenantId, variantId]);
+          if (pvRows.length > 0) prodId = pvRows[0].product_id;
+        }
         const qty = parseFloat(item.quantity !== undefined ? item.quantity : (item.qty || 1)) || 1;
         const deductQty = parseFloat(item.deduct_quantity !== undefined ? item.deduct_quantity : (item.deductQty !== undefined ? item.deductQty : qty)) || qty;
         const price = parseFloat(item.price !== undefined ? item.price : (item.unit_price || item.sale_price || 0)) || 0;
-        const pCost = parseFloat(item.purchase_price !== undefined ? item.purchase_price : (item.cost_price || item.costPrice || 0)) || 0;
+        let pCost = parseFloat(item.purchase_price !== undefined ? item.purchase_price : (item.cost_price || item.costPrice || 0)) || 0;
+        // QA-002: never snapshot a zero cost — fall back to variant/product master cost
+        if (!pCost && variantId) {
+          const [vRows] = await conn.query(`SELECT purchase_price FROM product_variants WHERE tenant_id = ? AND id = ?`, [tenantId, variantId]);
+          if (vRows.length > 0) pCost = parseFloat(vRows[0].purchase_price) || 0;
+        }
+        if (!pCost && prodId) {
+          const [pRows] = await conn.query(`SELECT purchase_price FROM products WHERE tenant_id = ? AND id = ?`, [tenantId, prodId]);
+          if (pRows.length > 0) pCost = parseFloat(pRows[0].purchase_price) || 0;
+        }
         const disc = parseFloat(item.discount || 0);
         const total = parseFloat(item.total !== undefined ? item.total : (qty * price)) || (qty * price);
         const prodName = item.product_name || item.name || '';
 
         await conn.query(
-          `INSERT INTO sale_items (tenant_id, sale_id, product_id, product_name, variant_id, quantity, unit_price, purchase_price, discount, total)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [tenantId, saleId, prodId, prodName, variantId, qty, price, pCost, disc, total]
+          `INSERT INTO sale_items (tenant_id, sale_id, product_id, product_name, variant_id, quantity, unit_price, price, purchase_price, discount, total)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, saleId, prodId, prodName, variantId, qty, price, price, pCost, disc, total]
         );
 
         // Deduct inventory from variant if available

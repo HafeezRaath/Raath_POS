@@ -3203,7 +3203,7 @@ export default function SettingsPage({ initialTab } = {}) {
                   variant="outlined"
                   size="small"
                   onClick={() => {
-                    const next = applyBusinessTypeDefaults(getShopBusinessType());
+                    const next = applyBusinessTypeDefaults(getShopBusinessType(), true);
                     if (next) {
                       setPageVisibility(next);
                       setHasChanges(true);

@@ -397,15 +397,18 @@ export default function StockTrackingPage() {
           safeDbCall(() => db.getAllPurchaseItems())
         ]);
 
-        const productSaleItems = (allSaleItems || []).filter(si => si.product_variant_id === product.id);
+        // QA-041: Number() se type-safe match (string/number mismatch par history ghaib na ho)
+        const vid = Number(product.id);
+        const productSaleItems = (allSaleItems || []).filter(si => Number(si.product_variant_id) === vid);
         sales = productSaleItems.map(si => {
-          const sale = (allSales || []).find(s => s.id === si.sale_id);
-          return { ...si, invoice_no: sale?.invoice_no, date: sale?.date, customer_name: sale?.customer_name };
+          const sale = (allSales || []).find(s => Number(s.id) === Number(si.sale_id));
+          // QA-041: purani sale_items rows me price NULL hai — unit_price fallback
+          return { ...si, price: si.price || si.unit_price, invoice_no: sale?.invoice_no, date: sale?.date, customer_name: sale?.customer_name };
         }).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
 
-        const productPurchaseItems = (allPurchaseItems || []).filter(pi => pi.product_variant_id === product.id);
+        const productPurchaseItems = (allPurchaseItems || []).filter(pi => Number(pi.product_variant_id) === vid);
         purchases = productPurchaseItems.map(pi => {
-          const purchase = (allPurchases || []).find(p => p.id === pi.purchase_id);
+          const purchase = (allPurchases || []).find(p => Number(p.id) === Number(pi.purchase_id));
           return { ...pi, purchase_no: purchase?.purchase_no, purchase_date: purchase?.purchase_date, supplier_name: purchase?.supplier_name };
         }).sort((a, b) => new Date(b.purchase_date) - new Date(a.purchase_date)).slice(0, 10);
       }
@@ -855,7 +858,7 @@ export default function StockTrackingPage() {
                         <TableCell fontWeight="500">{s.invoice_no}</TableCell>
                         <TableCell>{s.customer_name}</TableCell>
                         <TableCell align="right">{s.quantity}</TableCell>
-                        <TableCell align="right">{formatCurrency(s.price)}</TableCell>
+                        <TableCell align="right">{formatCurrency(s.price || s.unit_price)}</TableCell>
                       </TableRow>
                     ))}
                     {(!productHistory.sales || productHistory.sales.length === 0) && (

@@ -177,6 +177,24 @@ exports.createPurchase = async (req, res, next) => {
             [qty, qty, tenantId, prodId]
           );
         }
+
+        // QA-028: create serialized IMEI devices when imei_list is provided
+        const imeiRaw = it.imei_list || it.imeiList || '';
+        if (imeiRaw && String(imeiRaw).trim()) {
+          const imeis = String(imeiRaw).split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+          for (const imei of imeis) {
+            const [imeiRes] = await conn.query(
+              `INSERT INTO device_imei (tenant_id, product_id, product_variant_id, imei1, purchase_price, sale_price, status, supplier_id, purchase_id, notes)
+               VALUES (?, ?, ?, ?, ?, ?, 'IN_STOCK', ?, ?, 'Added via purchase')`,
+              [tenantId, prodId, variantId || null, imei, unitCost, unitCost, supplier_id || null, purchaseId]
+            );
+            await conn.query(
+              `INSERT INTO device_imei_history (tenant_id, device_imei_id, action, from_status, to_status, ref_type, ref_id, amount, notes)
+               VALUES (?, ?, 'STOCK_IN', NULL, 'IN_STOCK', 'purchase', ?, ?, 'Added via purchase')`,
+              [tenantId, imeiRes.insertId, purchaseId, unitCost]
+            );
+          }
+        }
       }
 
       // 3. Update Supplier balance & ledger if supplier assigned and due amount > 0

@@ -142,6 +142,8 @@ const AppRoutes = React.memo(function AppRoutes() {
         
         {/* ===== SERVICES & DISTRIBUTION ROUTES ===== */}
         <Route path="/services" element={<ProtectedRoute pageId="workorders"><MainLayout><ServicesPage /></MainLayout></ProtectedRoute>} />
+        {/* QA-063: /work-orders alias — purana/bookmarked URL seedha Services (Work Orders) par le jaye */}
+        <Route path="/work-orders" element={<Navigate to="/services" replace />} />
         <Route path="/distribution" element={<ProtectedRoute pageId="distribution"><MainLayout><Distribution /></MainLayout></ProtectedRoute>} />
         <Route path="/payroll" element={<ProtectedRoute pageId="workorders"><MainLayout><PayrollPage /></MainLayout></ProtectedRoute>} />
 
