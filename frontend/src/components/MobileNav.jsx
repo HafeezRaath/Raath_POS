@@ -97,7 +97,7 @@ const MobileNav = memo(() => {
               }`}
             >
               <Icon size={20} />
-              <span className="text-[11px] mt-0.5">{item.label}</span>
+              <span className="text-[13px] mt-0.5">{item.label}</span>
             </Link>
           );
         })}
@@ -117,7 +117,7 @@ const MobileNav = memo(() => {
               }`}
             >
               <Icon size={20} />
-              <span className="text-[11px] mt-0.5">{item.label}</span>
+              <span className="text-[13px] mt-0.5">{item.label}</span>
             </Link>
           );
         })}
@@ -131,7 +131,7 @@ const MobileNav = memo(() => {
           }`}
         >
           <MoreHoriz size={20} />
-          <span className="text-[11px] mt-0.5">More</span>
+          <span className="text-[13px] mt-0.5">More</span>
         </button>
       </div>
 

@@ -269,7 +269,7 @@ export default function LoginPage() {
 
         {/* Demo Login Credentials Box */}
         <div className="mt-6 p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-center">
-          <p className="text-[11px] font-bold text-amber-900 uppercase tracking-wider mb-0.5">
+          <p className="text-[13px] font-bold text-amber-900 uppercase tracking-wider mb-0.5">
             Quick Demo Login
           </p>
           <p className="text-xs text-amber-800">
@@ -306,7 +306,7 @@ export default function LoginPage() {
                 }`}
               >
                 <span className="text-3xl mb-1.5">{bt.icon}</span>
-                <span className={`text-[11px] font-bold text-center leading-tight ${
+                <span className={`text-[13px] font-bold text-center leading-tight ${
                   selectedBusinessType === bt.value ? 'text-white' : 'text-slate-700'
                 }`}>
                   {bt.label}
@@ -319,13 +319,13 @@ export default function LoginPage() {
               <p className="text-sm font-bold text-white">
                 ✓ {BUSINESS_TYPES.find(b => b.value === selectedBusinessType)?.label}
               </p>
-              <p className="text-[11px] text-indigo-200 mt-0.5">
+              <p className="text-[13px] text-indigo-200 mt-0.5">
                 Login ke baad sirf relevant features dikhenge
               </p>
             </div>
           )}
           {!selectedBusinessType && (
-            <p className="text-[11px] text-slate-400 text-center mt-4">
+            <p className="text-[13px] text-slate-400 text-center mt-4">
               (Optional) Select karna zaroori nahi — sab features milenge
             </p>
           )}
@@ -397,21 +397,21 @@ export default function LoginPage() {
             <Alert type="success">Account found! Here are your credentials:</Alert>
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Name</span>
+                <span className="text-[12px] font-bold text-slate-400 uppercase">Name</span>
                 <p className="text-sm font-bold text-slate-800">{foundUser.name}</p>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Email</span>
+                <span className="text-[12px] font-bold text-slate-400 uppercase">Email</span>
                 <p className="text-sm text-slate-800">{foundUser.email}</p>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Role</span>
+                <span className="text-[12px] font-bold text-slate-400 uppercase">Role</span>
                 <div className="mt-0.5">
                   <Badge variant="indigo">{foundUser.role?.toUpperCase() || 'USER'}</Badge>
                 </div>
               </div>
               <div className="pt-2 border-t border-slate-200">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Password</span>
+                <span className="text-[12px] font-bold text-slate-400 uppercase">Password</span>
                 <div className="mt-1 flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200">
                   <span className="font-mono text-sm font-bold text-indigo-600 tracking-wider">
                     {foundUser.password}

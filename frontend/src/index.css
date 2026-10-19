@@ -7,7 +7,7 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
-    font-size: 17px;
+    font-size: 19px; /* Hafeez: poore software me font bara (17px -> 19px) */
     max-width: 100vw;
     overflow-x: hidden;
     font-family: 'Carlito', sans-serif !important;

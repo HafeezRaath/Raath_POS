@@ -451,7 +451,7 @@ export default function Navbar() {
                 <span className="text-lg font-black tracking-wide text-white leading-tight font-sans">
                   RAATH
                 </span>
-                <span className="text-[10px] font-black tracking-widest text-emerald-400 uppercase leading-none">
+                <span className="text-[12px] font-black tracking-widest text-emerald-400 uppercase leading-none">
                   POS SYSTEM
                 </span>
               </div>
@@ -545,7 +545,7 @@ export default function Navbar() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-[#111752]/85 hover:bg-[#111752] focus:bg-[#0d1242] text-white placeholder:text-indigo-200/70 text-xs rounded-xl pl-8 pr-14 py-1.5 border border-indigo-400/35 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-400/25 transition-all shadow-inner backdrop-blur-sm"
               />
-              <span className="absolute right-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-white/10 text-indigo-100 border border-indigo-300/30 pointer-events-none">
+              <span className="absolute right-1.5 px-1.5 py-0.5 rounded text-[12px] font-mono font-semibold bg-white/10 text-indigo-100 border border-indigo-300/30 pointer-events-none">
                 Ctrl+K
               </span>
             </div>
@@ -562,7 +562,7 @@ export default function Navbar() {
                   >
                     <span className="text-blue-400 font-bold">●</span>
                     <span>{item.label}</span>
-                    <span className="text-[10px] text-indigo-300 ml-auto font-mono">{item.path}</span>
+                    <span className="text-[12px] text-indigo-300 ml-auto font-mono">{item.path}</span>
                   </Link>
                 ))}
               </div>
@@ -620,7 +620,7 @@ export default function Navbar() {
                   <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                     <div>
                       <h4 className="text-xs font-bold text-slate-900">Notifications & Alerts</h4>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[13px] text-slate-500">
                         {notifications.length > 0
                           ? `${notifications.length} unread alerts`
                           : 'All caught up!'}
@@ -630,7 +630,7 @@ export default function Navbar() {
                       <button
                         type="button"
                         onClick={() => setNotifications([])}
-                        className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                        className="text-[13px] font-semibold text-indigo-600 hover:text-indigo-800"
                       >
                         Clear all
                       </button>
@@ -659,7 +659,7 @@ export default function Navbar() {
                                 <span className="text-xs font-semibold text-slate-900">
                                   {notif.title}
                                 </span>
-                                <span className="text-[10px] text-slate-400">{notif.time}</span>
+                                <span className="text-[12px] text-slate-400">{notif.time}</span>
                               </div>
                               <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
                                 {notif.desc}
@@ -672,7 +672,7 @@ export default function Navbar() {
                       <div className="py-8 px-4 text-center">
                         <CheckCircle size={32} className="mx-auto text-emerald-500/40 mb-2" />
                         <p className="text-xs font-medium text-slate-600">No active alerts</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
+                        <p className="text-[13px] text-slate-400 mt-0.5">
                           Inventory and payments are in good standing
                         </p>
                       </div>
@@ -761,7 +761,7 @@ export default function Navbar() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold leading-tight">RAATH POS</h3>
-                  <p className="text-[10px] text-blue-200">POINT OF SALE</p>
+                  <p className="text-[12px] text-blue-200">POINT OF SALE</p>
                 </div>
               </div>
               <button
@@ -781,7 +781,7 @@ export default function Navbar() {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-slate-900">{userName}</p>
-                  <span className="text-[10px] font-semibold text-[#1c2580] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                  <span className="text-[12px] font-semibold text-[#1c2580] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                     {roleLabel}
                   </span>
                 </div>
@@ -809,7 +809,7 @@ export default function Navbar() {
                 const Icon = group.icon;
                 return (
                   <div key={group.key} className="space-y-1">
-                    <div className="flex items-center gap-2 px-3 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <div className="flex items-center gap-2 px-3 py-1 text-[13px] font-bold text-slate-400 uppercase tracking-wider">
                       <Icon size={14} />
                       <span>{group.label}</span>
                     </div>

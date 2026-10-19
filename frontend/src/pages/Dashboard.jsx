@@ -786,7 +786,7 @@ export default function Dashboard() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <span className="text-[13px] font-bold text-slate-500 uppercase tracking-wider">
                   Total Revenue ({period})
                 </span>
                 <h3 className="text-2xl font-extrabold text-[#1c2580] mt-1">
@@ -822,7 +822,7 @@ export default function Dashboard() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <span className="text-[13px] font-bold text-slate-500 uppercase tracking-wider">
                   Low Stock Alerts
                 </span>
                 <h3 className="text-2xl font-extrabold text-[#1c2580] mt-1">{stats.lowStock}</h3>
@@ -850,7 +850,7 @@ export default function Dashboard() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <span className="text-[13px] font-bold text-slate-500 uppercase tracking-wider">
                   Expiry Alerts
                 </span>
                 <h3 className={`text-2xl font-extrabold mt-1 ${stats.expiredCount > 0 ? 'text-red-600' : 'text-[#1c2580]'}`}>
@@ -877,7 +877,7 @@ export default function Dashboard() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <span className="text-[13px] font-bold text-slate-500 uppercase tracking-wider">
                   Expenses & Returns
                 </span>
                 <h3 className="text-2xl font-extrabold text-[#1c2580] mt-1">
@@ -906,7 +906,7 @@ export default function Dashboard() {
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <span className="text-[13px] font-bold text-slate-500 uppercase tracking-wider">
                   Active Directory
                 </span>
                 <h3 className="text-2xl font-extrabold text-[#1c2580] mt-1">
@@ -1108,7 +1108,7 @@ export default function Dashboard() {
                   <button 
                     type="button" 
                     onClick={() => navigate('/accounts')}
-                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                    className="text-[13px] font-semibold text-indigo-600 hover:text-indigo-800"
                   >
                     View Accounts &rarr;
                   </button>
@@ -1116,7 +1116,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-2">
                   {systemAccounts.map((acc) => (
                     <div key={acc.id} className="p-2 bg-slate-50 rounded-lg border border-slate-200/60 flex flex-col justify-between">
-                      <span className="text-[11px] text-slate-600 font-medium truncate">{acc.name}</span>
+                      <span className="text-[13px] text-slate-600 font-medium truncate">{acc.name}</span>
                       <span className={`text-xs font-bold ${Number(acc.current_balance) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {formatCurrency(acc.current_balance)}
                       </span>
@@ -1232,7 +1232,7 @@ export default function Dashboard() {
                       <p className="font-bold text-slate-800 truncate max-w-[180px]">
                         {item.product_name}
                       </p>
-                      <span className="text-[10px] text-slate-400 font-mono">
+                      <span className="text-[12px] text-slate-400 font-mono">
                         SKU: {item.sku || 'N/A'}
                       </span>
                     </div>
@@ -1244,7 +1244,7 @@ export default function Dashboard() {
                       >
                         {item.current_stock} left
                       </span>
-                      <span className="text-[10px] text-slate-400 block">
+                      <span className="text-[12px] text-slate-400 block">
                         Limit: {item.stock_alert_quantity}
                       </span>
                     </div>
@@ -1272,12 +1272,12 @@ export default function Dashboard() {
                     className="flex items-center justify-between text-xs"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[10px] flex items-center justify-center flex-shrink-0">
+                      <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 font-bold text-[12px] flex items-center justify-center flex-shrink-0">
                         {idx + 1}
                       </span>
                       <div className="truncate">
                         <p className="font-semibold text-slate-800 truncate">{p.product_name}</p>
-                        <span className="text-[10px] text-slate-400">{p.total_sold} units sold</span>
+                        <span className="text-[12px] text-slate-400">{p.total_sold} units sold</span>
                       </div>
                     </div>
                     <span className="font-bold text-slate-900 flex-shrink-0">
