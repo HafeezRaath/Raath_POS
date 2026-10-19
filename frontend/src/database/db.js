@@ -181,6 +181,12 @@ class DatabaseClient {
     return res.data || [];
   }
 
+  // v77: purchase return detail items ke sath
+  async getPurchaseReturnById(id) {
+    const res = await api.get(`/returns/purchases/${id}`);
+    return res;
+  }
+
   async createPurchaseReturn(data) {
     const res = await api.post('/returns/purchases', data);
     return res;
@@ -1164,7 +1170,10 @@ class DatabaseClient {
   async _syncIDBEMIAfterPayment() { return true; }
 
   async getAllGuarantors() {
-    return this.query('SELECT * FROM emi_guarantors WHERE is_deleted = 0');
+    // v77/QA-019: master `guarantors` table se parho (backend) — emi_guarantors sirf link table hai,
+    // standalone guarantor usme row nahi banata to list khali rehti thi
+    const res = await api.get('/emi/guarantors');
+    return res.data || [];
   }
 
   async getGuarantors(id) {

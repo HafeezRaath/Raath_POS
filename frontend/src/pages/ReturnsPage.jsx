@@ -512,15 +512,35 @@ export default function ReturnsPage() {
         quantity: Number(i.quantity || i.qty || 1),
         price: Number(i.price || i.rate || 0)
       }));
-      
+
+      // v77/QA-031: pehle se returned qty nikalo taake dialog dobara poori qty offer na kare
+      const returnedByKey = {};
+      try {
+        const prevReturns = await db.getSaleReturns({ sale_id: sale.id }).catch(() => []);
+        for (const r of (prevReturns || [])) {
+          const rItems = await db.getSaleReturnItems(r.id).catch(() => []);
+          for (const ri of (rItems || [])) {
+            const key = ri.product_variant_id ? `v${ri.product_variant_id}` : `p${ri.product_id}`;
+            returnedByKey[key] = (returnedByKey[key] || 0) + Number(ri.quantity || 0);
+          }
+        }
+      } catch (_) { /* best-effort */ }
+
       setSaleItems(validItems);
-      setReturnItems(validItems.map(item => ({
-        ...item,
-        selected: false,
-        returnQty: 0,
-        returnPrice: item.price || 0,
-        condition: 'good'
-      })));
+      setReturnItems(validItems.map(item => {
+        const key = item.product_variant_id ? `v${item.product_variant_id}` : `p${item.product_id}`;
+        const alreadyReturned = returnedByKey[key] || 0;
+        const returnable = Math.max(0, Number(item.quantity || 0) - alreadyReturned);
+        return {
+          ...item,
+          selected: false,
+          returnQty: 0,
+          returnPrice: item.price || 0,
+          condition: 'good',
+          alreadyReturned,
+          maxReturnable: returnable
+        };
+      }));
       const defaultAcc = accounts.find(a => 
         sale.payment_mode === 'bank' ? (a.account_type === 'bank' || a.type === 'bank') : (a.account_type === 'cash' || a.type === 'cash')
       ) || accounts[0];
@@ -540,7 +560,10 @@ export default function ReturnsPage() {
   // ==================== HANDLE RETURN LOGIC ====================
   const handleReturnQtyChange = (index, qty) => {
     const updated = [...returnItems];
-    const maxQty = Number(updated[index].quantity || updated[index].qty || 0);
+    // v77/QA-031: already-returned qty dobara offer na ho — maxReturnable tak cap
+    const maxQty = updated[index].maxReturnable !== undefined
+      ? Number(updated[index].maxReturnable || 0)
+      : Number(updated[index].quantity || updated[index].qty || 0);
     const val = Math.min(Number(qty) || 0, maxQty);
     updated[index].returnQty = val;
     updated[index].selected = val > 0;
@@ -551,7 +574,7 @@ export default function ReturnsPage() {
     setReturnItems(prev => prev.map(i => ({
       ...i,
       selected: checked,
-      returnQty: checked ? (i.quantity || i.qty) : 0
+      returnQty: checked ? (i.maxReturnable !== undefined ? Number(i.maxReturnable || 0) : (i.quantity || i.qty)) : 0
     })));
   };
 
@@ -1324,7 +1347,9 @@ export default function ReturnsPage() {
                             onChange={(e) => {
                               const updated = [...returnItems];
                               updated[idx].selected = e.target.checked;
-                              updated[idx].returnQty = e.target.checked ? (item.quantity || item.qty) : 0;
+                              updated[idx].returnQty = e.target.checked
+                                ? (item.maxReturnable !== undefined ? Number(item.maxReturnable || 0) : (item.quantity || item.qty))
+                                : 0;
                               setReturnItems(updated);
                             }} 
                           />
@@ -1333,7 +1358,14 @@ export default function ReturnsPage() {
                           <Typography variant="body2" fontWeight={500}>{item.product_name}</Typography>
                           <Typography variant="caption" color="text.secondary" fontFamily="monospace">{item.sku}</Typography>
                         </TableCell>
-                        <TableCell align="right">{item.quantity || item.qty}</TableCell>
+                        <TableCell align="right">
+                          {item.quantity || item.qty}
+                          {Number(item.alreadyReturned || 0) > 0 && (
+                            <Typography variant="caption" color="warning.main" display="block">
+                              ({item.alreadyReturned} returned)
+                            </Typography>
+                          )}
+                        </TableCell>
                         <TableCell align="right">
                           <TextField 
                             type="number" 

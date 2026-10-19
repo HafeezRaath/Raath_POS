@@ -328,6 +328,38 @@ exports.getPurchaseReturns = async (req, res, next) => {
   }
 };
 
+// v77: purchase return detail (items ke sath) — frontend dialog isko call karta hai
+exports.getPurchaseReturnById = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { id } = req.params;
+    const rows = await query(
+      `SELECT pr.*, s.name AS supplier_name, s.phone AS supplier_phone, p.purchase_no
+       FROM purchase_returns pr
+       LEFT JOIN suppliers s ON s.id = pr.supplier_id AND s.tenant_id = pr.tenant_id
+       LEFT JOIN purchases p ON p.id = pr.purchase_id AND p.tenant_id = pr.tenant_id
+       WHERE pr.tenant_id = ? AND pr.id = ?`,
+      [tenantId, id]
+    );
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Purchase return not found' });
+    }
+    const ret = rows[0];
+    const items = await query(
+      `SELECT pri.*, p.name AS product_name, pv.variant_name, pv.sku AS variant_sku
+       FROM purchase_return_items pri
+       LEFT JOIN products p ON p.id = pri.product_id AND p.tenant_id = pri.tenant_id
+       LEFT JOIN product_variants pv ON pv.id = pri.product_variant_id AND pv.tenant_id = pri.tenant_id
+       WHERE pri.tenant_id = ? AND pri.purchase_return_id = ?`,
+      [tenantId, id]
+    );
+    ret.items = items || [];
+    res.json({ success: true, data: ret });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.createPurchaseReturn = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';

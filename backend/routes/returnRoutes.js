@@ -17,5 +17,6 @@ router.get('/sales/:id', returnController.getSaleReturnById);
 // Purchase Returns
 router.get('/purchases', returnController.getPurchaseReturns);
 router.post('/purchases', returnController.createPurchaseReturn);
+router.get('/purchases/:id', returnController.getPurchaseReturnById);
 
 module.exports = router;
