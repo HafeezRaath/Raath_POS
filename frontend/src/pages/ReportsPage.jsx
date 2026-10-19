@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Box, Paper, Typography, Button, TextField, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle,
@@ -1220,6 +1221,24 @@ export default function ReportsPage() {
     else if (activeTab === 6) loadExpenses();
     else if (activeTab === 7) loadExpiryReport();
   }, [activeTab]);
+
+  // QA-009: doosre page se wapas /reports par aane par data auto-refresh ho
+  const location = useLocation();
+  const firstLocRender = useRef(true);
+  useEffect(() => {
+    if (firstLocRender.current) { firstLocRender.current = false; return; }
+    if (location.pathname === '/reports') {
+      if (activeTab === 0) loadForecasting();
+      else if (activeTab === 1) loadSalesReport();
+      else if (activeTab === 2) loadPurchaseReport();
+      else if (activeTab === 3) loadCustomerReport();
+      else if (activeTab === 4) loadProfitLoss();
+      else if (activeTab === 5) loadStockAnalytics();
+      else if (activeTab === 6) loadExpenses();
+      else if (activeTab === 7) loadExpiryReport();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // Reload forecast when period changes (fixes dead PERIOD controls)
   useEffect(() => {

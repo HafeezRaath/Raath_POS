@@ -7,7 +7,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow, Slider, InputAdornment,
   Tabs, Tab, IconButton, Checkbox, FormGroup, useMediaQuery, useTheme,
   Drawer, Collapse, Fab, Badge, List, ListItem, ListItemText, ListItemIcon,
-  Fade, Zoom, Accordion, AccordionSummary, AccordionDetails
+  Fade, Zoom, Accordion, AccordionSummary, AccordionDetails, CircularProgress
 } from '../components/ui/tailwind-mui';
 import {
   Settings, Store, Person, Receipt, Percent, Notifications,
@@ -328,6 +328,10 @@ export default function SettingsPage({ initialTab } = {}) {
     return idx >= 0 ? idx : 0;
   });
   const [loading, setLoading] = useState(false);
+  // QA-007: "Saving..." sirf asal save par dikhe — initial load/pull par nahi
+  const [saving, setSaving] = useState(false);
+  // QA-007: DB/cloud se settings load hone tak form me defaults flash na hon
+  const [settingsReady, setSettingsReady] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [hasChanges, setHasChanges] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -1025,6 +1029,7 @@ export default function SettingsPage({ initialTab } = {}) {
     setSnackbar({ open: true, message: 'Error loading: ' + err.message, severity: 'error' });
   }
   setLoading(false);
+  setSettingsReady(true); // QA-007: ab form render ho sakta hai bina defaults flash ke
 };
 
   const buildPermissionsMap = (rolesArr) => {
@@ -1098,7 +1103,7 @@ export default function SettingsPage({ initialTab } = {}) {
 
   // ==================== INDIVIDUAL TAB SAVE HANDLERS ====================
   const handleSaveShopProfileOnly = async () => {
-    setLoading(true);
+    setSaving(true);
     try {
       const activeShopId = db.getActiveShopId ? db.getActiveShopId() : (localStorage.getItem('raath_shop_id') || 'shop_5PMP7Vvsa8NYiTWv7aG2kEsE0uB3');
       await db.saveShopProfile(shopProfile);
@@ -1132,11 +1137,11 @@ export default function SettingsPage({ initialTab } = {}) {
     } catch (err) {
       setSnackbar({ open: true, message: 'Error saving shop profile: ' + err.message, severity: 'error' });
     }
-    setLoading(false);
+    setSaving(false);
   };
 
   const handleSaveReceiptSettingsOnly = async () => {
-    setLoading(true);
+    setSaving(true);
     try {
       const activeShopId = db.getActiveShopId ? db.getActiveShopId() : (localStorage.getItem('raath_shop_id') || 'shop_5PMP7Vvsa8NYiTWv7aG2kEsE0uB3');
       await db.saveReceiptSettings(receiptSettings);
@@ -1160,11 +1165,11 @@ export default function SettingsPage({ initialTab } = {}) {
     } catch (err) {
       setSnackbar({ open: true, message: 'Error saving receipt settings: ' + err.message, severity: 'error' });
     }
-    setLoading(false);
+    setSaving(false);
   };
 
   const handleSaveBarcodeSettingsOnly = async () => {
-    setLoading(true);
+    setSaving(true);
     try {
       const activeShopId = db.getActiveShopId ? db.getActiveShopId() : (localStorage.getItem('raath_shop_id') || 'shop_5PMP7Vvsa8NYiTWv7aG2kEsE0uB3');
       await db.saveBarcodeSettings(barcodeSettings);
@@ -1188,12 +1193,12 @@ export default function SettingsPage({ initialTab } = {}) {
     } catch (err) {
       setSnackbar({ open: true, message: 'Error saving barcode settings: ' + err.message, severity: 'error' });
     }
-    setLoading(false);
+    setSaving(false);
   };
 
   // ==================== GLOBAL SAVE HANDLER (ALL SETTINGS + CLOUD SYNC) ====================
   const handleSave = async () => {
-    setLoading(true);
+    setSaving(true);
     try {
       const activeShopId = db.getActiveShopId ? db.getActiveShopId() : (localStorage.getItem('raath_shop_id') || 'shop_5PMP7Vvsa8NYiTWv7aG2kEsE0uB3');
 
@@ -1254,13 +1259,13 @@ export default function SettingsPage({ initialTab } = {}) {
     } catch (err) { 
       setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' }); 
     }
-    setLoading(false);
+    setSaving(false);
   };
 
   const handleReset = async () => {
     if (!window.confirm('WARNING: Reset ALL settings and clear database?')) return;
     if (!window.confirm('FINAL CONFIRMATION: All data permanently deleted?')) return;
-    setLoading(true);
+    setSaving(true);
     try {
       ['shop_profile', 'pos_users', 'receipt_settings', 'barcode_settings', 'tax_settings', 'notification_settings', 'current_user', 'page_visibility'].forEach(k => localStorage.removeItem(k));
 
@@ -1275,7 +1280,7 @@ export default function SettingsPage({ initialTab } = {}) {
     } catch (err) { 
       setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' }); 
     }
-    setLoading(false);
+    setSaving(false);
   };
 
   const persistRoles = useCallback(async (newRoles, newPerms) => {
@@ -1350,13 +1355,13 @@ export default function SettingsPage({ initialTab } = {}) {
     const newRoles = editingRole ? roles.map(r => r.id === editingRole.id ? updatedRole : r) : [...roles, updatedRole];
     const newPerms = buildPermissionsMap(newRoles);
 
-    setLoading(true);
+    setSaving(true);
     try {
       await persistRoles(newRoles, newPerms);
       setRoleDialog(false);
       setSnackbar({ open: true, message: `Role "${updatedRole.label}" ${editingRole ? 'updated' : 'created'}!`, severity: 'success' });
     } catch (e) {}
-    setLoading(false);
+    setSaving(false);
   };
 
   const handleDeleteRole = async (role) => {
@@ -1371,14 +1376,14 @@ export default function SettingsPage({ initialTab } = {}) {
     }
     if (!window.confirm(`Delete role "${role.label}"?`)) return;
 
-    setLoading(true);
+    setSaving(true);
     try {
       const newRoles = roles.filter(r => r.id !== role.id);
       const newPerms = buildPermissionsMap(newRoles);
       await persistRoles(newRoles, newPerms);
       setSnackbar({ open: true, message: `Role "${role.label}" deleted!`, severity: 'success' });
     } catch (e) {}
-    setLoading(false);
+    setSaving(false);
   };
 
   // NEW: Granular CRUD permission toggle
@@ -1457,7 +1462,7 @@ export default function SettingsPage({ initialTab } = {}) {
       setSnackbar({ open: true, message: 'Password must be at least 6 characters!', severity: 'error' });
       return;
     }
-    setLoading(true);
+    setSaving(true);
     try {
       const userData = { 
         name: editingUser.name, 
@@ -1497,7 +1502,7 @@ export default function SettingsPage({ initialTab } = {}) {
     } catch (err) { 
       setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' }); 
     }
-    setLoading(false);
+    setSaving(false);
   };
 
   const refreshUsersList = async () => {
@@ -1523,7 +1528,7 @@ export default function SettingsPage({ initialTab } = {}) {
       return;
     }
     setConfirmDeleteId(null);
-    setLoading(true);
+    setSaving(true);
     try { 
       await db.deleteUser(id); 
       await refreshUsersList(); 
@@ -1531,7 +1536,7 @@ export default function SettingsPage({ initialTab } = {}) {
     } catch (err) { 
       setSnackbar({ open: true, message: 'Error: ' + err.message, severity: 'error' }); 
     }
-    setLoading(false);
+    setSaving(false);
   };
 
   const toggleUserActive = async (id) => {
@@ -1585,8 +1590,8 @@ export default function SettingsPage({ initialTab } = {}) {
           <Button variant="outlined" color="error" size="small" startIcon={<Restore />} onClick={handleReset}>
             {isMobile ? 'Reset' : 'Reset All'}
           </Button>
-          <Button variant="contained" size="small" startIcon={<Save />} onClick={handleSave} disabled={loading} sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, fontWeight: 'bold' }}>
-            {loading ? 'Saving...' : isMobile ? 'Save' : 'Save All Changes'}
+          <Button variant="contained" size="small" startIcon={<Save />} onClick={handleSave} disabled={loading || saving} sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, fontWeight: 'bold' }}>
+            {saving ? 'Saving...' : isMobile ? 'Save' : 'Save All Changes'}
           </Button>
         </Stack>
       </Box>
@@ -1630,6 +1635,13 @@ export default function SettingsPage({ initialTab } = {}) {
         <Fade in>
           <Box>
             <SectionTitle icon={<Store />} title="Shop Profile" subtitle="Your business information appears on receipts and reports" isMobile={isMobile} />
+            {/* QA-007: settings load hone tak skeleton — defaults flash na hon */}
+            {!settingsReady ? (
+              <Box sx={{ py: 4, textAlign: 'center' }}>
+                <CircularProgress size={32} />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Loading shop profile…</Typography>
+              </Box>
+            ) : (
             <Grid container spacing={isMobile ? 1.5 : 3}>
               <Grid item xs={12} md={6}>
                 <SettingCard 
@@ -1852,14 +1864,15 @@ export default function SettingsPage({ initialTab } = {}) {
                     size="medium"
                     startIcon={<Save />} 
                     onClick={handleSaveShopProfileOnly}
-                    disabled={loading}
+                    disabled={saving}
                     sx={{ bgcolor: '#10b981', '&:hover': { bgcolor: '#059669' }, fontWeight: 'bold', px: 3 }}
                   >
-                    Save Shop Profile & Sync
+                    {saving ? 'Saving...' : 'Save Shop Profile & Sync'}
                   </Button>
                 </Box>
               </Grid>
             </Grid>
+            )}
           </Box>
         </Fade>
       )}

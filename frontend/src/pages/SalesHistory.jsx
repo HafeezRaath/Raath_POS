@@ -990,6 +990,23 @@ export default function SalesHistoryPage() {
       const variantMap = new Map((allVariants || []).map(v => [String(v.id), v]));
       const productMap = new Map((allProducts || []).map(p => [String(p.id), p]));
 
+      // QA-046: is sale par hue returns ki per-item returned qty nikalo (annotation ke liye)
+      const returnedQtyMap = new Map();
+      try {
+        const retRows = await db.query(
+          `SELECT sri.product_id, sri.product_variant_id, SUM(sri.quantity) AS returned_qty
+           FROM sale_return_items sri
+           JOIN sale_returns sr ON sr.id = sri.sale_return_id
+           WHERE sr.sale_id = ? AND sr.is_deleted = 0
+           GROUP BY sri.product_id, sri.product_variant_id`,
+          [sale.id]
+        );
+        (retRows || []).forEach(r => {
+          const key = `${r.product_id || ''}|${r.product_variant_id || ''}`;
+          returnedQtyMap.set(key, Number(r.returned_qty || 0));
+        });
+      } catch (_) { /* returns na milen to annotation skip */ }
+
       // Format items to guarantee product_name, sku, quantity, price, discount, total
       let formattedItems = (items || []).map(i => {
         const vId = String(i.product_variant_id || i.variant_id || i.variantId || '');
@@ -1024,6 +1041,10 @@ export default function SalesHistoryPage() {
         const resolvedSku = (i.sku && i.sku !== '-') ? i.sku : (matchedVariant?.sku || matchedProduct?.sku || i.barcode || '-');
         const resolvedVariantName = i.variant_name || matchedVariant?.variant_name || '';
 
+        // QA-046: returned qty annotation
+        const retKey = `${i.product_id || i.productId || ''}|${i.product_variant_id || i.variant_id || i.variantId || ''}`;
+        const returnedQty = returnedQtyMap.get(retKey) || 0;
+
         return {
           ...i,
           product_name: realName,
@@ -1031,6 +1052,7 @@ export default function SalesHistoryPage() {
           variant_name: resolvedVariantName,
           sku: resolvedSku,
           quantity: Number(i.quantity || i.qty || 1),
+          returned_qty: returnedQty,
           price: Number(i.price || i.rate || i.unit_price || 0),
           discount: Number(i.discount || 0),
           total: Number(i.total || ((Number(i.quantity || i.qty || 1) * Number(i.price || 0)) - Number(i.discount || 0)))
@@ -1247,14 +1269,15 @@ export default function SalesHistoryPage() {
         }))
       });
 
-      // ─── 2. SUBTRACT RETURN PRICE FROM ORIGINAL SALE ───
+      // ─── 2. SALE AMOUNTS ADJUST KARO ───
+      // QA-006: original grand_total/subtotal ko kabhi overwrite mat karo —
+      // return ka apna alag record (sale_returns) hai jo link ka kaam karta hai.
       const curGrandTotal = Number(returningSale.grand_total || 0);
-      const curSubtotal = Number(returningSale.subtotal || curGrandTotal);
       const curPaid = Number(returningSale.paid_amount || 0);
       const curDue = Number(returningSale.due_amount || Math.max(0, curGrandTotal - curPaid));
 
-      const newGrandTotal = Math.max(0, curGrandTotal - netRefundCalculatedSum);
-      const newSubtotal = Math.max(0, curSubtotal - netRefundCalculatedSum);
+      // Full return = poori raqam wapas → status 'returned'
+      const isFullReturn = netRefundCalculatedSum >= curGrandTotal;
 
       let newDue = curDue;
       let newPaid = curPaid;
@@ -1271,7 +1294,7 @@ export default function SalesHistoryPage() {
       }
 
       let newStatus = 'paid';
-      if (newGrandTotal <= 0) {
+      if (isFullReturn) {
         newStatus = 'returned';
       } else if (newDue > 0) {
         newStatus = (newPaid > 0 ? 'partial' : 'due');
@@ -1280,8 +1303,7 @@ export default function SalesHistoryPage() {
       }
 
       await db.updateSale(returningSale.id, {
-        grand_total: newGrandTotal,
-        subtotal: newSubtotal,
+        // QA-006: grand_total/subtotal ORIGINAL rehte hain — return sale_returns me linked hai
         paid_amount: newPaid,
         due_amount: newDue,
         payment_status: newStatus
@@ -1978,7 +2000,14 @@ export default function SalesHistoryPage() {
                             <Typography variant="body2" fontWeight={500}>{item.product_name || item.name || 'Item'}</Typography>
                             <Typography variant="caption" color="text.secondary" fontFamily="monospace">{item.sku || '-'}</Typography>
                           </TableCell>
-                          <TableCell align="right" fontWeight={600}>{item.quantity || item.qty || 0}</TableCell>
+                          <TableCell align="right" fontWeight={600}>
+                            {item.quantity || item.qty || 0}
+                            {Number(item.returned_qty || 0) > 0 && (
+                              <Typography variant="caption" color="warning.main" sx={{ display: 'block', fontWeight: 500 }}>
+                                ({item.returned_qty} returned)
+                              </Typography>
+                            )}
+                          </TableCell>
                           <TableCell align="right">{formatCurrency(item.price || 0)}</TableCell>
                           <TableCell align="right" color="error.main">-{formatCurrency(item.discount || 0)}</TableCell>
                           <TableCell align="right" fontWeight="bold">{formatCurrency(item.total || (item.quantity * item.price) || 0)}</TableCell>
