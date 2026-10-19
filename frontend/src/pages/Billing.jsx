@@ -1059,7 +1059,20 @@ export default function BillingPage() {
   const [categories, setCategories] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
-  const [cart, setCart] = useState([]);
+  // QA-064: unheld draft refresh par na khoye — localStorage autosave (held-bill flow alag hai)
+  const [cart, setCart] = useState(() => {
+    try {
+      const saved = localStorage.getItem('billing_draft');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try {
+      if (cart.length > 0) localStorage.setItem('billing_draft', JSON.stringify(cart));
+      else localStorage.removeItem('billing_draft');
+    } catch {}
+  }, [cart]);
   const cartRef = useRef(cart);
   cartRef.current = cart;
   const [partyType, setPartyType] = useState('customer');

@@ -2918,6 +2918,20 @@ export default function SettingsPage({ initialTab } = {}) {
                             <MenuItem value="CODE39">CODE39 (Standard Barcode)</MenuItem>
                           </Select>
                         </FormControl>
+                        {/* QA-058: label scaling options */}
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Label Scale</InputLabel>
+                          <Select
+                            value={barcodeSettings.labelScale || 1}
+                            onChange={(e) => handleBarcodeChange('labelScale', Number(e.target.value))}
+                            label="Label Scale"
+                          >
+                            <MenuItem value={0.75}>Small (75%)</MenuItem>
+                            <MenuItem value={1}>Medium (100% — Default)</MenuItem>
+                            <MenuItem value={1.25}>Large (125%)</MenuItem>
+                            <MenuItem value={1.5}>Extra Large (150%)</MenuItem>
+                          </Select>
+                        </FormControl>
                       </Stack>
                     </SettingCard>
                   </Grid>

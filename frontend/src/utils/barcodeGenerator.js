@@ -121,7 +121,9 @@ export const DEFAULT_BARCODE_SETTINGS = {
   showBarcodeText: true,
   showSku: false,
   barcodeType: 'CODE128',
-  fontSize: 'medium'
+  fontSize: 'medium',
+  // QA-058: label scaling (1 = 100%)
+  labelScale: 1
 };
 
 /**
@@ -185,9 +187,15 @@ export const renderSingleLabelContent = (item, cfg) => {
   const rawPrice = item.retail_price !== undefined ? item.retail_price : (item.price || 0);
   const formattedPrice = Number(rawPrice).toLocaleString();
   const barcodeValue = item.barcode || '00000000';
-  const sku = item.sku || '';
+  // QA-057: SKU mukhtalif keys me ho sakta hai (product vs variant)
+  const sku = item.sku || item.variant_sku || item.product_sku || '';
 
-  const labelHeight = cfg.labelHeight || 25;
+  // QA-058: label scale multiplier
+  const scale = Number(cfg.labelScale) || 1;
+  const labelW = Number(cfg.labelWidth || 38) * scale;
+  const labelH = Number(cfg.labelHeight || 25) * scale;
+
+  const labelHeight = labelH;
   const paddingMm = cfg.marginMm !== undefined ? cfg.marginMm : 1.5;
 
   // Calculate proportional barcode height inside label
@@ -200,8 +208,8 @@ export const renderSingleLabelContent = (item, cfg) => {
 
   return `
     <div class="barcode-sticker" style="
-      width: ${cfg.labelWidth}mm;
-      height: ${cfg.labelHeight}mm;
+      width: ${labelW}mm;
+      height: ${labelH}mm;
       padding: ${paddingMm}mm;
       box-sizing: border-box;
       display: flex;
@@ -262,8 +270,10 @@ export const generateBarcodePrintHtml = (itemsList, customOptions = {}) => {
   };
 
   const columns = Math.min(3, Math.max(1, cfg.columns || 1));
-  const labelWidth = cfg.labelWidth || 38;
-  const labelHeight = cfg.labelHeight || 25;
+  // QA-058: scale yahan bhi apply ho (page layout label size se match kare)
+  const _scale = Number(cfg.labelScale) || 1;
+  const labelWidth = (cfg.labelWidth || 38) * _scale;
+  const labelHeight = (cfg.labelHeight || 25) * _scale;
   const gapMm = columns > 1 ? (cfg.gapMm !== undefined ? cfg.gapMm : 2) : 0;
   const startColumn = Math.min(columns, Math.max(1, cfg.startColumn || 1));
 
