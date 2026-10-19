@@ -472,6 +472,38 @@ export default function ExpensesPage() {
     }
   };
 
+  // QA-051: printable expense voucher
+  const printExpenseVoucher = (expense) => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`
+      <!DOCTYPE html><html><head><title>Expense Voucher ${expense.receipt_no || ''}</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 480px; margin: 20px auto; font-size: 13px; color: #111; }
+        h2 { text-align: center; margin-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        td { padding: 7px 4px; border-bottom: 1px dashed #ddd; }
+        td:first-child { color: #555; width: 40%; }
+        td:last-child { text-align: right; font-weight: bold; }
+        .total td { font-size: 16px; border-bottom: 2px solid #111; }
+        .sign { display: flex; justify-content: space-between; margin-top: 40px; }
+      </style></head><body>
+        <h2>Expense Voucher</h2>
+        <table>
+          <tr><td>Voucher #</td><td>${expense.receipt_no || '-'}</td></tr>
+          <tr><td>Date</td><td>${formatDate(expense.date)}</td></tr>
+          <tr><td>Title</td><td>${expense.title || '-'}</td></tr>
+          <tr><td>Category</td><td>${expense.category_name || '-'}</td></tr>
+          <tr><td>Payment Mode</td><td>${(expense.payment_method || expense.payment_mode || 'cash').toUpperCase()}</td></tr>
+          <tr><td>Description</td><td>${expense.description || '-'}</td></tr>
+          <tr class="total"><td>Amount</td><td>${formatCurrency(expense.amount)}</td></tr>
+        </table>
+        <div class="sign"><div>___________<br/>Prepared By</div><div>___________<br/>Approved By</div></div>
+        <script>window.onload = function() { setTimeout(function() { window.print(); }, 300); };<\/script>
+      </body></html>`);
+    w.document.close();
+  };
+
   // ==================== CATEGORY MANAGEMENT ====================
   const handleAddCategory = async (e) => {
     e.preventDefault();
@@ -877,6 +909,12 @@ export default function ExpensesPage() {
                         <Tooltip title="Delete">
                           <IconButton size="small" color="error" onClick={() => setDeleteConfirm(expense)}>
                             <Delete fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        {/* QA-051: expense voucher print */}
+                        <Tooltip title="Print Voucher">
+                          <IconButton size="small" color="success" onClick={() => printExpenseVoucher(expense)}>
+                            <Print fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       </TableCell>

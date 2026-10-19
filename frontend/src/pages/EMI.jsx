@@ -1948,6 +1948,48 @@ export default function EMI() {
     setExportMenuAnchor(null);
     setSnackbar({ open: true, message: 'Payments PDF opened in new tab!', severity: 'success' });
   };
+
+  // QA-049: printable EMI agreement + down-payment receipt
+  const printEMIAgreement = () => {
+    if (!selectedEMI) return;
+    const e = selectedEMI;
+    const schedRows = (selectedSchedule || []).map((s, i) => `
+      <tr><td>${i + 1}</td><td>${formatDate(s.due_date)}</td>
+      <td class="text-right">${formatCurrency(s.planned_amount)}</td>
+      <td class="text-right">${formatCurrency(s.paid_amount || 0)}</td>
+      <td>${(s.status || 'pending').toUpperCase()}</td></tr>`).join('');
+    const payRows = (selectedPayments || []).map(p => `
+      <tr><td>${p.receipt_no || `PAY-${p.id}`}</td><td>${formatDate(p.payment_date)}</td>
+      <td class="text-right">${formatCurrency(p.amount)}</td>
+      <td>${(p.payment_mode || 'cash').toUpperCase()}</td>
+      <td>${p.is_down_payment ? 'DOWN PAYMENT' : (p.notes || '-')}</td></tr>`).join('');
+    const html = `
+      <h1>EMI Agreement — ${e.application_no}</h1>
+      <div>
+        <div class="summary-box"><div class="summary-label">Customer</div><div class="summary-value" style="font-size:11px">${e.customer_name || 'Walk-in'}</div></div>
+        <div class="summary-box"><div class="summary-label">CNIC</div><div class="summary-value" style="font-size:11px">${e.customer_cnic || e._customer_cnic || '—'}</div></div>
+        <div class="summary-box"><div class="summary-label">Product</div><div class="summary-value" style="font-size:11px">${e.product_name || '-'}</div></div>
+        <div class="summary-box"><div class="summary-label">IMEI</div><div class="summary-value" style="font-size:11px">${e.device_imei || '—'}</div></div>
+      </div>
+      <div style="margin-top:10px">
+        <div class="summary-box"><div class="summary-label">Total Payable</div><div class="summary-value">${formatCurrency(e.total_amount)}</div></div>
+        <div class="summary-box"><div class="summary-label">Down Payment</div><div class="summary-value">${formatCurrency(e.down_payment)}${e.down_payment_method ? ` (${e.down_payment_method})` : ''}</div></div>
+        <div class="summary-box"><div class="summary-label">Monthly EMI</div><div class="summary-value">${formatCurrency(e.emi_amount)}</div></div>
+        <div class="summary-box"><div class="summary-label">Months</div><div class="summary-value">${e.total_months}</div></div>
+        <div class="summary-box"><div class="summary-label">Interest</div><div class="summary-value">${e.interest_rate || 0}%${e.interest_amount ? ` (${formatCurrency(e.interest_amount)})` : ''}</div></div>
+        <div class="summary-box"><div class="summary-label">Remaining</div><div class="summary-value">${formatCurrency(e.remaining_amount)}</div></div>
+      </div>
+      <h2>Installment Schedule</h2>
+      <table><tr><th>#</th><th>Due Date</th><th>Planned</th><th>Paid</th><th>Status</th></tr>${schedRows}</table>
+      <h2>Payments Received</h2>
+      <table><tr><th>Receipt</th><th>Date</th><th>Amount</th><th>Mode</th><th>Notes</th></tr>${payRows}</table>
+      <div style="margin-top:25px; display:flex; justify-content:space-between">
+        <div>______________________<br/>Customer Signature</div>
+        <div>______________________<br/>Shop Authorized Signature</div>
+      </div>`;
+    downloadPDF(`EMI-Agreement-${e.application_no}`, html);
+  };
+
   // ==================== CUSTOMER & PRODUCT HANDLERS ====================
 
   const handleCustomerChange = (e) => {
@@ -3338,6 +3380,8 @@ export default function EMI() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHistoryDialog(false)}>Close</Button>
+          {/* QA-049: printable EMI agreement */}
+          <Button variant="outlined" onClick={printEMIAgreement}>Print Agreement</Button>
         </DialogActions>
       </Dialog>
     );

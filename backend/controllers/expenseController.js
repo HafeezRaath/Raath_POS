@@ -44,19 +44,21 @@ exports.createExpense = async (req, res, next) => {
     const {
       title, amount, category_id = null, category_name = '',
       account_id = null, description = '', date = new Date().toISOString().slice(0, 10),
-      payment_method = 'cash'
+      payment_method = 'cash', receipt_no = ''
     } = req.body;
 
     const parsedAmount = parseFloat(amount) || 0;
     if (!title || parsedAmount <= 0) {
       return res.status(400).json({ success: false, error: 'Valid title and amount required' });
     }
+    // QA-051: receipt number hamesha ho — na bheja gaya ho to generate karo
+    const receiptNo = (receipt_no || '').trim() || ('EXP-' + Date.now());
 
     const createdId = await transaction(async (conn) => {
       const [resIns] = await conn.query(
-        `INSERT INTO expenses (tenant_id, title, amount, category_id, category_name, account_id, description, date, payment_method)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [tenantId, title.trim(), parsedAmount, category_id, category_name, account_id, description, date, payment_method]
+        `INSERT INTO expenses (tenant_id, title, amount, category_id, category_name, account_id, description, date, payment_method, receipt_no)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [tenantId, title.trim(), parsedAmount, category_id, category_name, account_id, description, date, payment_method, receiptNo]
       );
       const expenseId = resIns.insertId;
 

@@ -302,6 +302,40 @@ export default function SuppliersPage() {
     }
   };
   
+  // QA-050: supplier payment receipt print
+  const printSupplierReceipt = (pay) => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`
+      <!DOCTYPE html><html><head><title>Supplier Payment Receipt</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 420px; margin: 20px auto; font-size: 13px; color: #111; }
+        h2 { text-align: center; margin-bottom: 4px; }
+        .center { text-align: center; color: #555; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        td { padding: 6px 4px; border-bottom: 1px dashed #ddd; }
+        td:first-child { color: #555; }
+        td:last-child { text-align: right; font-weight: bold; }
+        .total td { font-size: 16px; border-bottom: 2px solid #111; }
+        .sign { display: flex; justify-content: space-between; margin-top: 40px; }
+      </style></head><body>
+        <h2>Payment Receipt</h2>
+        <div class="center">${viewSupplier?.name || ''}</div>
+        <table>
+          <tr><td>Date</td><td>${formatDate(pay.date)}</td></tr>
+          <tr><td>Receipt #</td><td>SUP-PAY-${pay.id}</td></tr>
+          <tr><td>Supplier</td><td>${viewSupplier?.name || ''}</td></tr>
+          <tr><td>Payment Mode</td><td>${(pay.payment_mode || 'cash').toUpperCase()}</td></tr>
+          <tr><td>Note</td><td>${pay.note || '-'}</td></tr>
+          <tr class="total"><td>Amount Paid</td><td>Rs. ${Number(pay.amount).toLocaleString()}</td></tr>
+          <tr><td>Remaining Payable</td><td>Rs. ${Number(viewSupplier?.current_balance || 0).toLocaleString()}</td></tr>
+        </table>
+        <div class="sign"><div>___________<br/>Received By</div><div>___________<br/>Authorized</div></div>
+        <script>window.onload = function() { setTimeout(function() { window.print(); }, 300); };<\/script>
+      </body></html>`);
+    w.document.close();
+  };
+
   // ==================== HELPER FUNCTIONS ====================
   const getSupplierPurchases = (supplierId) => purchases.filter(p => p.supplier_id === supplierId && !p.is_deleted);
   const getSupplierPayments = (supplierId) => payments.filter(p => p.supplier_id === supplierId);
@@ -1793,6 +1827,7 @@ export default function SuppliersPage() {
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Mode</TableCell>
                         <TableCell sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Note</TableCell>
                         <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Amount</TableCell>
+                        <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', py: 1.5, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Receipt</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -1805,6 +1840,10 @@ export default function SuppliersPage() {
                           <TableCell sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>{p.note || 'N/A'}</TableCell>
                           <TableCell align="right" sx={{ color: 'success.main', fontWeight: 'bold', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                             Rs. {Number(p.amount).toLocaleString()}
+                          </TableCell>
+                          {/* QA-050: receipt print */}
+                          <TableCell align="right">
+                            <Button size="small" variant="outlined" onClick={() => printSupplierReceipt(p)}>Receipt</Button>
                           </TableCell>
                         </TableRow>
                       ))}

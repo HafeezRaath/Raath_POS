@@ -54,7 +54,12 @@ export const ThermalReceipt = React.forwardRef(({
   const change = Math.max(0, Number(sale?.change_amount || sale?.change || (paid - grandTotal)));
   const paymentMode = (sale?.payment_mode || 'CASH').toUpperCase();
 
-  const effectiveFooter = effectiveSettings.footerText || effectiveShop.receiptFooter || 'Thank you for visiting us!\nReturns accepted within 7 days with receipt.';
+  // QA-047: demo placeholder footers ("viral desserts" waghera) ko default se replace karo
+  const rawFooter = effectiveSettings.footerText || effectiveShop.receiptFooter || '';
+  const isDemoFooter = /viral desserts|demo (store|shop)|lorem ipsum/i.test(rawFooter);
+  const effectiveFooter = (!rawFooter || isDemoFooter)
+    ? 'Thank you for visiting us!\nReturns accepted within 7 days with receipt.'
+    : rawFooter;
   const previewMaxWidth = dims.paperWidthMm <= 58 ? 260 : 340;
 
   // FBR and QR calculations
