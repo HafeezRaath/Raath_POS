@@ -16,5 +16,6 @@ router.get('/stock', reportController.getStockReport);
 router.get('/customer-dues', reportController.getCustomerDues);
 router.get('/supplier-dues', reportController.getSupplierDues);
 router.get('/expiry', reportController.getExpiryReport);
+router.get('/top-selling', reportController.getTopSelling); // QA-044
 
 module.exports = router;

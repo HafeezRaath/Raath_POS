@@ -956,8 +956,12 @@ class DatabaseClient {
     return this.getProducts();
   }
 
-  async getTopSellingProducts(limit = 5) {
-    const res = await api.get('/reports/top-selling', { limit }).catch(() => ({ data: [] }));
+  // QA-044: from/to dates backend ko bhejo (pehle ignore ho rahi thin)
+  async getTopSellingProducts(from, to, limit = 20) {
+    const params = { limit };
+    if (from) params.from_date = from;
+    if (to) params.to_date = to;
+    const res = await api.get('/reports/top-selling', params).catch(() => ({ data: [] }));
     return res.data || [];
   }
 

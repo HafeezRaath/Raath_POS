@@ -3035,8 +3035,25 @@ useEffect(() => {
             </Typography>
             <Typography sx={{ fontSize: '0.72rem', color: '#475569' }}>•</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#10b981', fontWeight: 700, fontSize: '0.72rem' }}>
-              <VerifiedUser sx={{ fontSize: 14, color: '#10b981' }} /> Administrator
+              {/* QA-059: actual user role dikhao, hardcoded "Administrator" nahi */}
+              <VerifiedUser sx={{ fontSize: 14, color: '#10b981' }} /> {(() => { try { const u = JSON.parse(localStorage.getItem('current_user') || '{}'); return u.role_name || u.role || 'User'; } catch { return 'User'; } })()}
             </Box>
+            {/* QA-060/QA-061: restricted roles ke liye bhi logout */}
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              sx={{ fontSize: '0.65rem', py: 0.3, textTransform: 'none' }}
+              onClick={() => {
+                localStorage.removeItem('raath_token');
+                localStorage.removeItem('current_user');
+                localStorage.removeItem('raath_tenant_id');
+                localStorage.removeItem('raath_shop_name');
+                window.location.href = '/login';
+              }}
+            >
+              Logout
+            </Button>
           </Box>
         </Paper>
       )}

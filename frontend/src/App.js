@@ -10,6 +10,7 @@ import { useResponsive } from './hooks/useResponsive';
 import { AuthProvider, useAuth } from './AuthContext';
 import { hasPermissionSync } from './role';
 import { isModuleEnabled, TOGGLEABLE_MODULES } from './config/businessModules';
+import AccessDenied from './components/AccessDenied';
 
 const TOGGLEABLE_IDS = new Set(TOGGLEABLE_MODULES.map(m => m.id));
 
@@ -76,7 +77,8 @@ function ProtectedRoute({ children, pageId }) {
 
   if (loading) return <PageLoader />;
   if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />;
-  if (pageId && !hasAccess) return <Navigate to="/" replace />;
+  // QA-060: blank page ki jagah Access Denied dikhao
+  if (pageId && !hasAccess) return <AccessDenied pageName={pageId} />;
   // Business-type ke hisaab se disabled module direct URL se bhi na khule
   if (pageId && TOGGLEABLE_IDS.has(pageId) && !isModuleEnabled(pageId)) {
     return <Navigate to="/" replace />;

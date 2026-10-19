@@ -326,3 +326,31 @@ exports.getExpiryReport = async (req, res, next) => {
   }
 };
 
+
+// --- QA-044: Top selling products (frontend /reports/top-selling call karta tha jo maujood nahi tha) ---
+exports.getTopSelling = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { from_date, to_date, limit = 20 } = req.query;
+    let sql = `
+      SELECT si.product_variant_id, si.product_id,
+             COALESCE(pv.variant_name, p.name, si.product_name, 'Item') AS product_name,
+             COALESCE(pv.sku, p.sku, '') AS sku,
+             SUM(si.quantity) AS total_sold,
+             SUM(si.quantity * COALESCE(si.unit_price, si.price, 0)) AS total_revenue
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      LEFT JOIN product_variants pv ON pv.id = si.product_variant_id
+      LEFT JOIN products p ON p.id = si.product_id
+      WHERE s.tenant_id = ? AND s.is_deleted = 0
+    `;
+    const params = [tenantId];
+    if (from_date) { sql += ` AND DATE(s.sale_date) >= ?`; params.push(from_date); }
+    if (to_date) { sql += ` AND DATE(s.sale_date) <= ?`; params.push(to_date); }
+    sql += ` GROUP BY si.product_variant_id, si.product_id, product_name, sku ORDER BY total_sold DESC LIMIT ${Math.min(parseInt(limit, 10) || 20, 100)}`;
+    const rows = await query(sql, params);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    next(error);
+  }
+};

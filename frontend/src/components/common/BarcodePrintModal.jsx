@@ -17,6 +17,7 @@ import {
   generateCode128Svg,
   printBarcodeJob
 } from '../../utils/barcodeGenerator';
+import { getEffectiveShopProfile } from '../../utils/receiptGenerator';
 import db from '../../database/db';
 
 const BarcodePrintModal = ({
@@ -596,7 +597,8 @@ const BarcodePrintModal = ({
                                 }}
                               >
                                 <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#64748b' }}>
-                                  #{stickerNumber} • {settings.shopName || 'MY STORE'}
+                                  {/* QA-056: configured shop name, fallback chain */}
+                                  #{stickerNumber} • {settings.shopName || getEffectiveShopProfile().name || 'MY STORE'}
                                 </Typography>
                                 <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '0.75rem', lineHeight: 1.1, color: '#0f172a', my: 0.5 }}>
                                   {productName}

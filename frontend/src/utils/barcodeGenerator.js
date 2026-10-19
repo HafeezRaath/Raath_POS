@@ -173,7 +173,14 @@ export const calculateBarcodeLayout = (totalQuantity, columns = 1, startColumn =
  * Build a single sticker's HTML content
  */
 export const renderSingleLabelContent = (item, cfg) => {
-  const shopName = cfg.shopName || 'MY STORE';
+  // QA-056: configured shop name — cfg, phir shop_profile, phir fallback
+  let profileName = '';
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('shop_profile') : null;
+    if (raw) { const sp = JSON.parse(raw); profileName = sp.name || sp.shop_name || ''; }
+    if (!profileName && typeof localStorage !== 'undefined') profileName = localStorage.getItem('raath_shop_name') || '';
+  } catch {}
+  const shopName = cfg.shopName || profileName || 'MY STORE';
   const productName = item.product_name || item.name || 'Product';
   const rawPrice = item.retail_price !== undefined ? item.retail_price : (item.price || 0);
   const formattedPrice = Number(rawPrice).toLocaleString();

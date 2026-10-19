@@ -2383,7 +2383,7 @@ export default function ReportsPage() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    {['Product', 'SKU', 'Stock', 'Sold', 'Velocity', 'Days Left', 'Status', 'Order', 'Value'].map(h => (
+                    {['Product', 'SKU', 'Stock', 'Sold', 'Velocity', 'Days Left', 'Forecast 30d', 'Status', 'Reorder Qty', 'Value'].map(h => (
                       <TableCell key={h} sx={{ bgcolor: '#10b981', color: 'white', fontWeight: 'bold', fontSize: '0.75rem' }}>{h}</TableCell>
                     ))}
                   </TableRow>
@@ -2404,12 +2404,17 @@ export default function ReportsPage() {
                         <TableCell align="right">
                           {v.daily_velocity > 0 ? (
                             <Box>
-                              <Typography fontWeight="bold" color={v.days_remaining <= 7 ? 'error.main' : 'success.main'}>
+                              {/* QA-045: threshold consistent rakho (hardcoded 7 nahi) */}
+                              <Typography fontWeight="bold" color={v.days_remaining <= forecastThreshold ? 'error.main' : 'success.main'}>
                                 {v.days_remaining} days
                               </Typography>
-                              <LinearProgress variant="determinate" value={Math.min((v.days_remaining / 60) * 100, 100)} color={v.days_remaining <= 7 ? 'error' : 'success'} sx={{ height: 4, borderRadius: 2 }} />
+                              <LinearProgress variant="determinate" value={Math.min((v.days_remaining / 60) * 100, 100)} color={v.days_remaining <= forecastThreshold ? 'error' : 'success'} sx={{ height: 4, borderRadius: 2 }} />
                             </Box>
                           ) : 'No data'}
+                        </TableCell>
+                        {/* QA-045: 30-day forecast column */}
+                        <TableCell align="right" fontWeight="500">
+                          {v.daily_velocity > 0 ? `${Math.ceil(v.daily_velocity * 30)} units` : '-'}
                         </TableCell>
                         <TableCell align="center">
                           <Chip size="small" color={status.color} label={status.label} sx={{ height: 18, fontSize: '0.6rem' }} />
