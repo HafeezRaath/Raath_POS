@@ -1039,11 +1039,12 @@ export default function EMI() {
       return;
     }
 
-    const startDate = new Date().toISOString().split('T')[0];
-    const nextDate = new Date();
-    const originalDay = nextDate.getDate();
-    nextDate.setMonth(nextDate.getMonth() + 1);
-    if (nextDate.getDate() !== originalDay) nextDate.setDate(0);
+    const nowLocal = new Date();
+    const pad2 = (n) => String(n).padStart(2, '0');
+    // QA-052: local date (toISOString UTC me 00:00–05:00 PKT par 1 din peeche dega)
+    const startDate = `${nowLocal.getFullYear()}-${pad2(nowLocal.getMonth() + 1)}-${pad2(nowLocal.getDate())}`;
+    const nextDate = new Date(nowLocal.getFullYear(), nowLocal.getMonth() + 1, nowLocal.getDate());
+    if (nextDate.getDate() !== nowLocal.getDate()) nextDate.setDate(0); // month-end clamp
     const appNo = generateApplicationNo();
     const customerObj = customers.find(c => String(c.id) === String(calc.customerId));
 
@@ -1074,7 +1075,7 @@ export default function EMI() {
       source_purchase_price: Number(calc.sourcePurchasePrice || 0),
       paid_months: 0,
       start_date: startDate,
-      next_due_date: nextDate.toISOString().split('T')[0],
+      next_due_date: `${nextDate.getFullYear()}-${pad2(nextDate.getMonth() + 1)}-${pad2(nextDate.getDate())}`,
       due_day: nextDate.getDate(),
       status: 'active',
       salesman_id: null,

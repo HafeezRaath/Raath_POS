@@ -81,6 +81,8 @@ exports.createEMI = async (req, res, next) => {
       shop_location = '', notes = '', guarantors = [],
       // QA-023: extra record fields
       customer_cnic = '', down_payment_method = '', device_imei = '', device_imei_id = null,
+      // QA-024: frontend apna application_no bhejta hai — use hi canonical rakho
+      application_no = '',
     } = req.body;
 
     const tAmount = parseFloat(total_amount) || 0;
@@ -91,12 +93,22 @@ exports.createEMI = async (req, res, next) => {
     // Last installment absorbs remainder: last = remaining - (months-1) * emiAmount
     const emiAmount = months > 0 ? Math.ceil(remaining / months) : 0;
 
-    const appNo = 'EMI-' + Date.now();
+    // QA-024: client ka bheja application_no canonical hai; na aaye to generate karo
+    const appNo = String(application_no || '').trim() || 'EMI-' + Date.now();
 
-    const startDateObj = new Date(start_date);
-    const nextDueObj = new Date(startDateObj);
-    nextDueObj.setMonth(nextDueObj.getMonth() + 1);
-    const nextDueDate = nextDueObj.toISOString().slice(0, 10);
+    // QA-052: date-only strings ko LOCAL time me parse karo (new Date('2026-10-18')
+    // UTC midnight banata hai jo display par 1 din ka farq dalta hai)
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const fmtLocal = (dt) => `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+    const addMonthsLocal = (dateStr, months) => {
+      const [y, m, d] = String(dateStr).slice(0, 10).split('-').map(Number);
+      const dt = new Date(y, (m - 1) + months, d);
+      const targetMonth = (((m - 1) + months) % 12 + 12) % 12;
+      if (dt.getMonth() !== targetMonth) dt.setDate(0); // month-end clamp
+      return fmtLocal(dt);
+    };
+
+    const nextDueDate = addMonthsLocal(start_date, 1);
 
     const emiId = await transaction(async (conn) => {
       // QA-023: customer CNIC auto-fetch agar nahi bheja gaya
@@ -116,11 +128,9 @@ exports.createEMI = async (req, res, next) => {
 
       const id = ins.insertId;
 
-      // Generate Installment Schedule
+      // Generate Installment Schedule (QA-052: local dates, month-end clamp)
       for (let i = 1; i <= months; i++) {
-        const dObj = new Date(startDateObj);
-        dObj.setMonth(dObj.getMonth() + i);
-        const dueDate = dObj.toISOString().slice(0, 10);
+        const dueDate = addMonthsLocal(start_date, i);
 
         await conn.query(
           `INSERT INTO emi_schedule (tenant_id, emi_id, installment_no, due_date, planned_amount, status)
