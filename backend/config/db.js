@@ -17,7 +17,8 @@ const poolConfig = {
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,
-  dateStrings: true
+  dateStrings: true,
+  timezone: '+05:00' // QA-034: shop timezone (PKT) — NOW()/stored DATETIMEs PKT me hon
 };
 
 const pool = mysql.createPool(poolConfig);

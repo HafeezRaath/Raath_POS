@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Box, Paper, Typography, TextField, Button, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Chip,
@@ -36,6 +36,22 @@ const getBalanceColor = (bal) => {
   if (val > 0) return 'error';
   if (val < 0) return 'success';
   return 'default';
+};
+
+// QA-034: date-only strings ("2026-10-19") ko local midnight samjho —
+// new Date("2026-10-19") UTC midnight banata hai jo PKT me 05:00 dikhta tha.
+// MySQL DATETIME strings ("2026-10-19 12:40:00") backend ab PKT me store karta hai.
+const parseLedgerDate = (s) => {
+  if (!s) return null;
+  const str = String(s).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(str)) {
+    return new Date(str.replace(' ', 'T'));
+  }
+  return new Date(str);
 };
 
 const getLedgerTypeChip = (type) => {
@@ -468,7 +484,13 @@ export default function CustomerPage() {
   };
 
   // Auto-select account based on payment mode
+  // QA-015: user ki manual choice ko re-render par overwrite mat karo —
+  // sirf tab auto-select karo jab mode badle ya abhi tak kuch select na hua ho
+  const prevPayModeRef = useRef(null);
   useEffect(() => {
+    const modeChanged = prevPayModeRef.current !== paymentForm.payment_mode;
+    prevPayModeRef.current = paymentForm.payment_mode;
+    if (!modeChanged && selectedPaymentAccount) return; // manual choice preserved
     if (!paymentForm.payment_mode || !paymentAccounts.length) {
       setSelectedPaymentAccount(null);
       return;
@@ -1191,10 +1213,10 @@ export default function CustomerPage() {
                           {entry.date ? (
                             <>
                               <Typography variant="body2" sx={{ fontSize: '0.8rem', fontWeight: 500 }}>
-                                {new Date(entry.date).toLocaleDateString('en-PK')}
+                                {parseLedgerDate(entry.date).toLocaleDateString('en-PK')}
                               </Typography>
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
-                                {new Date(entry.date).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })}
+                                {parseLedgerDate(entry.date).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })}
                               </Typography>
                             </>
                           ) : '-'}

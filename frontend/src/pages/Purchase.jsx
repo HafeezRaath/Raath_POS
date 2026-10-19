@@ -1999,6 +1999,8 @@ const handleProcessReturn = async () => {
   };
 
   // ==================== SUMMARY STATS ====================
+  // QA-029: Number() guard — non-numeric strings se RsNaN na aaye
+  const num0 = (v) => { const n = Number(v); return isNaN(n) ? 0 : n; };
   const summaryStats = useMemo(() => {
     let totalPurchases = 0;
     let totalPaid = 0;
@@ -2008,15 +2010,15 @@ const handleProcessReturn = async () => {
     let totalReturnAmount = 0;
     
     purchases.forEach(p => {
-      totalPurchases += p.grand_total || 0;
-      totalPaid += p.paid_amount || 0;
-      totalDue += (p.grand_total || 0) - (p.paid_amount || 0);
-      totalItems += p.items_count || 0;
+      totalPurchases += num0(p.grand_total);
+      totalPaid += num0(p.paid_amount);
+      totalDue += num0(p.grand_total) - num0(p.paid_amount);
+      totalItems += num0(p.items_count);
     });
     
     purchaseReturns.forEach(r => {
       totalReturns += 1;
-      totalReturnAmount += r.grand_total || 0;
+      totalReturnAmount += num0(r.grand_total);
     });
     
     return { 
