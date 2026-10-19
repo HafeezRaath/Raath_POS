@@ -42,6 +42,13 @@ const RETURN_REASONS = [
   'Other'
 ];
 
+// QA-042: return_no me pehle se "RET-" prefix ho sakta hai — double prefix se bacho
+const formatReturnNo = (ret, fallback) => {
+  const no = ret?.return_no || fallback;
+  if (!no) return 'RET-?';
+  return String(no).startsWith('RET-') ? String(no) : `RET-${no}`;
+};
+
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 2 }).format(amount || 0);
 };
@@ -175,7 +182,7 @@ const MobileReturnCard = ({ ret, onView, onDelete, index, canDelete }) => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle2" fontWeight="bold" noWrap>
-              #{index} RET-{ret.return_no || (isHashId(ret.id) ? index : ret.id)}
+              #{index} {formatReturnNo(ret, isHashId(ret.id) ? index : ret.id)}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
               {ret.customer_name || 'Walk-in Customer'}
@@ -618,6 +625,7 @@ export default function ReturnsPage() {
         total_amount: totalRefund,
         discount_amount: 0,
         tax_amount: 0,
+        reason: returnForm.reason || '', // QA-005: top-level reason backend store kare
         refund_amount: totalRefund,
         payment_mode: returnForm.refund_mode,
         account_id: isSplit ? null : (returnForm.account_id || null),
@@ -1095,7 +1103,7 @@ export default function ReturnsPage() {
                     {paginatedReturns.map((ret, idx) => (
                       <TableRow key={ret.id} hover>
                         <TableCell>{(returnPage - 1) * returnRowsPerPage + idx + 1}</TableCell>
-                        <TableCell sx={{ fontWeight: 'bold' }}>RET-{ret.return_no || (isHashId(ret.id) ? idx + 1 : ret.id)}</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold' }}>{formatReturnNo(ret, isHashId(ret.id) ? idx + 1 : ret.id)}</TableCell>
                         <TableCell sx={{ color: 'primary.main', fontWeight: 500 }}>{formatCleanId(ret.invoice_no || ret.original_invoice, idx)}</TableCell>
                         <TableCell sx={{ fontSize: '0.8rem' }}>{formatDate(ret.return_date)}</TableCell>
                         <TableCell>{ret.customer_name || 'Walk-in'}</TableCell>
