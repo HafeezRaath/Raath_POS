@@ -693,6 +693,8 @@ export default function SalesHistoryPage() {
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [paymentSale, setPaymentSale] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  // QA-035: payment kis account me jaye — dialog me selectable
+  const [paymentAccountId, setPaymentAccountId] = useState('');
 
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -720,7 +722,17 @@ export default function SalesHistoryPage() {
       const accountsList = db.getAccounts ? await db.getAccounts({ status: 'active' }).catch(() => []) : [];
       setAccounts(Array.isArray(accountsList) ? accountsList : []);
 
-      const sortedSales = (rawSales || []).sort((a, b) => {
+      // QA-054: payment_status null ho to paid/total se derive karo (UNKNOWN na dikhe)
+      const normalizedSales = (rawSales || []).map(s => {
+        if (!s.payment_status) {
+          const paid = Number(s.paid_amount || 0);
+          const total = Number(s.grand_total || 0);
+          s.payment_status = total > 0 && paid >= total ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
+        }
+        return s;
+      });
+
+      const sortedSales = normalizedSales.sort((a, b) => {
         const dateA = new Date(a.date || 0);
         const dateB = new Date(b.date || 0);
         return dateB - dateA;
@@ -1085,6 +1097,10 @@ export default function SalesHistoryPage() {
     setPaymentSale(sale);
     const dueAmount = Number(sale.grand_total || 0) - Number(sale.paid_amount || 0);
     setPaymentAmount(String(Math.max(0, dueAmount)));
+    // QA-035: default account — cash jaisa pehle, warna pehla active account
+    const accs = accounts || [];
+    const cashLike = accs.find(a => /cash/i.test(a.name || '')) || accs[0];
+    setPaymentAccountId(cashLike ? String(cashLike.id) : '');
     setPaymentDialog(true);
   };
 
@@ -1114,6 +1130,24 @@ export default function SalesHistoryPage() {
         payment_status: revisedStatus
       });
 
+      // QA-035: payment selected account me credit karo (pehle kahin post nahi hoti thi)
+      const payAcc = (accounts || []).find(a => String(a.id) === String(paymentAccountId));
+      if (payAcc && typeof db.createAccountTransaction === 'function') {
+        try {
+          await db.createAccountTransaction({
+            account_id: payAcc.id,
+            transaction_type: 'credit',
+            amount: parsedAddedCash,
+            description: `Payment received for invoice #${paymentSale.invoice_no}`,
+            payment_mode: payAcc.name,
+            reference_no: paymentSale.invoice_no,
+            reference_type: 'sale_payment'
+          });
+        } catch (accErr) {
+          console.warn('[SalesHistory] Account transaction failed:', accErr.message);
+        }
+      }
+
       if (paymentSale.customer_id) {
         await db.updateCustomer(paymentSale.customer_id, {
           current_balance: Number(paymentSale.customer_balance || 0) - parsedAddedCash
@@ -1123,7 +1157,7 @@ export default function SalesHistoryPage() {
           type: 'payment',
           amount: parsedAddedCash,
           description: `Manual balance recovery for invoice #${paymentSale.invoice_no}`,
-          payment_mode: 'cash'
+          payment_mode: payAcc ? payAcc.name : 'cash'
         });
       }
 
@@ -2147,6 +2181,21 @@ export default function SalesHistoryPage() {
                 InputProps={{ startAdornment: <InputAdornment position="start">Rs.</InputAdornment> }} 
                 autoFocus 
               />
+              {/* QA-035: account/method selector */}
+              <FormControl fullWidth>
+                <InputLabel>Receive In Account</InputLabel>
+                <Select
+                  value={paymentAccountId}
+                  label="Receive In Account"
+                  onChange={(e) => setPaymentAccountId(e.target.value)}
+                >
+                  {(accounts || []).map(acc => (
+                    <MenuItem key={acc.id} value={String(acc.id)}>
+                      {acc.name} (Rs. {Number(acc.current_balance || 0).toLocaleString()})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Stack>
           ) : (
             <Typography align="center" color="text.secondary">No sale selected</Typography>

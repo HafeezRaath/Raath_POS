@@ -119,7 +119,8 @@ exports.createSale = async (req, res, next) => {
       }
     }
 
-    const status = payload.payment_status || (dueAmount > 0 ? (paidAmount > 0 ? 'partial' : 'due') : 'completed');
+    // QA-054: frontend 'paid' expect karta hai — vocabulary consistent rakho
+    const status = payload.payment_status || (dueAmount > 0 ? (paidAmount > 0 ? 'partial' : 'due') : 'paid');
     const fbrStatus = payload.fbr_status || (payload.fbr_enabled ? 'SYNCED' : 'PENDING');
     const fbrReference = payload.dummy_fbr_reference || payload.fbr_reference || null;
 
