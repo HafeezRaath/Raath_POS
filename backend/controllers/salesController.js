@@ -179,11 +179,11 @@ exports.createSale = async (req, res, next) => {
           [tenantId, saleId, prodId, prodName, variantId, qty, price, price, pCost, disc, total]
         );
 
-        // Deduct inventory from variant if available
+        // Deduct inventory from variant if available (v76: BOTH stock columns — page current_stock dikhata hai)
         if (variantId) {
           await conn.query(
-            'UPDATE product_variants SET stock = stock - ? WHERE tenant_id = ? AND id = ?',
-            [deductQty, tenantId, variantId]
+            'UPDATE product_variants SET stock = GREATEST(0, stock - ?), current_stock = GREATEST(0, COALESCE(current_stock, 0) - ?) WHERE tenant_id = ? AND id = ?',
+            [deductQty, deductQty, tenantId, variantId]
           );
         }
 
@@ -413,7 +413,7 @@ exports.deleteSale = async (req, res, next) => {
       for (const item of items) {
         const qty = parseFloat(item.quantity) || 0;
         if (item.product_variant_id) {
-          await query('UPDATE product_variants SET stock = stock + ? WHERE tenant_id = ? AND id = ?', [qty, tenantId, item.product_variant_id]);
+          await query('UPDATE product_variants SET stock = stock + ?, current_stock = COALESCE(current_stock, 0) + ? WHERE tenant_id = ? AND id = ?', [qty, qty, tenantId, item.product_variant_id]);
         }
         if (item.product_id) {
           await query('UPDATE products SET stock = stock + ? WHERE tenant_id = ? AND id = ?', [qty, tenantId, item.product_id]);

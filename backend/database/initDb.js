@@ -411,6 +411,8 @@ async function initializeDatabase() {
 
     await addColumnIfMissing(connection, 'product_variants', '`expiry_date` DATE NULL');
     await addColumnIfMissing(connection, 'purchase_items', '`expiry_date` DATE NULL');
+    // v76: A3 — purchase return product_id resolution ke liye zaroori
+    await addColumnIfMissing(connection, 'purchase_items', '`product_variant_id` INT NULL');
 
     // Customer ledger migrations
     await addColumnIfMissing(connection, 'customer_ledger', "`type` VARCHAR(50) NOT NULL DEFAULT 'invoice'");

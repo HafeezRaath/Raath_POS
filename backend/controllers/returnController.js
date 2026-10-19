@@ -385,7 +385,7 @@ exports.createPurchaseReturn = async (req, res, next) => {
           await conn.query(`UPDATE products SET stock = stock - ? WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, tenantId, prodId]);
         }
         if (varId) {
-          await conn.query(`UPDATE product_variants SET stock = stock - ? WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, tenantId, varId]);
+          await conn.query(`UPDATE product_variants SET stock = GREATEST(0, stock - ?), current_stock = GREATEST(0, COALESCE(current_stock, 0) - ?) WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, item.quantity || 1, tenantId, varId]);
         }
       }
 

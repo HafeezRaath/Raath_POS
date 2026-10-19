@@ -330,7 +330,7 @@ exports.deleteEMI = async (req, res, next) => {
 
       // 2. Restore product stock if from inventory
       if (emi.product_variant_id && (!emi.product_source || emi.product_source === 'inventory')) {
-        await query('UPDATE product_variants SET stock = stock + 1 WHERE tenant_id = ? AND id = ?', [tenantId, emi.product_variant_id]);
+        await query('UPDATE product_variants SET stock = stock + 1, current_stock = COALESCE(current_stock, 0) + 1 WHERE tenant_id = ? AND id = ?', [tenantId, emi.product_variant_id]);
       }
       if (emi.product_id) {
         await query('UPDATE products SET stock = stock + 1 WHERE tenant_id = ? AND id = ?', [tenantId, emi.product_id]);
