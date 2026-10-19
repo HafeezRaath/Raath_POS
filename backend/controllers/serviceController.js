@@ -229,7 +229,8 @@ exports.updateWorkOrder = async (req, res, next) => {
          commission_credited = COALESCE(?, commission_credited),
          labor_amount = COALESCE(?, labor_amount),
          parts_amount = COALESCE(?, parts_amount),
-         completed_at = COALESCE(?, completed_at)
+         completed_at = COALESCE(?, completed_at),
+         assigned_by = COALESCE(?, assigned_by) -- QA-017: technician assign karne wala
        WHERE tenant_id = ? AND id = ? AND is_deleted = 0`,
       [
         status !== undefined ? status : null,
@@ -255,6 +256,8 @@ exports.updateWorkOrder = async (req, res, next) => {
         finalLabor !== undefined ? finalLabor : null,
         parts_amount !== undefined ? parts_amount : null,
         completed_at !== undefined ? completed_at : null,
+        // QA-017: staff assign ho raha hai to assigner record karo
+        staff_id !== undefined && staff_id ? (req.user?.id || null) : null,
         tenantId, id
       ]
     );

@@ -1940,7 +1940,7 @@ export default function ServicesPage() {
     });
 
     const [partSearch, setPartSearch] = useState('');
-    const [extPart, setExtPart] = useState({ name: '', cost: '', quantity: 1 });
+    const [extPart, setExtPart] = useState({ name: '', cost: '', quantity: 1, supplier: '' });
     const [categoryFilter, setCategoryFilter] = useState('');
     const [saving, setSaving] = useState(false);
 
@@ -2089,9 +2089,10 @@ export default function ServicesPage() {
         cost: Number(extPart.cost),
         quantity: Number(extPart.quantity) || 1,
         is_external: true,
-        is_included: false
+        is_included: false,
+        supplier: extPart.supplier.trim() // QA-014: market part ka source
       }]);
-      setExtPart({ name: '', cost: '', quantity: 1 });
+      setExtPart({ name: '', cost: '', quantity: 1, supplier: '' });
     };
 
     const togglePartIncluded = (partKey) => {
@@ -2501,6 +2502,14 @@ export default function ServicesPage() {
                   onChange={e => setExtPart({...extPart, cost: e.target.value})} 
                   sx={{ flex: 1.5, bgcolor: 'white' }} 
                 />
+                {/* QA-014: external part ka supplier/source */}
+                <TextField 
+                  size="small" 
+                  placeholder="Supplier / Source" 
+                  value={extPart.supplier} 
+                  onChange={e => setExtPart({...extPart, supplier: e.target.value})} 
+                  sx={{ flex: 2, bgcolor: 'white' }} 
+                />
                 <Button 
                   variant="outlined" 
                   size="small" 
@@ -2534,6 +2543,8 @@ export default function ServicesPage() {
                         </Box>
                         <Typography variant="caption" color="text.secondary">
                           Unit Cost: Rs. {p.cost}
+                          {/* QA-014: external part ka supplier/source dikhao */}
+                          {p.is_external && p.supplier && <> · Source: {p.supplier}</>}
                         </Typography>
                       </Box>
 
@@ -2801,9 +2812,12 @@ export default function ServicesPage() {
         await loadAll();
         setDeliverSettleOrder(null);
 
+        // QA-012: "settled" sirf jab fully paid ho; partial par sahi message
         setSnackbar({
           open: true,
-          message: `Order #${deliverSettleOrder.token_no || deliverSettleOrder.id} delivered and settled successfully!`,
+          message: newDue <= 0
+            ? `Order #${deliverSettleOrder.token_no || deliverSettleOrder.id} delivered and settled successfully!`
+            : `Partial payment of Rs. ${Number(payingNow).toLocaleString()} recorded for Order #${deliverSettleOrder.token_no || deliverSettleOrder.id}. Remaining due: Rs. ${Number(newDue).toLocaleString()}.`,
           severity: 'success'
         });
       } catch (err) {
@@ -3126,7 +3140,7 @@ export default function ServicesPage() {
                   • <strong>Monthly:</strong> Fixed monthly base salary payable to the staff.
                 </Typography>
                 <Typography variant="caption" display="block" color="text.secondary">
-                  • <strong>Commission:</strong> Percentage of total repair bill on every completed order.
+                  • <strong>Commission:</strong> Percentage of labor charges only (parts excluded) on every completed order.
                 </Typography>
                 <Typography variant="caption" display="block" color="text.secondary">
                   • <strong>Per Job:</strong> Fixed amount per repaired device.
@@ -3687,6 +3701,17 @@ export default function ServicesPage() {
                         Staff Commission: Rs. {o.commission_amount}
                       </Typography>
                     )}
+                    {/* QA-017: audit trail — receipt no, itemized payments, shop share, creator/assigner */}
+                    <Box sx={{ mt: 1, pt: 1, borderTop: '1px dashed #e5e7eb' }}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Receipt: {o.order_number || o.token_no || `#${o.id}`} · Advance: Rs.{o.advance_amount || 0} · Paid: Rs.{o.paid_amount || 0}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Shop Share: Rs.{Number(o.total_amount || o.total_cost || 0) - Number(o.commission_amount || 0)}
+                        {o.created_by_name && <> · Created by: {o.created_by_name}</>}
+                        {o.assigned_by_name && <> · Assigned by: {o.assigned_by_name}</>}
+                      </Typography>
+                    </Box>
                   </Paper>
                 );
               })}

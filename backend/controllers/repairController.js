@@ -85,14 +85,14 @@ exports.createJob = async (req, res, next) => {
            (tenant_id, order_number, service_id, staff_id, customer_id, customer_name, machine_name,
             device_model, imei, problem_description, condition_notes, passcode_encrypted,
             labor_amount, parts_amount, total_cost, total_amount, paid_amount, advance_amount,
-            payment_status, payment_mode, commission_percent, commission_amount, notes, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+            payment_status, payment_mode, commission_percent, commission_amount, notes, status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
         [tenantId, token, service_id, staff_id, customer_id, customer_name,
          `${customer_phone}`.trim() ? `${device_model} (${customer_phone})` : device_model,
          device_model, imei, problem_description, condition_notes, encryptPasscode(passcode),
          labor, partsAmount, partsAmount, totalAmount, advance_amount, advance_amount,
          Number(advance_amount) >= totalAmount ? 'paid' : (Number(advance_amount) > 0 ? 'partial' : 'unpaid'),
-         payment_mode, commissionPercent, commissionAmount, notes]
+         payment_mode, commissionPercent, commissionAmount, notes, req.user?.id || null] // QA-017: creator record
       );
 
       for (const pr of partRows) {
@@ -172,18 +172,23 @@ exports.listJobs = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { status = '', search = '', limit = 100 } = req.query;
-    let sql = `SELECT id, order_number, customer_name, device_model, imei, problem_description, status,
-                      labor_amount, parts_amount, total_amount, paid_amount, advance_amount, payment_status,
-                      commission_amount, staff_id, photo_before_url, photo_after_url, created_at, completed_at
-               FROM work_orders WHERE tenant_id = ? AND is_deleted = 0`;
+    let sql = `SELECT wo.id, wo.order_number, wo.customer_name, wo.device_model, wo.imei, wo.problem_description, wo.status,
+                      wo.labor_amount, wo.parts_amount, wo.total_amount, wo.paid_amount, wo.advance_amount, wo.payment_status,
+                      wo.commission_amount, wo.staff_id, wo.photo_before_url, wo.photo_after_url, wo.created_at, wo.completed_at,
+                      wo.created_by, wo.assigned_by,
+                      u1.name AS created_by_name, u2.name AS assigned_by_name
+               FROM work_orders wo
+               LEFT JOIN users u1 ON u1.id = wo.created_by
+               LEFT JOIN users u2 ON u2.id = wo.assigned_by
+               WHERE wo.tenant_id = ? AND wo.is_deleted = 0`;
     const params = [tenantId];
-    if (status) { sql += ` AND status = ?`; params.push(status); }
+    if (status) { sql += ` AND wo.status = ?`; params.push(status); }
     if (search) {
-      sql += ` AND (order_number LIKE ? OR customer_name LIKE ? OR imei LIKE ? OR device_model LIKE ?)`;
+      sql += ` AND (wo.order_number LIKE ? OR wo.customer_name LIKE ? OR wo.imei LIKE ? OR wo.device_model LIKE ?)`;
       const s = `%${search}%`;
       params.push(s, s, s, s);
     }
-    sql += ` ORDER BY id DESC LIMIT ${Math.min(Number(limit) || 100, 500)}`;
+    sql += ` ORDER BY wo.id DESC LIMIT ${Math.min(Number(limit) || 100, 500)}`;
     const rows = await query(sql, params);
     res.json({ success: true, data: rows });
   } catch (error) {

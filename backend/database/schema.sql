@@ -735,6 +735,8 @@ CREATE TABLE IF NOT EXISTS `work_orders` (
   `payment_status` VARCHAR(50) DEFAULT 'unpaid',
   `payment_mode` VARCHAR(50) DEFAULT 'cash',
   `commission_amount` DECIMAL(15,2) DEFAULT 0,
+  `created_by` INT NULL, -- QA-017: audit trail — kis user ne job banayi
+  `assigned_by` INT NULL, -- QA-017: audit trail — technician kis ne assign kiya
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `completed_at` DATETIME NULL,
   `is_deleted` TINYINT(1) DEFAULT 0,

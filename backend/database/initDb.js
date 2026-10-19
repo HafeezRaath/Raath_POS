@@ -163,6 +163,8 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'work_orders', '`paid_amount` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'work_orders', '`payment_status` VARCHAR(50) DEFAULT "unpaid"');
     await addColumnIfMissing(connection, 'work_orders', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
+    await addColumnIfMissing(connection, 'work_orders', '`created_by` INT NULL'); // QA-017 audit
+    await addColumnIfMissing(connection, 'work_orders', '`assigned_by` INT NULL'); // QA-017 audit
     await addColumnIfMissing(connection, 'work_orders', '`commission_amount` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'work_orders', '`completed_at` DATETIME NULL');
     await addColumnIfMissing(connection, 'work_orders', '`deleted_at` DATETIME NULL');
