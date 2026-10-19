@@ -13,6 +13,7 @@ router.use(optionalAuth);
 router.get('/sales', returnController.getSaleReturns);
 router.post('/sales', returnController.createSaleReturn);
 router.get('/sales/:id', returnController.getSaleReturnById);
+router.get('/sales/:id/items', returnController.getSaleReturnItemsById); // v78/QA-048
 
 // Purchase Returns
 router.get('/purchases', returnController.getPurchaseReturns);

@@ -768,6 +768,17 @@ export default function ReportsPage() {
         return true;
       });
 
+      // v78/QA-037: duplicate sale rows kabhi breakdown ko inflate na karein — id par dedupe
+      {
+        const seen = new Set();
+        filtered = filtered.filter(s => {
+          const k = String(s.id ?? s.invoice_no ?? Math.random());
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+      }
+
       if (salesPaymentMode !== 'all') {
         filtered = filtered.filter(s => String(s.payment_mode || '').toLowerCase() === salesPaymentMode.toLowerCase());
       }
@@ -784,10 +795,21 @@ export default function ReportsPage() {
       });
 
       const enriched = filtered.map(s => {
-        let items = Array.isArray(s.items) && s.items.length > 0 
-          ? s.items 
+        let items = Array.isArray(s.items) && s.items.length > 0
+          ? s.items
           : (saleItemsMap.get(String(s.id)) || (s.invoice_no ? saleItemsMap.get(String(s.invoice_no)) : []) || []);
-        
+
+        // v78/QA-037: duplicate item rows (same sale+product+qty+total) ko ek dafa gino
+        {
+          const seenIt = new Set();
+          items = items.filter(i => {
+            const k = `${i.product_variant_id || ''}|${i.product_id || ''}|${i.quantity || i.qty || ''}|${i.total || ''}`;
+            if (seenIt.has(k)) return false;
+            seenIt.add(k);
+            return true;
+          });
+        }
+
         // QA-037: allocate the bill's grand_total across its items proportionally,
         // so the item breakdown always reconciles with the headline (bill-level
         // discounts/taxes no longer inflate the item revenue total).

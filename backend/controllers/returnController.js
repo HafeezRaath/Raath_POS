@@ -125,10 +125,11 @@ exports.createSaleReturn = async (req, res, next) => {
           const uPrice = parseFloat(item.unit_price !== undefined ? item.unit_price : (item.price || item.returnPrice || 0)) || 0;
           const tot = parseFloat(item.total !== undefined ? item.total : (item.sub_total || (qty * uPrice))) || (qty * uPrice);
 
+          // v78/QA-048: product_variant_id bhi store karo (pehle drop ho raha tha)
           await conn.query(
-            `INSERT INTO sale_return_items (tenant_id, sale_return_id, product_id, quantity, unit_price, total)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [tenantId, id, prodId, qty, uPrice, tot]
+            `INSERT INTO sale_return_items (tenant_id, sale_return_id, product_id, product_variant_id, quantity, unit_price, total)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [tenantId, id, prodId, varId, qty, uPrice, tot]
           );
 
           // 1. Resolve product_id if only variant was passed
@@ -355,6 +356,26 @@ exports.getPurchaseReturnById = async (req, res, next) => {
     );
     ret.items = items || [];
     res.json({ success: true, data: ret });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// v78/QA-048: sale return ke items — product name/variant ke saath (raw /query path bypass)
+exports.getSaleReturnItemsById = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { id } = req.params;
+    const items = await query(
+      `SELECT sri.*, p.name AS product_name, pv.variant_name, pv.sku AS variant_sku
+       FROM sale_return_items sri
+       LEFT JOIN products p ON p.id = sri.product_id AND p.tenant_id = sri.tenant_id
+       LEFT JOIN product_variants pv ON pv.id = sri.product_variant_id AND pv.tenant_id = sri.tenant_id
+       WHERE sri.tenant_id = ? AND sri.sale_return_id = ?
+       ORDER BY sri.id ASC`,
+      [tenantId, id]
+    );
+    res.json({ success: true, data: items || [] });
   } catch (error) {
     next(error);
   }

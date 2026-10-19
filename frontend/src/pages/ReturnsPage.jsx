@@ -514,22 +514,26 @@ export default function ReturnsPage() {
       }));
 
       // v77/QA-031: pehle se returned qty nikalo taake dialog dobara poori qty offer na kare
-      const returnedByKey = {};
+      // (variant_id YA product_id me se koi ek match ho to count karo — dono taraf ids mukhtalif ho sakti hain)
+      let allReturnItems = [];
       try {
         const prevReturns = await db.getSaleReturns({ sale_id: sale.id }).catch(() => []);
         for (const r of (prevReturns || [])) {
           const rItems = await db.getSaleReturnItems(r.id).catch(() => []);
-          for (const ri of (rItems || [])) {
-            const key = ri.product_variant_id ? `v${ri.product_variant_id}` : `p${ri.product_id}`;
-            returnedByKey[key] = (returnedByKey[key] || 0) + Number(ri.quantity || 0);
-          }
+          allReturnItems = allReturnItems.concat(rItems || []);
         }
       } catch (_) { /* best-effort */ }
 
       setSaleItems(validItems);
       setReturnItems(validItems.map(item => {
-        const key = item.product_variant_id ? `v${item.product_variant_id}` : `p${item.product_id}`;
-        const alreadyReturned = returnedByKey[key] || 0;
+        const alreadyReturned = allReturnItems
+          .filter(ri =>
+            (ri.product_variant_id && item.product_variant_id &&
+              Number(ri.product_variant_id) === Number(item.product_variant_id)) ||
+            (ri.product_id && item.product_id &&
+              Number(ri.product_id) === Number(item.product_id))
+          )
+          .reduce((s, ri) => s + Number(ri.quantity || 0), 0);
         const returnable = Math.max(0, Number(item.quantity || 0) - alreadyReturned);
         return {
           ...item,

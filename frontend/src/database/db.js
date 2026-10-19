@@ -897,9 +897,14 @@ class DatabaseClient {
 
   // ==================== SALE RETURN ITEMS ====================
   async getAllSaleReturnItems(returnId) {
+    // v78/QA-048: raw /query ki bajaye dedicated backend endpoint (tenant-safe, JOIN-safe)
+    if (returnId) {
+      const res = await api.get(`/returns/sales/${returnId}/items`);
+      return res.data || [];
+    }
     const res = await this.query(
-      'SELECT sri.*, p.name AS product_name, pv.sku AS variant_sku FROM sale_return_items sri LEFT JOIN products p ON p.id = sri.product_id LEFT JOIN product_variants pv ON pv.id = sri.product_variant_id' + (returnId ? ' WHERE sri.sale_return_id = ?' : '') + ' ORDER BY sri.id DESC',
-      returnId ? [returnId] : []
+      'SELECT sri.*, p.name AS product_name, pv.sku AS variant_sku FROM sale_return_items sri LEFT JOIN products p ON p.id = sri.product_id LEFT JOIN product_variants pv ON pv.id = sri.product_variant_id ORDER BY sri.id DESC',
+      []
     );
     return res || [];
   }
