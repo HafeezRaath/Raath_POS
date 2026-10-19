@@ -224,7 +224,8 @@ export default function Dashboard() {
         topProductsData,
         paymentModes,
         trendData,
-        categorySalesData;
+        categorySalesData,
+        serviceRevenueData;
 
       if (isElectron) {
         const [
@@ -241,6 +242,7 @@ export default function Dashboard() {
           paymentResult,
           trendResult,
           categoryResult,
+          serviceResult,
         ] = await Promise.all([
           db.query(
             `SELECT COALESCE(SUM(grand_total), 0) as total, COUNT(*) as count,
@@ -248,6 +250,16 @@ export default function Dashboard() {
              FROM sales 
              WHERE date(date) >= date(?) AND date(date) <= date(?)
              AND is_deleted = 0`,
+            [startDate, endDate]
+          ),
+          // QA-016: completed repair/work-order revenue counts as revenue too
+          db.query(
+            `SELECT COALESCE(SUM(total_amount), 0) as total,
+             COALESCE(SUM(paid_amount), 0) as paid
+             FROM work_orders
+             WHERE date(COALESCE(completed_at, created_at)) >= date(?)
+             AND date(COALESCE(completed_at, created_at)) <= date(?)
+             AND status = 'completed' AND is_deleted = 0`,
             [startDate, endDate]
           ),
           db.query(
@@ -337,6 +349,7 @@ export default function Dashboard() {
         ]);
 
         todaySalesData = salesResult;
+        serviceRevenueData = serviceResult;
         lowStockData = lowStockResult;
         productsData = productsResult;
         customersData = customersResult;
@@ -362,6 +375,7 @@ export default function Dashboard() {
           allSaleItems,
           allCategories,
           allAccounts,
+          allWorkOrders,
         ] = await Promise.all([
           db.getSalesHistory(),
           db.getAllVariants(),
@@ -374,6 +388,7 @@ export default function Dashboard() {
           db.getAllSaleItems(),
           db.getCategories(),
           db.getAccounts ? db.getAccounts().catch(() => []) : Promise.resolve([]),
+          db.getWorkOrders ? db.getWorkOrders().catch(() => []) : Promise.resolve([]),
         ]);
 
         setSystemAccounts(Array.isArray(allAccounts) ? allAccounts : []);
@@ -383,12 +398,20 @@ export default function Dashboard() {
           return isDateBetween(s.date, startDate, endDate);
         });
 
+        // QA-016: completed repair/work-order revenue counts as revenue too
+        const periodWorkOrders = (allWorkOrders || []).filter((w) => {
+          if (w.is_deleted || w.status !== 'completed') return false;
+          return isDateBetween(w.completed_at || w.created_at, startDate, endDate);
+        });
+        const woTotal = periodWorkOrders.reduce((sum, w) => sum + (Number(w.total_amount) || 0), 0);
+        const woPaid = periodWorkOrders.reduce((sum, w) => sum + (Number(w.paid_amount) || 0), 0);
+
         todaySalesData = [
           {
-            total: periodSales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0),
+            total: periodSales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0) + woTotal,
             count: periodSales.length,
-            paid: periodSales.reduce((sum, s) => sum + (Number(s.paid_amount) || 0), 0),
-            due: periodSales.reduce((sum, s) => sum + (Number(s.due_amount) || 0), 0),
+            paid: periodSales.reduce((sum, s) => sum + (Number(s.paid_amount) || 0), 0) + woPaid,
+            due: periodSales.reduce((sum, s) => sum + (Number(s.due_amount) || 0), 0) + Math.max(0, woTotal - woPaid),
           },
         ];
 
@@ -519,6 +542,10 @@ export default function Dashboard() {
       const parsedCount = Number(todaySalesData?.[0]?.count || 0);
       const parsedPaid = Number(todaySalesData?.[0]?.paid || 0);
       const parsedDue = Number(todaySalesData?.[0]?.due || 0);
+      // QA-016: completed repair/work-order revenue counts toward revenue KPIs
+      const parsedServiceTotal = Number(serviceRevenueData?.[0]?.total || 0);
+      const parsedServicePaid = Number(serviceRevenueData?.[0]?.paid || 0);
+      const parsedServiceDue = Math.max(0, parsedServiceTotal - parsedServicePaid);
       const parsedLowStockCount = lowStockData?.length || 0;
       const parsedOutOfStockCount =
         lowStockData?.filter((i) => Number(i.current_stock) === 0).length || 0;
@@ -552,10 +579,10 @@ export default function Dashboard() {
       }
 
       setStats({
-        todaySales: parsedSales,
+        todaySales: parsedSales + parsedServiceTotal,
         todayCount: parsedCount,
-        todayPaid: parsedPaid,
-        todayDue: parsedDue,
+        todayPaid: parsedPaid + parsedServicePaid,
+        todayDue: parsedDue + parsedServiceDue,
         lowStock: parsedLowStockCount,
         totalProducts: productsData?.length || 0,
         outOfStock: parsedOutOfStockCount,

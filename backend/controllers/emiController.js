@@ -339,18 +339,47 @@ exports.getGuarantors = async (req, res, next) => {
 exports.createGuarantor = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
-    const { name, phone = '', cnic = '', address = '', occupation = '', monthly_income = 0, relation_to_customer = '', notes = '' } = req.body;
+    const {
+      emi_id = null, guarantor_type = 1,
+      name, phone = '', cnic = '', address = '', occupation = '',
+      monthly_income = 0, relation_to_customer = '', notes = '',
+      passport_photo_path = null, blank_check_photo_path = null,
+      cnic_front_photo_path = null, cnic_back_photo_path = null
+    } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Guarantor name is required' });
-    if (cnic) {
-      const dup = await query(`SELECT id FROM guarantors WHERE tenant_id = ? AND cnic = ? AND is_deleted = 0`, [tenantId, cnic]);
-      if (dup.length > 0) return res.status(409).json({ success: false, error: 'Guarantor with this CNIC already exists', data: dup[0] });
-    }
-    const r = await query(
-      `INSERT INTO guarantors (tenant_id, name, phone, cnic, address, occupation, monthly_income, relation_to_customer, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tenantId, name, phone, cnic || null, address, occupation, monthly_income, relation_to_customer, notes]
-    );
-    res.status(201).json({ success: true, data: { id: r.insertId } });
+
+    const result = await transaction(async (conn) => {
+      // 1. Master guarantor record: reuse by CNIC when it already exists
+      let masterId = null;
+      if (cnic) {
+        const [dup] = await conn.query(`SELECT id FROM guarantors WHERE tenant_id = ? AND cnic = ? AND is_deleted = 0`, [tenantId, cnic]);
+        if (dup.length > 0) masterId = dup[0].id;
+      }
+      if (!masterId) {
+        const [r] = await conn.query(
+          `INSERT INTO guarantors (tenant_id, name, phone, cnic, address, occupation, monthly_income, relation_to_customer, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, name, phone, cnic || null, address, occupation, monthly_income, relation_to_customer, notes]
+        );
+        masterId = r.insertId;
+      }
+
+      // 2. Per-EMI guarantor link (this is what the EMI screens read back)
+      let linkId = null;
+      if (emi_id) {
+        const [l] = await conn.query(
+          `INSERT INTO emi_guarantors (emi_id, guarantor_id, guarantor_type, name, phone, cnic, address, occupation, monthly_income, relation_to_customer,
+            passport_photo_path, blank_check_photo_path, cnic_front_photo_path, cnic_back_photo_path, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+          [emi_id, masterId, guarantor_type, name, phone, cnic || null, address, occupation, monthly_income, relation_to_customer,
+            passport_photo_path, blank_check_photo_path, cnic_front_photo_path, cnic_back_photo_path]
+        );
+        linkId = l.insertId;
+      }
+      return { masterId, linkId };
+    });
+
+    res.status(201).json({ success: true, data: { id: result.masterId, emi_guarantor_id: result.linkId } });
   } catch (error) { next(error); }
 };
 
@@ -541,18 +570,9 @@ exports.earlySettlement = async (req, res, next) => {
     const emi = rows[0];
     if (['completed', 'closed'].includes(emi.status)) return res.status(409).json({ success: false, error: 'Already settled' });
 
-    const paid = await query(
-      `SELECT COALESCE(SUM(total_received),0) AS paid FROM emi_payments WHERE tenant_id = ? AND emi_id = ? AND is_reversal = 0 AND notes != 'Down payment'`,
-      [tenantId, id]
-    );
-    const downPaid = await query(
-      `SELECT COALESCE(SUM(total_received),0) AS d FROM emi_payments WHERE tenant_id = ? AND emi_id = ? AND is_reversal = 0 AND notes = 'Down payment'`,
-      [tenantId, id]
-    );
-    const totalPaid = Number(paid[0]?.paid) || 0;
-    const base = Number(emi.total_payable) || Number(emi.remaining_amount) || 0;
-    const downAlready = Number(downPaid[0]?.d) || Number(emi.down_payment) || 0;
-    const outstanding = Math.max(0, +(base - downAlready - totalPaid).toFixed(2));
+    // remaining_amount is maintained net of down payment and installment
+    // payments — it IS the outstanding balance (QA-020: was double-subtracting).
+    const outstanding = Math.max(0, +(Number(emi.remaining_amount) || 0).toFixed(2));
     const discount = Math.min(Number(discount_amount) || 0, outstanding);
     const finalAmount = +(outstanding - discount).toFixed(2);
 

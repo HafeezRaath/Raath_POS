@@ -69,6 +69,33 @@ exports.createSaleReturn = async (req, res, next) => {
     const retDate = return_date ? new Date(return_date) : new Date();
     const splitJson = (Array.isArray(split_payments) && split_payments.length > 0) ? JSON.stringify(split_payments) : null;
 
+    // ─── DUPLICATE-RETURN GUARD (QA-031): never return more than was sold ───
+    if (sale_id && Array.isArray(items) && items.length > 0) {
+      for (const item of items) {
+        const prodId = item.product_id || item.productId || null;
+        if (!prodId) continue;
+        const qty = parseFloat(item.quantity !== undefined ? item.quantity : (item.returnQty || 1)) || 1;
+        const soldRows = await query(
+          `SELECT COALESCE(SUM(quantity),0) AS q FROM sale_items WHERE tenant_id = ? AND sale_id = ? AND product_id = ?`,
+          [tenantId, sale_id, prodId]
+        );
+        const retRows = await query(
+          `SELECT COALESCE(SUM(sri.quantity),0) AS q FROM sale_return_items sri
+           JOIN sale_returns sr ON sr.id = sri.sale_return_id
+           WHERE sr.tenant_id = ? AND sr.sale_id = ? AND sr.is_deleted = 0 AND sri.product_id = ?`,
+          [tenantId, sale_id, prodId]
+        );
+        const soldQ = parseFloat(soldRows[0]?.q) || 0;
+        const retQ = parseFloat(retRows[0]?.q) || 0;
+        if (soldQ > 0 && retQ + qty > soldQ) {
+          return res.status(409).json({
+            success: false,
+            error: `Already returned: only ${Math.max(0, soldQ - retQ)} more of "${item.product_name || item.name || 'this item'}" can be returned for invoice #${invoice_no || sale_id}`
+          });
+        }
+      }
+    }
+
     const retId = await transaction(async (conn) => {
       let id;
       try {

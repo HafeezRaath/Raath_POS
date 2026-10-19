@@ -57,6 +57,7 @@ exports.exportBackup = async (req, res, next) => {
       data: {}
     };
 
+    const stats = { totalTables: 0, totalRecords: 0, tables: {} };
     for (const table of tables) {
       try {
         let rows;
@@ -66,10 +67,14 @@ exports.exportBackup = async (req, res, next) => {
           rows = await query(`SELECT * FROM \`${table}\` WHERE tenant_id = ?`, [tenantId]);
         }
         backup.data[table] = rows;
+        stats.totalTables += 1;
+        stats.totalRecords += rows.length;
+        stats.tables[table] = rows.length;
       } catch (e) {
         backup.data[table] = [];
       }
     }
+    backup.stats = stats;
 
     res.json({ success: true, backup });
   } catch (error) {

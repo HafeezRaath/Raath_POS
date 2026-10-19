@@ -1158,7 +1158,7 @@ class DatabaseClient {
   }
 
   async createGuarantor(data) {
-    const res = await api.post('/customers/guarantors', data).catch(() => ({ data }));
+    const res = await api.post('/emi/guarantors', data);
     return res.data;
   }
 

@@ -938,7 +938,18 @@ export default function ReportsPage() {
         return true;
       });
 
-      const revenue = round2(periodSales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0));
+      let revenue = round2(periodSales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0));
+
+      // QA-016: include completed repair/work-order revenue in P&L revenue
+      const allWorkOrders = await db.getWorkOrders().catch(() => []);
+      const serviceRevenue = round2((allWorkOrders || []).filter(w => {
+        if (w.is_deleted || w.status !== 'completed') return false;
+        const wd = extractDateOnly(w.completed_at || w.created_at);
+        if (fromStr && wd < fromStr) return false;
+        if (toStr && wd > toStr) return false;
+        return true;
+      }).reduce((sum, w) => sum + (Number(w.total_amount) || 0), 0));
+      revenue = round2(revenue + serviceRevenue);
 
       // Compute COGS in 1 single pass
       const allSaleItems = await db.getAllSaleItems().catch(() => []);

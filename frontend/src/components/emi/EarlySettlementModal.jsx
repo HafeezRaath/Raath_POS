@@ -26,17 +26,14 @@ export default function EarlySettlementModal({ open, onClose, emi, onSettled }) 
 
   const calc = (() => {
     if (!detail) return null;
-    const base = Number(detail.total_payable) || Number(detail.remaining_amount) || 0;
-    const paidDown = (detail.payments || [])
-      .filter(p => p.notes === 'Down payment')
-      .reduce((s, p) => s + Number(p.total_received || 0), 0);
-    const paidInst = (detail.payments || [])
-      .filter(p => p.notes !== 'Down payment')
-      .reduce((s, p) => s + Number(p.total_received || 0), 0);
-    const downAlready = paidDown || Number(detail.down_payment) || 0;
-    const outstanding = Math.max(0, +(base - downAlready - paidInst).toFixed(2));
+    // remaining_amount is maintained by the backend net of down payment and
+    // installment payments — it IS the outstanding balance. Subtracting down
+    // payment or paid installments from it again double-counts (QA-020).
+    const outstanding = Math.max(0, +(Number(detail.remaining_amount) || 0).toFixed(2));
+    const base = Number(detail.total_payable) || outstanding;
+    const alreadyPaid = Math.max(0, +(base - outstanding).toFixed(2));
     const disc = Math.min(Number(discount) || 0, outstanding);
-    return { base, downAlready, paidInst, outstanding, disc, final: +(outstanding - disc).toFixed(2) };
+    return { base, downAlready: 0, paidInst: alreadyPaid, outstanding, disc, final: +(outstanding - disc).toFixed(2) };
   })();
 
   const handleSettle = async () => {

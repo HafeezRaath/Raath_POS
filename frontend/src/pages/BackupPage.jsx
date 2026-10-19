@@ -294,7 +294,7 @@ export default function BackupPage() {
         showSnackbar('Generating complete database export...', 'info');
         const payload = await exportFullDatabase();
         downloadLocalBackupFile(payload);
-        addBackupRecord('local', `JSON Export: ${payload.stats?.totalRecords || 0} records across ${payload.stats?.totalStores || 0} tables`);
+        addBackupRecord('local', `JSON Export: ${payload.stats?.totalRecords || 0} records across ${payload.stats?.totalTables || 0} tables`);
         showSnackbar('Backup downloaded to your computer!', 'success');
       }
     } catch (err) {

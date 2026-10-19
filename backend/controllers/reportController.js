@@ -151,7 +151,15 @@ exports.getProfitLoss = async (req, res, next) => {
     const [salesRow] = await query(salesSql, salesParams);
     const [expRow] = await query(expSql, expParams);
 
-    const totalSales = parseFloat(salesRow?.total_sales || 0);
+    // QA-016: completed repair/work-order revenue counts as revenue too
+    let svcSql = `SELECT COALESCE(SUM(total_amount), 0) AS svc_revenue FROM work_orders WHERE tenant_id = ? AND status = 'completed' AND is_deleted = 0`;
+    const svcParams = [tenantId];
+    if (from_date) { svcSql += ` AND DATE(COALESCE(completed_at, created_at)) >= ?`; svcParams.push(from_date); }
+    if (to_date) { svcSql += ` AND DATE(COALESCE(completed_at, created_at)) <= ?`; svcParams.push(to_date); }
+    const svcRows = await query(svcSql, svcParams);
+    const serviceRevenue = parseFloat(svcRows[0]?.svc_revenue || 0);
+
+    const totalSales = parseFloat(salesRow?.total_sales || 0) + serviceRevenue;
     const cogs = parseFloat(salesRow?.cogs || 0);
     const grossProfit = totalSales - cogs;
     const totalExpenses = parseFloat(expRow?.total_expenses || 0);
@@ -161,6 +169,7 @@ exports.getProfitLoss = async (req, res, next) => {
       success: true,
       data: {
         totalRevenue: totalSales,
+        serviceRevenue,
         costOfGoodsSold: cogs,
         grossProfit,
         totalExpenses,

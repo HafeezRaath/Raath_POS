@@ -9,32 +9,18 @@ import db from '../database/db';
  * Export all data from the database into a JSON payload
  */
 export async function exportFullDatabase() {
-  try {
-    const backupData = await db.exportBackup();
-    if (backupData) return backupData;
-  } catch (e) {
-    console.warn('[backupService] Export from API failed:', e.message);
+  // QA-062: never silently return an empty backup as "success" — throw so the
+  // UI shows a real error instead of a misleading "Backup downloaded!" toast.
+  const backupData = await db.exportBackup();
+  if (!backupData || !backupData.data || Object.keys(backupData.data).length === 0) {
+    throw new Error('Backup export returned no data — nothing was downloaded');
   }
-
-  // Fallback structure
-  const backup = {
-    app: 'RAATH_POS',
-    version: '2.0.0',
-    exportedAt: new Date().toISOString(),
-    stats: {
-      totalStores: 0,
-      totalRecords: 0,
-      storesSummary: {}
-    },
-    settings: {
-      shop_profile: JSON.parse(localStorage.getItem('shop_profile') || '{}'),
-      receipt_settings: JSON.parse(localStorage.getItem('receipt_settings') || '{}'),
-      tax_settings: JSON.parse(localStorage.getItem('tax_settings') || '{}')
-    },
-    data: {}
+  backupData.settings = {
+    shop_profile: JSON.parse(localStorage.getItem('shop_profile') || '{}'),
+    receipt_settings: JSON.parse(localStorage.getItem('receipt_settings') || '{}'),
+    tax_settings: JSON.parse(localStorage.getItem('tax_settings') || '{}')
   };
-
-  return backup;
+  return backupData;
 }
 
 /**

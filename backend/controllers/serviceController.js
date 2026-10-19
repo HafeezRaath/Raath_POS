@@ -77,12 +77,12 @@ exports.getStaff = async (req, res, next) => {
 exports.createStaff = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
-    const { name, phone = '', role = 'technician', commission_rate = 0, base_salary = 0, status = 'active' } = req.body;
+    const { name, phone = '', role = 'technician', salary_type = 'monthly', commission_rate = 0, base_salary = 0, per_job_rate = 0, status = 'active' } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Staff name is required' });
 
     const result = await query(
-      `INSERT INTO staff (tenant_id, name, phone, role, commission_rate, base_salary, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [tenantId, name, phone, role, commission_rate, base_salary, status]
+      `INSERT INTO staff (tenant_id, name, phone, role, salary_type, commission_rate, base_salary, per_job_rate, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tenantId, name, phone, role, salary_type, commission_rate, base_salary, per_job_rate, status]
     );
     res.status(201).json({ success: true, message: 'Staff member added', data: { id: result.insertId, ...req.body } });
   } catch (error) {
@@ -94,17 +94,19 @@ exports.updateStaff = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    const { name, phone, role, commission_rate, base_salary, status } = req.body;
+    const { name, phone, role, salary_type, commission_rate, base_salary, per_job_rate, status } = req.body;
     await query(
       `UPDATE staff SET
          name = COALESCE(?, name),
          phone = COALESCE(?, phone),
          role = COALESCE(?, role),
+         salary_type = COALESCE(?, salary_type),
          commission_rate = COALESCE(?, commission_rate),
          base_salary = COALESCE(?, base_salary),
+         per_job_rate = COALESCE(?, per_job_rate),
          status = COALESCE(?, status)
        WHERE tenant_id = ? AND id = ? AND is_deleted = 0`,
-      [name, phone, role, commission_rate, base_salary, status, tenantId, id]
+      [name, phone, role, salary_type, commission_rate, base_salary, per_job_rate, status, tenantId, id]
     );
     res.json({ success: true, message: 'Staff updated' });
   } catch (error) {
