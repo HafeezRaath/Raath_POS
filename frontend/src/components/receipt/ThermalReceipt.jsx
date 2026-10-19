@@ -119,6 +119,10 @@ export const ThermalReceipt = React.forwardRef(({
           {displayItems.map((item, idx) => (
             <Box key={idx} sx={{ py: 0.5, borderBottom: '1px dashed #000', fontSize: `${dims.fontSizePx}px`, color: '#000' }}>
               <Typography sx={{ fontWeight: 700, fontSize: `${dims.fontSizePx}px`, color: '#000' }}>{item.name}</Typography>
+              {/* QA-004: IMEI item ki detail line par print ho */}
+              {(item.imei1 || item.imei) && (
+                <Typography sx={{ fontSize: `${dims.smallSizePx}px`, color: '#000', fontWeight: 600 }}>IMEI: {item.imei1 || item.imei}</Typography>
+              )}
               <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: `${dims.smallSizePx}px`, fontWeight: 600, color: '#000' }}>
                 <span>Qty: {item.qty} @ {Number(item.price).toFixed(0)}</span>
                 <span style={{ fontWeight: 700 }}>{Number(item.total).toFixed(0)}</span>
@@ -146,7 +150,12 @@ export const ThermalReceipt = React.forwardRef(({
           </Box>
           {displayItems.map((item, idx) => (
             <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5, borderBottom: '1px dashed #000', fontSize: `${dims.fontSizePx}px`, color: '#000' }}>
-              <span style={{ width: '45%', textAlign: 'left', fontWeight: 700 }}>{item.name}</span>
+              <span style={{ width: '45%', textAlign: 'left', fontWeight: 700 }}>{item.name}
+                {/* QA-004: IMEI item ki detail line par print ho */}
+                {(item.imei1 || item.imei) && (
+                  <span style={{ display: 'block', fontWeight: 400, fontSize: '0.85em' }}>IMEI: {item.imei1 || item.imei}</span>
+                )}
+              </span>
               <span style={{ width: '15%', textAlign: 'center', fontWeight: 700 }}>{item.qty}</span>
               <span style={{ width: '20%', textAlign: 'right', fontWeight: 600 }}>{Number(item.price).toFixed(0)}</span>
               <span style={{ width: '20%', textAlign: 'right', fontWeight: 700 }}>{Number(item.total).toFixed(0)}</span>

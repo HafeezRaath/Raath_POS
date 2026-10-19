@@ -965,8 +965,19 @@ class DatabaseClient {
     return [];
   }
 
-  async addMultipleSerializedItems(items) {
-    return { success: true, count: items?.length || 0 };
+  // QA-003: Add Product se aaye IMEIs ko asal me /imei/bulk par bhejo —
+  // backend duplicate IMEI par 409 deta hai (bulkAddImei guard), jo yahan
+  // throw ho kar caller ke snackbar me "IMEI already in system" dikhayega.
+  async addMultipleSerializedItems(variantId, imeiList) {
+    const list = Array.isArray(imeiList) ? imeiList : (Array.isArray(variantId) ? variantId : []);
+    const pvid = Array.isArray(variantId) ? null : variantId;
+    const imeis = list
+      .map(s => String(s == null ? '' : s).replace(/\D/g, ''))
+      .filter(Boolean)
+      .map(imei1 => ({ imei1 }));
+    if (imeis.length === 0) return { success: true, count: 0 };
+    const res = await api.post('/imei/bulk', { product_variant_id: pvid, imeis });
+    return { success: true, count: res.count || imeis.length };
   }
 
   // ==================== USER LOOKUPS & ROLES ====================
