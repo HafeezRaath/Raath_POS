@@ -361,18 +361,31 @@ exports.createPurchaseReturn = async (req, res, next) => {
       const id = ins.insertId;
 
       for (const item of items) {
+        // v75/A3: frontend product_id nahi bhejta (sirf purchase_item_id) — purchase_items se resolve karo
+        let prodId = item.product_id || null;
+        let varId = item.product_variant_id || null;
+        if ((!prodId || !varId) && item.purchase_item_id) {
+          const [piRows] = await conn.query(
+            `SELECT product_id, product_variant_id FROM purchase_items WHERE tenant_id = ? AND id = ?`,
+            [tenantId, item.purchase_item_id]
+          );
+          if (piRows.length > 0) {
+            if (!prodId) prodId = piRows[0].product_id || null;
+            if (!varId) varId = piRows[0].product_variant_id || null;
+          }
+        }
         await conn.query(
           `INSERT INTO purchase_return_items (tenant_id, purchase_return_id, product_id, product_variant_id, quantity, return_price, sub_total, reason)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [tenantId, id, item.product_id || null, item.product_variant_id || null, item.quantity || 1, item.return_price || item.price || 0, item.sub_total || item.total || 0, item.reason || '']
+          [tenantId, id, prodId, varId, item.quantity || 1, item.return_price || item.price || 0, item.sub_total || item.total || 0, item.reason || '']
         );
 
         // Deduct inventory
-        if (item.product_id) {
-          await conn.query(`UPDATE products SET stock = stock - ? WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, tenantId, item.product_id]);
+        if (prodId) {
+          await conn.query(`UPDATE products SET stock = stock - ? WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, tenantId, prodId]);
         }
-        if (item.product_variant_id) {
-          await conn.query(`UPDATE product_variants SET stock = stock - ? WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, tenantId, item.product_variant_id]);
+        if (varId) {
+          await conn.query(`UPDATE product_variants SET stock = stock - ? WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, tenantId, varId]);
         }
       }
 

@@ -137,6 +137,12 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'emi_payments', '`is_reversal` TINYINT(1) DEFAULT 0');
 
     await addColumnIfMissing(connection, 'sales', '`invoice_no` VARCHAR(100)');
+    // v75: QA-030 — FIFO allocation query sales par ORDER BY date karta hai
+    await addColumnIfMissing(connection, 'sales', '`date` DATETIME DEFAULT CURRENT_TIMESTAMP');
+    // v75: QA-002/A4 — sale_items INSERT price column likhta hai
+    await addColumnIfMissing(connection, 'sale_items', '`price` DECIMAL(15,2) DEFAULT 0');
+    // v75: QA-051 — expense voucher receipt_no auto-generate hota hai
+    await addColumnIfMissing(connection, 'expenses', '`receipt_no` VARCHAR(100)');
     await addColumnIfMissing(connection, 'sales', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
     await addColumnIfMissing(connection, 'sales', '`fbr_status` VARCHAR(50) DEFAULT "PENDING"');
     await addColumnIfMissing(connection, 'sales', '`fbr_reference` VARCHAR(150)');
