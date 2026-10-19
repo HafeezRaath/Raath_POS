@@ -78,7 +78,9 @@ exports.createEMI = async (req, res, next) => {
       interest_type = 'percentage', fixed_interest_per_month = 0,
       product_source = 'inventory', source_name = '', source_purchase_price = 0,
       start_date = new Date().toISOString().slice(0, 10), salesman_id = null,
-      shop_location = '', notes = '', guarantors = []
+      shop_location = '', notes = '', guarantors = [],
+      // QA-023: extra record fields
+      customer_cnic = '', down_payment_method = '', device_imei = '', device_imei_id = null,
     } = req.body;
 
     const tAmount = parseFloat(total_amount) || 0;
@@ -97,11 +99,19 @@ exports.createEMI = async (req, res, next) => {
     const nextDueDate = nextDueObj.toISOString().slice(0, 10);
 
     const emiId = await transaction(async (conn) => {
+      // QA-023: customer CNIC auto-fetch agar nahi bheja gaya
+      let cnicVal = String(customer_cnic || '').trim();
+      if (!cnicVal && customer_id) {
+        try {
+          const [cRows] = await conn.query('SELECT cnic FROM customers WHERE tenant_id = ? AND id = ? LIMIT 1', [tenantId, customer_id]);
+          if (cRows && cRows.length > 0) cnicVal = String(cRows[0].cnic || '').trim();
+        } catch { /* ignore */ }
+      }
       const [ins] = await conn.query(
         `INSERT INTO emi_records 
-         (tenant_id, application_no, customer_id, customer_name, product_variant_id, product_id, sale_id, product_name, product_sku, total_amount, down_payment, remaining_amount, emi_amount, interest_rate, interest_type, fixed_interest_per_month, total_months, total_installments, start_date, next_due_date, salesman_id, shop_location, notes, product_source, source_name, source_purchase_price, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-        [tenantId, appNo, customer_id, customer_name, product_variant_id, product_id, sale_id, product_name, product_sku, tAmount, dPayment, remaining, emiAmount, interest_rate, interest_type, fixed_interest_per_month, months, months, start_date, nextDueDate, salesman_id, shop_location, notes, product_source, source_name, source_purchase_price]
+         (tenant_id, application_no, customer_id, customer_name, product_variant_id, product_id, sale_id, product_name, product_sku, total_amount, down_payment, remaining_amount, emi_amount, interest_rate, interest_type, fixed_interest_per_month, total_months, total_installments, start_date, next_due_date, salesman_id, shop_location, notes, product_source, source_name, source_purchase_price, status, customer_cnic, down_payment_method, device_imei, device_imei_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+        [tenantId, appNo, customer_id, customer_name, product_variant_id, product_id, sale_id, product_name, product_sku, tAmount, dPayment, remaining, emiAmount, interest_rate, interest_type, fixed_interest_per_month, months, months, start_date, nextDueDate, salesman_id, shop_location, notes, product_source, source_name, source_purchase_price, cnicVal || null, down_payment_method || null, device_imei || null, device_imei_id]
       );
 
       const id = ins.insertId;
@@ -159,8 +169,11 @@ exports.payInstallment = async (req, res, next) => {
     const penAmt = parseFloat(penalty_amount) || 0;
     const discAmt = parseFloat(discount_amount) || 0;
 
-    if (payAmt <= 0) {
-      return res.status(400).json({ success: false, error: 'Payment amount must be greater than zero' });
+    // QA-021: Rs0 = missed installment marker — koi paisa move nahi hota,
+    // sirf installment "missed" mark hoti hai
+    const isMissed = payAmt <= 0;
+    if (isMissed && (penAmt > 0 || discAmt > 0)) {
+      return res.status(400).json({ success: false, error: 'Missed installment cannot carry penalty/discount' });
     }
 
     // M5 FIX: Validate payment doesn't exceed remaining + penalty
@@ -171,7 +184,7 @@ exports.payInstallment = async (req, res, next) => {
     const remaining = parseFloat(emiCheck[0].remaining_amount) || 0;
     const maxPayable = remaining + penAmt;
     // Round to paisa for comparison
-    if (Math.round(payAmt * 100) > Math.round(maxPayable * 100)) {
+    if (!isMissed && Math.round(payAmt * 100) > Math.round(maxPayable * 100)) {
       return res.status(400).json({
         success: false,
         error: `Payment Rs.${payAmt.toFixed(2)} exceeds remaining Rs.${remaining.toFixed(2)} (+ Rs.${penAmt.toFixed(2)} penalty)`
@@ -180,6 +193,24 @@ exports.payInstallment = async (req, res, next) => {
     const receiptNo = 'EMIRCP-' + Date.now();
 
     await transaction(async (conn) => {
+      // QA-021: MISSED installment — sirf marker, koi balance/account change nahi
+      if (isMissed) {
+        const [missRes] = await conn.query(
+          `INSERT INTO emi_payments
+             (tenant_id, emi_id, amount, penalty_amount, discount_amount, total_received, payment_mode, payment_method, account_id, receipt_no, notes, status, payment_date)
+           VALUES (?, ?, 0, 0, 0, 0, ?, ?, NULL, ?, ?, 'missed', NOW())`,
+          [tenantId, id, payment_mode, payment_mode, receiptNo, notes || 'Installment missed — Rs0 recorded']
+        );
+        const [pendings] = await conn.query(
+          `SELECT id FROM emi_schedule WHERE tenant_id = ? AND emi_id = ? AND status IN ('pending', 'partial') ORDER BY installment_no ASC LIMIT 1`,
+          [tenantId, id]
+        );
+        if (pendings.length > 0) {
+          await conn.query(`UPDATE emi_schedule SET status = 'missed' WHERE tenant_id = ? AND id = ?`, [tenantId, pendings[0].id]);
+        }
+        return;
+      }
+
       // 1. Record EMI payment
       const [payRes] = await conn.query(
         `INSERT INTO emi_payments 
@@ -245,7 +276,7 @@ exports.payInstallment = async (req, res, next) => {
       }
     });
 
-    res.json({ success: true, message: 'Installment payment recorded', data: { receipt_no: receiptNo } });
+    res.json({ success: true, message: isMissed ? 'Installment marked as missed' : 'Installment payment recorded', data: { receipt_no: receiptNo } });
   } catch (error) {
     next(error);
   }

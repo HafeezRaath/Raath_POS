@@ -1061,6 +1061,7 @@ export default function EMI() {
       total_amount: calculatedMetrics.totalWithInterest || Number(calc.totalAmount),
       down_payment: Number(calc.downPayment),
       down_payment_mode: calc.downPaymentMode || 'cash',
+      down_payment_method: calc.downPaymentMode || 'cash', // QA-023
       down_payment_account_id: calc.downPaymentAccountId || null,
       remaining_amount: calculatedMetrics.totalPayable,
       emi_amount: calculatedMetrics.emiAmount,
@@ -1257,7 +1258,9 @@ export default function EMI() {
   };
 
   const handlePayment = async () => {
-    if (!selectedEMI || !paymentForm.amount || Number(paymentForm.amount) <= 0) {
+    // QA-021: Rs0 allowed — missed installment marker
+    const rawAmt = paymentForm.amount;
+    if (!selectedEMI || rawAmt === '' || rawAmt == null || Number(rawAmt) < 0) {
       setSnackbar({ open: true, message: 'Please enter a valid amount!', severity: 'warning' });
       return;
     }
@@ -1669,7 +1672,24 @@ export default function EMI() {
       };
     });
 
-    setSelectedPayments(Array.isArray(payments) ? payments : []);
+    // QA-022: down payment Payments tab me nazar aaye (display-only row;
+    // schedule allocation me shamil nahi — wo pehle se remaining se bahar hai)
+    const _dpAmt = Number(emi.down_payment || 0);
+    const _payList = Array.isArray(payments) ? [...payments] : [];
+    if (_dpAmt > 0) {
+      _payList.unshift({
+        id: `down-${emi.id}`,
+        receipt_no: 'DOWN-PAYMENT',
+        payment_date: emi.created_at || emi.sale_date || emi.start_date,
+        amount: _dpAmt,
+        penalty_amount: 0,
+        discount_amount: 0,
+        payment_mode: emi.down_payment_mode || emi.down_payment_method || 'cash',
+        notes: 'Down payment (at plan creation)',
+        is_down_payment: true,
+      });
+    }
+    setSelectedPayments(_payList);
     setSelectedSchedule(finalSchedule);
     setSelectedGuarantors(Array.isArray(guarantors) ? guarantors : []);
     setSelectedVisits(Array.isArray(visits) ? visits : []);
@@ -3122,7 +3142,38 @@ export default function EMI() {
             </Typography>
             <Typography variant="caption" color="text.secondary">
               Total: {formatCurrency(selectedEMI.total_amount)} | EMI: {formatCurrency(selectedEMI.emi_amount)} | {selectedEMI.paid_months}/{selectedEMI.total_months} months
+              {/* QA-022: down payment visible */}
+              {Number(selectedEMI.down_payment) > 0 && <> | Down Payment: {formatCurrency(selectedEMI.down_payment)}</>}
             </Typography>
+            {/* QA-023: EMI record fields — CNIC, IMEI, source, cost, interest, down-payment method */}
+            <Paper variant="outlined" sx={{ p: 1.5, mt: 1.5, mb: 1, bgcolor: '#f8fafc', borderRadius: 2 }}>
+              <Grid container spacing={1}>
+                <Grid item xs={6} sm={4}>
+                  <Typography variant="caption" color="text.secondary" display="block">Customer CNIC</Typography>
+                  <Typography variant="body2" fontWeight={600}>{selectedEMI.customer_cnic || selectedEMI._customer_cnic || '—'}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <Typography variant="caption" color="text.secondary" display="block">Device IMEI</Typography>
+                  <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{selectedEMI.device_imei || '—'}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <Typography variant="caption" color="text.secondary" display="block">Product Source</Typography>
+                  <Typography variant="body2" fontWeight={600}>{selectedEMI.product_source || 'inventory'}{selectedEMI.source_name ? ` (${selectedEMI.source_name})` : ''}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <Typography variant="caption" color="text.secondary" display="block">Purchase Cost</Typography>
+                  <Typography variant="body2" fontWeight={600}>{formatCurrency(selectedEMI.source_purchase_price || selectedEMI.product_cost_price || selectedEMI.cost_price)}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <Typography variant="caption" color="text.secondary" display="block">Interest Amount</Typography>
+                  <Typography variant="body2" fontWeight={600}>{formatCurrency(selectedEMI.interest_amount || (Number(selectedEMI.total_amount || 0) - (Number(selectedEMI.product_retail_price || 0) - Number(selectedEMI.down_payment || 0))))}</Typography>
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <Typography variant="caption" color="text.secondary" display="block">Down-Payment Method</Typography>
+                  <Typography variant="body2" fontWeight={600}>{selectedEMI.down_payment_method || selectedEMI.down_payment_mode || '—'}</Typography>
+                </Grid>
+              </Grid>
+            </Paper>
           </Box>
 
           <Tabs value={historyTab} onChange={(e, v) => setHistoryTab(v)} variant="scrollable" scrollButtons="auto" sx={{ mb: 2, minHeight: 36 }}>
@@ -3370,6 +3421,16 @@ export default function EMI() {
                       size="small"
                     />
                   )}
+                  {/* QA-021: missed installment marker */}
+                  <Chip
+                    clickable
+                    color={Number(paymentForm.amount) === 0 ? 'warning' : 'default'}
+                    label="Mark as Missed (Rs0)"
+                    onClick={() => {
+                      setPaymentForm(prev => ({ ...prev, amount: 0, discountAmount: 0, penaltyAmount: 0 }));
+                    }}
+                    size="small"
+                  />
                 </Stack>
               </Box>
             )}

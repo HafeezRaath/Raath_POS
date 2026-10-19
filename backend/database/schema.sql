@@ -1075,6 +1075,9 @@ CREATE TABLE IF NOT EXISTS `emi_records` (
   `agreement_signed` TINYINT(1) DEFAULT 0,
   `agreement_date` DATE,
   `agreement_file_path` VARCHAR(255),
+  `customer_cnic` VARCHAR(30) NULL, -- QA-023
+  `down_payment_method` VARCHAR(50) NULL, -- QA-023
+  `device_imei` VARCHAR(30) NULL, -- QA-023
   `is_deleted` TINYINT(1) DEFAULT 0,
   `deleted_at` DATETIME NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,

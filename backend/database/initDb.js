@@ -199,6 +199,9 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'emi_records', '`early_settlement_discount` DECIMAL(15,2) DEFAULT 0');
     await addColumnIfMissing(connection, 'emi_records', '`settled_at` DATETIME NULL');
     await addColumnIfMissing(connection, 'emi_records', '`cnic_only` TINYINT(1) DEFAULT 0');
+    await addColumnIfMissing(connection, 'emi_records', '`customer_cnic` VARCHAR(30) NULL'); // QA-023
+    await addColumnIfMissing(connection, 'emi_records', '`down_payment_method` VARCHAR(50) NULL'); // QA-023
+    await addColumnIfMissing(connection, 'emi_records', '`device_imei` VARCHAR(30) NULL'); // QA-023
     await addColumnIfMissing(connection, 'emi_guarantors', '`guarantor_id` INT NULL');
     await addColumnIfMissing(connection, 'emi_guarantors', '`customer_id` INT NULL');
     await addColumnIfMissing(connection, 'emi_guarantors', '`is_deleted` TINYINT(1) DEFAULT 0');
