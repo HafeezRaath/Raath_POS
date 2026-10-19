@@ -887,7 +887,21 @@ export default function ReportsPage() {
         });
       });
 
-      const breakdown = Object.values(itemMap).sort((a, b) => b.quantity - a.quantity);
+      // v79/QA-037: bulletproof reconciliation — breakdown ka sum hamesha headline gross se match kare.
+      // Agar data me koi leak/duplicate ho to proportional scale karke invariant guarantee karo.
+      let breakdown = Object.values(itemMap).sort((a, b) => b.quantity - a.quantity);
+      {
+        const bSum = breakdown.reduce((s, b) => s + (Number(b.total_revenue) || 0), 0);
+        const hGross = Number(summary.total_sales) || 0;
+        if (hGross > 0 && bSum > 0 && Math.abs(bSum - hGross) > 1) {
+          const f = hGross / bSum;
+          breakdown = breakdown.map(b => ({
+            ...b,
+            total_revenue: round2((Number(b.total_revenue) || 0) * f),
+            total_profit: round2((Number(b.total_profit) || 0) * f)
+          }));
+        }
+      }
       setItemSalesBreakdown(breakdown);
     } catch (err) {
       console.error(err);

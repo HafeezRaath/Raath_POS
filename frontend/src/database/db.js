@@ -899,8 +899,17 @@ class DatabaseClient {
   async getAllSaleReturnItems(returnId) {
     // v78/QA-048: raw /query ki bajaye dedicated backend endpoint (tenant-safe, JOIN-safe)
     if (returnId) {
-      const res = await api.get(`/returns/sales/${returnId}/items`);
-      return res.data || [];
+      try {
+        const res = await api.get(`/returns/sales/${returnId}/items`);
+        const arr = res.data || [];
+        if (arr.length > 0) return arr;
+        // v79: endpoint khaali de to raw query fallback (purane returns ke liye)
+      } catch (_) { /* fallback neeche */ }
+      const fb = await this.query(
+        'SELECT sri.*, p.name AS product_name, pv.sku AS variant_sku FROM sale_return_items sri LEFT JOIN products p ON p.id = sri.product_id LEFT JOIN product_variants pv ON pv.id = sri.product_variant_id WHERE sri.sale_return_id = ? ORDER BY sri.id ASC',
+        [returnId]
+      ).catch(() => []);
+      return fb || [];
     }
     const res = await this.query(
       'SELECT sri.*, p.name AS product_name, pv.sku AS variant_sku FROM sale_return_items sri LEFT JOIN products p ON p.id = sri.product_id LEFT JOIN product_variants pv ON pv.id = sri.product_variant_id ORDER BY sri.id DESC',

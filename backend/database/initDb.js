@@ -143,6 +143,8 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'sale_items', '`price` DECIMAL(15,2) DEFAULT 0');
     // v75: QA-051 — expense voucher receipt_no auto-generate hota hai
     await addColumnIfMissing(connection, 'expenses', '`receipt_no` VARCHAR(100)');
+    // v79: QA-048 — sale_return_items INSERT ab product_variant_id likhta hai
+    await addColumnIfMissing(connection, 'sale_return_items', '`product_variant_id` INT NULL');
     await addColumnIfMissing(connection, 'sales', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
     await addColumnIfMissing(connection, 'sales', '`fbr_status` VARCHAR(50) DEFAULT "PENDING"');
     await addColumnIfMissing(connection, 'sales', '`fbr_reference` VARCHAR(150)');
