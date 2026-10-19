@@ -1,7 +1,7 @@
 // QA-060: blank white page ki jagah proper Access Denied page
+// (Tailwind + lucide-react — project me MUI dependency nahi hai)
 import React from 'react';
-import { Box, Typography, Button, Paper } from '@mui/material';
-import { Lock as LockIcon } from '@mui/icons-material';
+import { Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function AccessDenied({ pageName }) {
@@ -14,29 +14,33 @@ export default function AccessDenied({ pageName }) {
     window.location.href = '/login';
   };
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh', p: 3 }}>
-      <Paper sx={{ p: 4, maxWidth: 420, textAlign: 'center', borderRadius: 3 }}>
-        <LockIcon sx={{ fontSize: 56, color: '#f59e0b', mb: 2 }} />
-        <Typography variant="h5" fontWeight="bold" gutterBottom>
-          Access Denied
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+    <div className="flex items-center justify-center min-h-[70vh] p-6">
+      <div className="bg-white shadow-lg rounded-2xl p-8 max-w-md w-full text-center">
+        <Lock className="w-14 h-14 mx-auto mb-4 text-amber-500" />
+        <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
+        <p className="text-sm text-gray-600 mb-1">
           {pageName
             ? `Aapke role ko "${pageName}" page dekhne ki ijazat nahi hai.`
             : 'Aapke role ko ye page dekhne ki ijazat nahi hai.'}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>
+        </p>
+        <p className="text-xs text-gray-400 block mb-6">
           Apne administrator se rabta karein agar aapko access chahiye.
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-          <Button variant="contained" onClick={() => navigate('/')}>
+        </p>
+        <div className="flex gap-2 justify-center">
+          <button
+            onClick={() => navigate('/')}
+            className="px-5 py-2 rounded-lg bg-blue-700 text-white font-medium hover:bg-blue-800"
+          >
             Dashboard
-          </Button>
-          <Button variant="outlined" color="error" onClick={handleLogout}>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="px-5 py-2 rounded-lg border border-red-500 text-red-600 font-medium hover:bg-red-50"
+          >
             Logout
-          </Button>
-        </Box>
-      </Paper>
-    </Box>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
