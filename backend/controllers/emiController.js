@@ -164,7 +164,7 @@ exports.payInstallment = async (req, res, next) => {
     }
 
     // M5 FIX: Validate payment doesn't exceed remaining + penalty
-    const [emiCheck] = await query('SELECT remaining_amount FROM emi_records WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    const emiCheck = await query('SELECT remaining_amount FROM emi_records WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
     if (emiCheck.length === 0) {
       return res.status(404).json({ success: false, error: 'EMI record not found' });
     }

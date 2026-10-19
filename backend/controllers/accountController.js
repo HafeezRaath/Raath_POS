@@ -137,7 +137,7 @@ exports.transferFunds = async (req, res, next) => {
     }
 
     // M1 FIX: Check source has sufficient balance (prevent negative)
-    const [srcAccts] = await query('SELECT current_balance, name FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, from_account_id]);
+    const srcAccts = await query('SELECT current_balance, name FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, from_account_id]);
     if (srcAccts.length === 0) {
       return res.status(404).json({ success: false, error: 'Source account not found' });
     }

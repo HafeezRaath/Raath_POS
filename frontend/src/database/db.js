@@ -183,7 +183,7 @@ class DatabaseClient {
 
   async createPurchaseReturn(data) {
     const res = await api.post('/returns/purchases', data);
-    return res.data;
+    return res;
   }
 
   // ==================== PURCHASES ====================
@@ -399,6 +399,11 @@ class DatabaseClient {
   async deleteExpense(id) {
     const res = await api.delete(`/expenses/${id}`);
     return res.success;
+  }
+
+  async updateExpense(id, data) {
+    const res = await api.put(`/expenses/${id}`, data);
+    return res.data;
   }
 
   async getExpenseCategories() {

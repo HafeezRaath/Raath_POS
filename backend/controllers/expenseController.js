@@ -80,13 +80,72 @@ exports.createExpense = async (req, res, next) => {
   }
 };
 
+exports.updateExpense = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant_id || 'tenant_default';
+    const { id } = req.params;
+    const {
+      title, amount, category_id = null, category_name = '',
+      account_id = null, description = '', date = new Date().toISOString().slice(0, 10),
+      payment_method = 'cash'
+    } = req.body;
+
+    const parsedAmount = parseFloat(amount) || 0;
+    if (!title || parsedAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid title and amount required' });
+    }
+
+    const existing = await query('SELECT * FROM expenses WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, error: 'Expense not found' });
+    }
+    const old = existing[0];
+    const oldAmount = parseFloat(old.amount) || 0;
+    const oldAccountId = old.account_id;
+
+    await transaction(async (conn) => {
+      // 1. Reverse old account deduction (add back)
+      if (oldAccountId && oldAmount > 0) {
+        await conn.query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [oldAmount, tenantId, oldAccountId]);
+        await conn.query(
+          `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
+           VALUES (?, ?, 'credit', ?, 'Expense update reversal', 'expense', ?, CURDATE())`,
+          [tenantId, oldAccountId, oldAmount, id]
+        );
+      }
+
+      // 2. Update expense row
+      await conn.query(
+        `UPDATE expenses SET title = ?, amount = ?, category_id = ?, category_name = ?, account_id = ?, description = ?, date = ?, payment_method = ?
+         WHERE tenant_id = ? AND id = ?`,
+        [title.trim(), parsedAmount, category_id, category_name, account_id, description, date, payment_method, tenantId, id]
+      );
+
+      // 3. Deduct new amount from (new) account
+      if (account_id) {
+        await conn.query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [parsedAmount, tenantId, account_id]);
+        await conn.query(
+          `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
+           VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'expense', ?, ?)`,
+          [tenantId, account_id, parsedAmount, tenantId, account_id, `Expense: ${title}`, id, date]
+        );
+      }
+    });
+
+    const updated = await query('SELECT * FROM expenses WHERE tenant_id = ? AND id = ?', [tenantId, id]);
+    res.json({ success: true, data: updated[0] || null });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.deleteExpense = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
 
     // Get expense for account reversal
-    const [expenses] = await query('SELECT * FROM expenses WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    const expenses = await query('SELECT * FROM expenses WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
     if (expenses.length === 0) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
     }

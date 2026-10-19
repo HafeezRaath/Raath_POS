@@ -175,7 +175,8 @@ exports.createSaleReturn = async (req, res, next) => {
 
           // Check current account balance — "sirf utni hi jay zyda nhi"
           const [accRows] = await conn.query(`SELECT current_balance, name FROM accounts WHERE tenant_id = ? AND id = ?`, [tenantId, spAccId]);
-          const currentBal = accRows ? (parseFloat(accRows.current_balance) || 0) : 0;
+          const spAccRow = Array.isArray(accRows) && accRows.length > 0 ? accRows[0] : null;
+          const currentBal = spAccRow ? (parseFloat(spAccRow.current_balance) || 0) : 0;
           const maxDeductible = Math.max(0, currentBal);
           const actualDeduct = Math.min(spAmount, maxDeductible);
 
@@ -184,14 +185,15 @@ exports.createSaleReturn = async (req, res, next) => {
             await conn.query(
               `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
                VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'sale_return', ?, CURDATE())`,
-              [tenantId, spAccId, actualDeduct, tenantId, spAccId, `Refund for Return #${returnNumber} (Split: ${accRows?.name || ''})`, id]
+              [tenantId, spAccId, actualDeduct, tenantId, spAccId, `Refund for Return #${returnNumber} (Split: ${spAccRow?.name || ''})`, id]
             );
           }
         }
       } else if (account_id && refAmt > 0) {
         // Single account: only deduct up to available balance
         const [accRows] = await conn.query(`SELECT current_balance, name FROM accounts WHERE tenant_id = ? AND id = ?`, [tenantId, account_id]);
-        const currentBal = accRows ? (parseFloat(accRows.current_balance) || 0) : 0;
+        const accRow = Array.isArray(accRows) && accRows.length > 0 ? accRows[0] : null;
+        const currentBal = accRow ? (parseFloat(accRow.current_balance) || 0) : 0;
         const maxDeductible = Math.max(0, currentBal);
         const actualDeduct = Math.min(refAmt, maxDeductible);
 
@@ -309,6 +311,18 @@ exports.createPurchaseReturn = async (req, res, next) => {
 
     const returnNo = 'PR-' + Date.now();
     const gTotal = parseFloat(grand_total) || parseFloat(total_amount) || 0;
+
+    // Validate: a return must carry at least one item, otherwise it would
+    // move supplier money with no stock movement (phantom return).
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Return must include at least one item' });
+    }
+    if (purchase_id) {
+      const purch = await query('SELECT id FROM purchases WHERE tenant_id = ? AND id = ?', [tenantId, purchase_id]);
+      if (purch.length === 0) {
+        return res.status(400).json({ success: false, error: 'Purchase not found' });
+      }
+    }
 
     const retId = await transaction(async (conn) => {
       const [ins] = await conn.query(

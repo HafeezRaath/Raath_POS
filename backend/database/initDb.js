@@ -408,6 +408,7 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'customer_ledger', "`reference_no` VARCHAR(100) NULL");
     await addColumnIfMissing(connection, 'customer_ledger', "`sale_id` INT NULL");
     await addColumnIfMissing(connection, 'customer_ledger', "`items_json` LONGTEXT NULL");
+    await addColumnIfMissing(connection, 'customer_ledger', "`date` DATETIME DEFAULT CURRENT_TIMESTAMP");
 
     // Payments migrations
     await addColumnIfMissing(connection, 'payments', "`account_id` INT NULL");
