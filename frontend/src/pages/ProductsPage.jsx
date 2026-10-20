@@ -2735,24 +2735,19 @@ const [copies, setCopies] = useState(1);
               </Box>
             ) : (
               // Desktop Table View
-              <TableContainer component={Paper} sx={{ overflowX: 'auto', maxWidth: '100%' }}>
-                <Table size="small" sx={{
-                  minWidth: 840,
-                  '& td, & th': { whiteSpace: 'nowrap' },
-                  '& .col-opt-md': { display: { xs: 'none', md: 'table-cell' } },
-                  '& .col-opt-lg': { display: { xs: 'none', lg: 'table-cell' } },
-                }}>
+              <TableContainer component={Paper}>
+                <Table size="small" className="min-w-[840px] whitespace-nowrap">
                   <TableHead>
                     <TableRow sx={{ bgcolor: 'primary.main' }}>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Image</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Name / Variant</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>SKU</TableCell>
-                      <TableCell className="col-opt-lg" sx={{ color: 'white', fontWeight: 'bold' }}>Type</TableCell>
-                      <TableCell className="col-opt-md" sx={{ color: 'white', fontWeight: 'bold' }}>Category</TableCell>
+                      <TableCell className="hidden lg:table-cell" sx={{ color: 'white', fontWeight: 'bold' }}>Type</TableCell>
+                      <TableCell className="hidden md:table-cell" sx={{ color: 'white', fontWeight: 'bold' }}>Category</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Stock</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Cost</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Retail</TableCell>
-                      <TableCell className="col-opt-lg" sx={{ color: 'white', fontWeight: 'bold' }}>Wholesale</TableCell>
+                      <TableCell className="hidden lg:table-cell" sx={{ color: 'white', fontWeight: 'bold' }}>Wholesale</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Status</TableCell>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Actions</TableCell>
                     </TableRow>
@@ -2816,8 +2811,8 @@ const [copies, setCopies] = useState(1);
                               </Box>
                             </TableCell>
                             <TableCell>{parent.sku}</TableCell>
-                            <TableCell className="col-opt-lg">{getTypeChip(parent.product_type || parent.type)}</TableCell>
-                            <TableCell className="col-opt-md">{parent.category_name || '-'}</TableCell>
+                            <TableCell className="hidden lg:table-cell">{getTypeChip(parent.product_type || parent.type)}</TableCell>
+                            <TableCell className="hidden md:table-cell">{parent.category_name || '-'}</TableCell>
                             <TableCell>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                                 {renderParentStock(parent, totalStock)}
@@ -2826,7 +2821,7 @@ const [copies, setCopies] = useState(1);
                             </TableCell>
                             <TableCell>{formatCurrency(parent.purchase_price)}</TableCell>
                             <TableCell>{formatCurrency(parent.retail_price)}</TableCell>
-                            <TableCell className="col-opt-lg">{formatCurrency(parent.wholesale_price)}</TableCell>
+                            <TableCell className="hidden lg:table-cell">{formatCurrency(parent.wholesale_price)}</TableCell>
                             <TableCell>
                               <Chip size="small" color={parent.status === 'active' ? 'success' : 'default'} label={parent.status} />
                             </TableCell>
@@ -2894,8 +2889,8 @@ const [copies, setCopies] = useState(1);
                                   <Typography variant="body2">{variant.variant_name || 'Default'}</Typography>
                                 </TableCell>
                                 <TableCell>{variant.sku}</TableCell>
-                                <TableCell className="col-opt-lg">-</TableCell>
-                                <TableCell className="col-opt-md">-</TableCell>
+                                <TableCell className="hidden lg:table-cell">-</TableCell>
+                                <TableCell className="hidden md:table-cell">-</TableCell>
                                 <TableCell>
                                   {variant.is_box_product && variant.units_per_box > 0 ? (
                                     <Box>
@@ -2936,7 +2931,7 @@ const [copies, setCopies] = useState(1);
                                 </TableCell>
                                 <TableCell>{formatCurrency(variant.purchase_price)}</TableCell>
                                 <TableCell>{formatCurrency(variant.retail_price)}</TableCell>
-                                <TableCell className="col-opt-lg">{formatCurrency(variant.wholesale_price)}</TableCell>
+                                <TableCell className="hidden lg:table-cell">{formatCurrency(variant.wholesale_price)}</TableCell>
                                 <TableCell>
                                   <Chip size="small" color={variant.status === 'active' ? 'success' : 'default'} label={variant.status} />
                                 </TableCell>
@@ -3039,8 +3034,8 @@ const [copies, setCopies] = useState(1);
                 )}
               </Box>
             ) : (
-              <TableContainer component={Paper} sx={{ overflowX: 'auto', maxWidth: '100%' }}>
-                <Table size="small" sx={{ minWidth: 680, '& td, & th': { whiteSpace: 'nowrap' } }}>
+              <TableContainer component={Paper}>
+                <Table size="small" className="min-w-[680px] whitespace-nowrap">
                   <TableHead>
                     <TableRow sx={{ bgcolor: 'primary.main' }}>
                       <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Offer Name</TableCell>
