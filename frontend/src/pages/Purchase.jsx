@@ -49,7 +49,7 @@ const formatCurrency = (amount) => {
 // ==================== MOBILE PURCHASE CARD ====================
 const MobilePurchaseCard = ({ purchase, onEdit, onDelete, onReturn, onPayment, onViewSupplier, onView }) => {
   const [expanded, setExpanded] = useState(false);
-  const due = (purchase.grand_total || 0) - (purchase.paid_amount || 0);
+  const due = Math.max(0, (purchase.grand_total || 0) - (purchase.paid_amount || 0) - (Number(purchase.returned_amount) || 0));
   const computedPaymentStatus = due <= 0 ? 'paid' : ((purchase.paid_amount || 0) > 0 ? 'partial' : 'due');
 
   return (
@@ -1140,7 +1140,7 @@ export default function PurchasePage() {
 
   const handleOpenPayment = (purchase) => {
     setPaymentPurchase(purchase);
-    const due = (purchase.grand_total || 0) - (purchase.paid_amount || 0);
+    const due = Math.max(0, (purchase.grand_total || 0) - (purchase.paid_amount || 0) - (Number(purchase.returned_amount) || 0));
     setPaymentAmount(String(due));
     const mode = purchase.payment_mode || 'cash';
     setPaymentMode(mode);
@@ -1188,7 +1188,7 @@ export default function PurchasePage() {
       return;
     }
 
-    const due = (paymentPurchase.grand_total || 0) - (paymentPurchase.paid_amount || 0);
+    const due = Math.max(0, (paymentPurchase.grand_total || 0) - (paymentPurchase.paid_amount || 0) - (Number(paymentPurchase.returned_amount) || 0));
     if (amount > due) {
       setSnackbar({ open: true, message: `Amount exceeds due balance! Max allowed: ${formatCurrency(due)}`, severity: 'warning' });
       return;
@@ -1758,7 +1758,7 @@ const handleProcessReturn = async () => {
         'Supplier': p.supplier_name || '',
         'Total': p.grand_total || 0,
         'Paid': p.paid_amount || 0,
-        'Due': (p.grand_total || 0) - (p.paid_amount || 0),
+        'Due': Math.max(0, (p.grand_total || 0) - (p.paid_amount || 0) - (Number(p.returned_amount) || 0)),
         'Status': p.status || 'pending',
         'Payment Status': p.payment_status || 'due',
         'Items': p.items_count || 0
@@ -2303,7 +2303,7 @@ const handleProcessReturn = async () => {
                       </TableRow>
                     )}
                     {paginatedPurchases.map((purchase) => {
-                      const due = (purchase.grand_total || 0) - (purchase.paid_amount || 0);
+                      const due = Math.max(0, (purchase.grand_total || 0) - (purchase.paid_amount || 0) - (Number(purchase.returned_amount) || 0));
                       const computedPaymentStatus = due <= 0 ? 'paid' : ((purchase.paid_amount || 0) > 0 ? 'partial' : 'due');
                       return (
                         <TableRow key={purchase.id} hover>
@@ -2413,7 +2413,7 @@ const handleProcessReturn = async () => {
                   <Typography variant="body2" fontWeight={500}>View Details</Typography>
                 </MenuItem>
 
-                {menuSelectedPurchase && ((menuSelectedPurchase.grand_total || 0) - (menuSelectedPurchase.paid_amount || 0) > 0) && (
+                {menuSelectedPurchase && (((menuSelectedPurchase.grand_total || 0) - (menuSelectedPurchase.paid_amount || 0) - (Number(menuSelectedPurchase.returned_amount) || 0)) > 0) && (
                   <MenuItem
                     onClick={() => {
                       const p = menuSelectedPurchase;
@@ -2493,7 +2493,7 @@ const handleProcessReturn = async () => {
           <Box>
             {isMobile ? (
               <Box>
-                {filteredPurchases.filter(p => (p.grand_total || 0) - (p.paid_amount || 0) > 0).map((purchase) => (
+                {filteredPurchases.filter(p => ((p.grand_total || 0) - (p.paid_amount || 0) - (Number(p.returned_amount) || 0)) > 0).map((purchase) => (
                   <MobilePurchaseCard
                     key={purchase.id}
                     purchase={purchase}
@@ -2504,7 +2504,7 @@ const handleProcessReturn = async () => {
                     onViewSupplier={handleViewSupplier}
                   />
                 ))}
-                {filteredPurchases.filter(p => (p.grand_total || 0) - (p.paid_amount || 0) > 0).length === 0 && (
+                {filteredPurchases.filter(p => ((p.grand_total || 0) - (p.paid_amount || 0) - (Number(p.returned_amount) || 0)) > 0).length === 0 && (
                   <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 1 }}>
                     <CheckCircle sx={{ fontSize: 48, color: 'success.main' }} />
                     <Typography color="text.secondary">All payments are up to date!</Typography>
@@ -2526,8 +2526,8 @@ const handleProcessReturn = async () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredPurchases.filter(p => (p.grand_total || 0) - (p.paid_amount || 0) > 0).map((purchase) => {
-                      const due = (purchase.grand_total || 0) - (purchase.paid_amount || 0);
+                    {filteredPurchases.filter(p => ((p.grand_total || 0) - (p.paid_amount || 0) - (Number(p.returned_amount) || 0)) > 0).map((purchase) => {
+                      const due = Math.max(0, (purchase.grand_total || 0) - (purchase.paid_amount || 0) - (Number(purchase.returned_amount) || 0));
                       return (
                         <TableRow key={purchase.id} hover>
                           <TableCell>{purchase.purchase_no || purchase.purchase_number || ('PUR-' + String(purchase.id).padStart(5, '0'))}</TableCell>
@@ -2560,7 +2560,7 @@ const handleProcessReturn = async () => {
                         </TableRow>
                       );
                     })}
-                    {filteredPurchases.filter(p => (p.grand_total || 0) - (p.paid_amount || 0) > 0).length === 0 && (
+                    {filteredPurchases.filter(p => ((p.grand_total || 0) - (p.paid_amount || 0) - (Number(p.returned_amount) || 0)) > 0).length === 0 && (
                       <TableRow>
                         <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                           <Typography color="text.secondary">All payments are up to date!</Typography>
@@ -3610,7 +3610,7 @@ const handleProcessReturn = async () => {
                 <Grid item xs={6}>
                   <Typography variant="caption" color="text.secondary" display="block">Due</Typography>
                   <Typography variant="body2" fontWeight="bold" color="error.main">
-                    {formatCurrency((paymentPurchase.grand_total || 0) - (paymentPurchase.paid_amount || 0))}
+                    {formatCurrency(Math.max(0, (paymentPurchase.grand_total || 0) - (paymentPurchase.paid_amount || 0) - (Number(paymentPurchase.returned_amount) || 0)))}
                   </Typography>
                 </Grid>
               </Grid>
@@ -3979,8 +3979,8 @@ const handleProcessReturn = async () => {
                           />
                           <Chip 
                             size="small" 
-                            color={((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0)) <= 0 ? 'success' : ((viewPurchaseData.paid_amount || 0) > 0 ? 'warning' : 'error')} 
-                            label={((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0)) <= 0 ? 'PAID' : ((viewPurchaseData.paid_amount || 0) > 0 ? 'PARTIAL' : 'DUE')} 
+                            color={((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0) - (Number(viewPurchaseData.returned_amount) || 0)) <= 0 ? 'success' : (((viewPurchaseData.paid_amount || 0) + (Number(viewPurchaseData.returned_amount) || 0)) > 0 ? 'warning' : 'error')} 
+                            label={((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0) - (Number(viewPurchaseData.returned_amount) || 0)) <= 0 ? 'PAID' : (((viewPurchaseData.paid_amount || 0) + (Number(viewPurchaseData.returned_amount) || 0)) > 0 ? 'PARTIAL' : 'DUE')} 
                             sx={{ height: 20, fontSize: '0.65rem' }}
                           />
                         </Stack>
@@ -4150,14 +4150,23 @@ const handleProcessReturn = async () => {
                       </Typography>
                     </Box>
 
+                    {(Number(viewPurchaseData.returned_amount) || 0) > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="caption" color="text.secondary">Less: Returned Items:</Typography>
+                        <Typography variant="body2" fontWeight="bold" color="warning.main">
+                          - {formatCurrency(viewPurchaseData.returned_amount || 0)}
+                        </Typography>
+                      </Box>
+                    )}
+
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Typography variant="caption" color="text.secondary">Due Balance:</Typography>
                       <Typography 
                         variant="body2" 
                         fontWeight="bold" 
-                        color={((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0)) > 0 ? 'error.main' : 'text.secondary'}
+                        color={Math.max(0, (viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0) - (Number(viewPurchaseData.returned_amount) || 0)) > 0 ? 'error.main' : 'text.secondary'}
                       >
-                        {formatCurrency(Math.max(0, (viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0)))}
+                        {formatCurrency(Math.max(0, (viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0) - (Number(viewPurchaseData.returned_amount) || 0)))}
                       </Typography>
                     </Box>
                   </Stack>
@@ -4176,7 +4185,7 @@ const handleProcessReturn = async () => {
         </DialogContent>
 
         <DialogActions sx={{ px: isMobile ? 1.5 : 2.5, py: 1.5, bgcolor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-          {viewPurchaseData && ((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0) > 0) && (
+          {viewPurchaseData && (((viewPurchaseData.grand_total || 0) - (viewPurchaseData.paid_amount || 0) - (Number(viewPurchaseData.returned_amount) || 0)) > 0) && (
             <Button
               variant="contained"
               color="success"
@@ -4490,7 +4499,7 @@ const handleProcessReturn = async () => {
                       </TableRow>
                     )}
                     {supplierPurchases.map((p) => {
-                      const due = (p.grand_total || 0) - (p.paid_amount || 0);
+                      const due = Math.max(0, (p.grand_total || 0) - (p.paid_amount || 0) - (Number(p.returned_amount) || 0));
                       return (
                         <TableRow key={p.id} hover>
                           <TableCell>{p.purchase_no || p.purchase_number || ('PUR-' + String(p.id).padStart(5, '0'))}</TableCell>

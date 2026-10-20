@@ -147,6 +147,8 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'sale_return_items', '`product_variant_id` INT NULL');
     // v80 (Hafeez 36a6b10): purchase return INSERT ab purchase_item_id likhta hai (returned_quantity tracking)
     await addColumnIfMissing(connection, 'purchase_return_items', '`purchase_item_id` INT NULL');
+    // v81: purchase return ka settlement type — cash refund (1) vs supplier credit (0); sirf credit return purchase ka DUE kam karta hai
+    await addColumnIfMissing(connection, 'purchase_returns', '`is_cash_refund` TINYINT(1) DEFAULT 0');
     await addColumnIfMissing(connection, 'sales', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
     await addColumnIfMissing(connection, 'sales', '`fbr_status` VARCHAR(50) DEFAULT "PENDING"');
     await addColumnIfMissing(connection, 'sales', '`fbr_reference` VARCHAR(150)');

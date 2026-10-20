@@ -312,9 +312,11 @@ exports.getPurchaseReturns = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const { supplier_id, purchase_id } = req.query;
     let sql = `
-      SELECT pr.*, s.name AS supplier_name, s.phone AS supplier_phone
+      SELECT pr.*, s.name AS supplier_name, s.phone AS supplier_phone, p.purchase_no,
+        (SELECT COUNT(*) FROM purchase_return_items pri WHERE pri.purchase_return_id = pr.id AND pri.tenant_id = pr.tenant_id) AS items_count
       FROM purchase_returns pr
       JOIN suppliers s ON pr.supplier_id = s.id
+      LEFT JOIN purchases p ON p.id = pr.purchase_id AND p.tenant_id = pr.tenant_id
       WHERE pr.tenant_id = ? AND pr.is_deleted = 0
     `;
     const params = [tenantId];
@@ -392,6 +394,8 @@ exports.createPurchaseReturn = async (req, res, next) => {
 
     const returnNo = 'PR-' + Date.now();
     const gTotal = parseFloat(grand_total) || parseFloat(total_amount) || 0;
+    // v81: settlement type pehle compute karo — cash/bank refund (account select ho to) vs supplier credit
+    const isCashRefund = (payment_mode === 'cash' || payment_mode === 'bank') && !!account_id;
 
     // Validate: a return must carry at least one item, otherwise it would
     // move supplier money with no stock movement (phantom return).
@@ -407,9 +411,9 @@ exports.createPurchaseReturn = async (req, res, next) => {
 
     const retId = await transaction(async (conn) => {
       const [ins] = await conn.query(
-        `INSERT INTO purchase_returns (tenant_id, purchase_id, return_no, supplier_id, total_amount, grand_total, notes, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'processed')`,
-        [tenantId, purchase_id, returnNo, supplier_id, total_amount, gTotal, notes]
+        `INSERT INTO purchase_returns (tenant_id, purchase_id, return_no, supplier_id, total_amount, grand_total, notes, status, is_cash_refund)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'processed', ?)`,
+        [tenantId, purchase_id, returnNo, supplier_id, total_amount, gTotal, notes, isCashRefund ? 1 : 0]
       );
 
       const id = ins.insertId;
@@ -476,7 +480,6 @@ exports.createPurchaseReturn = async (req, res, next) => {
       }
 
       // Update supplier balance / Cash refund
-      const isCashRefund = (payment_mode === 'cash' || payment_mode === 'bank') && account_id;
       if (isCashRefund && gTotal > 0) {
         // Direct cash/bank refund from supplier into account
         await conn.query(

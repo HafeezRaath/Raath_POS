@@ -467,6 +467,7 @@ CREATE TABLE IF NOT EXISTS `purchase_returns` (
   `notes` TEXT,
   `status` VARCHAR(50) DEFAULT 'processed',
   `is_deleted` TINYINT(1) DEFAULT 0,
+  `is_cash_refund` TINYINT(1) DEFAULT 0,
   `deleted_at` DATETIME NULL,
   `created_by` INT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,

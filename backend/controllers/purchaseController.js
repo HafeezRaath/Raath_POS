@@ -15,7 +15,8 @@ exports.getPurchases = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const { supplierId, startDate, endDate, limit = 100 } = req.query;
     let sql = `
-      SELECT p.*, s.name AS supplier_name, s.phone AS supplier_phone, w.name AS warehouse_name
+      SELECT p.*, s.name AS supplier_name, s.phone AS supplier_phone, w.name AS warehouse_name,
+        COALESCE((SELECT SUM(pr.grand_total) FROM purchase_returns pr WHERE pr.purchase_id = p.id AND pr.tenant_id = p.tenant_id AND pr.is_deleted = 0 AND COALESCE(pr.is_cash_refund, 0) = 0), 0) AS returned_amount
       FROM purchases p
       LEFT JOIN suppliers s ON p.supplier_id = s.id
       LEFT JOIN warehouses w ON p.warehouse_id = w.id
@@ -51,7 +52,8 @@ exports.getPurchaseById = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
     const purchases = await query(`
-      SELECT p.*, COALESCE(p.supplier_name, s.name) AS supplier_name, s.phone AS supplier_phone, w.name AS warehouse_name
+      SELECT p.*, COALESCE(p.supplier_name, s.name) AS supplier_name, s.phone AS supplier_phone, w.name AS warehouse_name,
+        COALESCE((SELECT SUM(pr.grand_total) FROM purchase_returns pr WHERE pr.purchase_id = p.id AND pr.tenant_id = p.tenant_id AND pr.is_deleted = 0 AND COALESCE(pr.is_cash_refund, 0) = 0), 0) AS returned_amount
       FROM purchases p
       LEFT JOIN suppliers s ON p.supplier_id = s.id
       LEFT JOIN warehouses w ON p.warehouse_id = w.id
