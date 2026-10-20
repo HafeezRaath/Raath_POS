@@ -30,6 +30,7 @@ import { useNavigate } from 'react-router-dom';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
 import BarcodePrintModal from '../components/common/BarcodePrintModal';
+import { getShopBusinessType } from '../config/businessModules';
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
@@ -304,6 +305,8 @@ export default function PurchasePage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const navigate = useNavigate();
+  // v84: IMEI entry sirf Mobile Shop business type me (account ki registered type)
+  const isMobileShop = getShopBusinessType() === 'mobile';
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -3158,8 +3161,8 @@ const handleProcessReturn = async () => {
                 label="Qty" 
                 value={currentItem.quantity} 
                 onChange={(e) => setCurrentItem(prev => ({ ...prev, quantity: e.target.value }))}
-                sx={{ 
-                  '& .MuiInputBase-root': { 
+                sx={{
+                  '& .MuiInputBase-root': {
                     fontSize: '0.7rem',
                     padding: '2px 4px',
                     height: '36px'
@@ -3237,7 +3240,8 @@ const handleProcessReturn = async () => {
                 }}
               />
             </Box>
-            {/* QA-028: IMEI entry for serialized stock at purchase time */}
+            {/* v84: IMEI entry for serialized stock — SIRF Mobile Shop me */}
+            {isMobileShop && (
             <Box sx={{ flex: '1 1 200px', minWidth: '180px' }}>
               <TextField
                 fullWidth
@@ -3259,11 +3263,12 @@ const handleProcessReturn = async () => {
                 }}
               />
             </Box>
+            )}
             <Box sx={{ flex: '0 0 80px', minWidth: '70px' }}>
-              <Button 
-                variant="contained" 
-                color="secondary" 
-                startIcon={<Add />} 
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<Add />}
                 onClick={handleAddItem}
                 fullWidth
                 sx={{ 

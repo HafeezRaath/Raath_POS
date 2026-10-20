@@ -34,7 +34,7 @@ import api from '../api/apiClient';
 import { useNavigate } from 'react-router-dom';
 import useSyncListener from '../hooks/useSyncListener';
 import UnifiedPagination from '../components/common/UnifiedPagination';
-import { getDefaultProductType, getProductTypesForBusiness } from '../config/businessModules';
+import { getDefaultProductType, getProductTypesForBusiness, getShopBusinessType } from '../config/businessModules';
 import ShoeVariantMatrix from '../components/shoes/ShoeVariantMatrix';
 import ThaanFabricForm from '../components/garments/ThaanFabricForm';
 import ReadymadeMatrix from '../components/garments/ReadymadeMatrix';
@@ -269,9 +269,10 @@ export default function InventoryPage() {
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
 
-  // Filter product types by selected business type (from login page)
+  // v84: product types account ki REGISTERED business type se filter karo
+  // (pehle login-page picker ki value use hoti thi — galat type select karne par IMEI type cloth shop ko bhi mil jata tha)
   const allowedProductTypes = React.useMemo(() => {
-    const businessType = localStorage.getItem('raath_selected_business_type') || 'other';
+    const businessType = getShopBusinessType();
     const allowed = getProductTypesForBusiness(businessType);
     return PRODUCT_TYPES.filter(t => allowed.includes(t.value));
   }, []);

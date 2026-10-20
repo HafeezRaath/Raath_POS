@@ -18,7 +18,7 @@ import Modal from '../components/ui/Modal';
 import Alert from '../components/ui/Alert';
 import Badge from '../components/ui/Badge';
 import { useAuth } from '../AuthContext';
-import { BUSINESS_TYPES, BUSINESS_MODULE_DEFAULTS } from '../config/businessModules';
+import { BUSINESS_TYPES } from '../config/businessModules';
 import db from '../database/db';
 
 export default function LoginPage() {
@@ -124,24 +124,10 @@ export default function LoginPage() {
       return;
     }
 
-    // Save selected business type for module customization after login
-    if (selectedBusinessType) {
-      localStorage.setItem('raath_selected_business_type', selectedBusinessType);
-      // Apply module defaults for this business type (if user hasn't customized)
-      const alreadyCustomized = localStorage.getItem('raath_modules_customized');
-      if (!alreadyCustomized) {
-        const defaults = BUSINESS_MODULE_DEFAULTS[selectedBusinessType];
-        if (defaults) {
-          // Merge with existing page_visibility (preserve other settings)
-          let current = {};
-          try {
-            current = JSON.parse(localStorage.getItem('page_visibility') || '{}');
-          } catch (e) {}
-          const updated = { ...current, emi: defaults.emi, workorders: defaults.workorders, distribution: defaults.distribution };
-          localStorage.setItem('page_visibility', JSON.stringify(updated));
-        }
-      }
-    }
+    // v84: login par picker ki business type apply NAHI hoti — existing account ki
+    // REGISTERED business_type hi chalegi (AuthContext login success par sync karta hai).
+    // Picker sirf naye signup ke liye hai; galat type select karke login karne par bhi
+    // account ki asal type ke features hi dikhenge.
 
     setLoading(true);
 

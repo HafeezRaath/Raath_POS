@@ -33,6 +33,7 @@ import { ArticlePickerModal } from '../components/shoes/ShoePickModals';
 import UniformSizePicker from '../components/bookshop/UniformSizePicker';
 import ThaanMeterModal from '../components/garments/ThaanMeterModal';
 import ImeiPickerModal from '../components/mobile/ImeiPickerModal';
+import { getShopBusinessType } from '../config/businessModules';
 
 // ==================== HELPERS ====================
 // ==================== HELPERS ====================
@@ -1053,6 +1054,9 @@ export default function BillingPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileActiveTab, setMobileActiveTab] = useState('products');
+  // v84: IMEI UI sirf Mobile Shop business type me (account ki registered type)
+  const shopBusinessType = getShopBusinessType();
+  const isMobileShop = shopBusinessType === 'mobile';
   
   // ---- STATE ----
   const [products, setProducts] = useState([]);
@@ -3195,11 +3199,14 @@ useEffect(() => {
       <Add />
     </Button>
 
+    {/* v84: IMEI picker sirf Mobile Shop (business type) me dikhata hai */}
+    {isMobileShop && (
     <Button variant="outlined" size="small" onClick={() => setImeiPickerOpen(true)}
       sx={{ height: 40, flexShrink: 0, fontSize: '0.7rem', fontWeight: 'bold', borderColor: '#1e40af', color: '#1e40af' }}
       title="Serialized phone select karo (IMEI)">
       📱 IMEI
     </Button>
+    )}
 
     <FormControl size="small" sx={{ minWidth: 105, flexShrink: 0 }}>
       <Select value={partyType} onChange={(e) => { setPartyType(e.target.value); setSelectedParty(null); }} sx={{ fontSize: '0.75rem', height: 40 }}>

@@ -110,6 +110,9 @@ export function AuthProvider({ children }) {
       localStorage.setItem('current_user', JSON.stringify(userData));
       localStorage.setItem('raath_tenant_id', tenantId);
       localStorage.setItem('raath_shop_name', userData.shop_name || 'RAATH POS Store');
+      // v84: selected business type hamesha account ki REGISTERED type se sync rakho —
+      // login page par galat type chunne par bhi account ki asal type hi lagegi
+      localStorage.setItem('raath_selected_business_type', String(userData.business_type || 'retail').toLowerCase());
 
       // QA-063: pehle server se saved page_visibility restore karo (user ki choice),
       // na mile to business-type defaults — taa ke fresh session me "Visible"
@@ -172,6 +175,8 @@ export function AuthProvider({ children }) {
         localStorage.setItem('current_user', JSON.stringify(userData));
         localStorage.setItem('raath_tenant_id', tenantId);
         localStorage.setItem('raath_shop_name', userData.shop_name || 'RAATH POS Store');
+        // v84: nayi shop — selected type bhi registered type se sync
+        localStorage.setItem('raath_selected_business_type', String(userData.business_type || 'retail').toLowerCase());
         // QA-063: nayi shop — pehle server se saved visibility, na mile to defaults
         try {
           const { restoreOrApplyModuleVisibility } = await import('./config/businessModules');
