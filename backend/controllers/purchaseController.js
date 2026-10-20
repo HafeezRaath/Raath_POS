@@ -61,7 +61,12 @@ exports.getPurchaseById = async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'Purchase not found' });
     }
     const purchase = purchases[0];
-    const items = await query('SELECT * FROM purchase_items WHERE tenant_id = ? AND purchase_id = ?', [tenantId, id]);
+    const items = await query(`
+      SELECT pi.*,
+        COALESCE((SELECT SUM(pri.quantity) FROM purchase_return_items pri WHERE pri.purchase_item_id = pi.id AND pri.tenant_id = ?), 0) AS returned_quantity
+      FROM purchase_items pi
+      WHERE pi.tenant_id = ? AND pi.purchase_id = ?
+    `, [tenantId, tenantId, id]);
     purchase.items = items;
     res.json({ success: true, data: purchase });
   } catch (error) {
@@ -279,12 +284,13 @@ exports.getAllPurchaseItems = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const { purchaseId } = req.query;
     let sql = `
-      SELECT pi.*, p.name AS product_name
+      SELECT pi.*, p.name AS product_name,
+        COALESCE((SELECT SUM(pri.quantity) FROM purchase_return_items pri WHERE pri.purchase_item_id = pi.id AND pri.tenant_id = ?), 0) AS returned_quantity
       FROM purchase_items pi
       LEFT JOIN products p ON pi.product_id = p.id
       WHERE pi.tenant_id = ?
     `;
-    const params = [tenantId];
+    const params = [tenantId, tenantId];
     if (purchaseId) {
       sql += ' AND pi.purchase_id = ?';
       params.push(purchaseId);
