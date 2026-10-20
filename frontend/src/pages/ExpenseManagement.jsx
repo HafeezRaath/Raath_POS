@@ -267,7 +267,9 @@ export default function ExpensesPage() {
       easypaisa: 'easypaisa'
     };
     const targetType = map[mode] || mode;
-    let found = paymentAccounts.find(a => (a.type || '').toLowerCase() === targetType);
+    // v82: sab se pehle formData.account_id (edit par expense ka apna account) try karo
+    let found = formData.account_id ? paymentAccounts.find(a => String(a.id) === String(formData.account_id)) : null;
+    if (!found) found = paymentAccounts.find(a => (a.type || '').toLowerCase() === targetType);
     if (!found) {
       // Fuzzy name/type match
       if (targetType === 'cash') {
@@ -297,7 +299,7 @@ export default function ExpensesPage() {
       found = paymentAccounts.find(a => (a.type || '').toLowerCase() === 'cash') || paymentAccounts[0];
     }
     setSelectedPaymentAccount(found || null);
-  }, [formData.payment_mode, paymentAccounts]);
+  }, [formData.payment_mode, formData.account_id, paymentAccounts]);
 
   // ==================== KEYBOARD SHORTCUTS ====================
   const handleOpenExpense = useCallback((expense = null) => {
@@ -308,6 +310,8 @@ export default function ExpensesPage() {
         amount: String(expense.amount || ''),
         category_id: String(expense.category_id || ''),
         payment_mode: expense.payment_mode || 'cash',
+        // v82: edit par expense ka APNA account yaad rakho — warna auto-select galat account utha leta tha
+        account_id: expense.account_id ? String(expense.account_id) : '',
         date: expense.date ? (expense.date.includes('T') ? expense.date.split('T')[0] : expense.date) : new Date().toISOString().split('T')[0],
         description: expense.description || '',
         reference_no: expense.reference_no || '',
@@ -320,6 +324,7 @@ export default function ExpensesPage() {
         amount: '',
         category_id: categories[0]?.id ? String(categories[0].id) : '',
         payment_mode: 'cash',
+        account_id: '',
         date: new Date().toISOString().split('T')[0],
         description: '',
         reference_no: '',
@@ -1030,6 +1035,8 @@ export default function ExpensesPage() {
                         onChange={(e) => {
                           const acc = paymentAccounts.find(a => String(a.id) === String(e.target.value));
                           setSelectedPaymentAccount(acc || null);
+                          // v82: manual selection formData me bhi rakho taake auto-select effect isko override na kare
+                          setFormData(prev => ({ ...prev, account_id: acc ? String(acc.id) : '' }));
                         }}
                         label="Deduct Payment From Account"
                       >

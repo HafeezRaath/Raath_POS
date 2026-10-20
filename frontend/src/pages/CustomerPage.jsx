@@ -69,6 +69,17 @@ const getLedgerTypeChip = (type) => {
   return map[type] || { label: type ? type.replace(/_/g, ' ') : 'Entry', color: 'default' };
 };
 
+// v82: ledger me sale ke items bullets me alag se render hote hain — is liye description me
+// pehle se lagi item summary (": panale toch (1x)") hata do taake invoice/product do dafa na dikhe
+const ledgerDisplayDesc = (entry, items) => {
+  const desc = entry.description || '-';
+  if (items.length > 0) {
+    const m = desc.match(/^(Invoice\s*#\S+)/i);
+    if (m) return m[1];
+  }
+  return desc;
+};
+
 const provinces = ['Punjab', 'Sindh', 'KPK', 'Balochistan', 'Gilgit', 'Azad Kashmir', 'Islamabad'];
 const paymentModes = ['cash', 'card', 'bank_transfer', 'cheque', 'jazzcash', 'easypaisa'];
 
@@ -626,7 +637,7 @@ export default function CustomerPage() {
         <tr>
           <td style="padding:8px;border-bottom:1px solid #e5e7eb;white-space:nowrap">${e.date ? new Date(e.date).toLocaleDateString('en-PK') : '-'}</td>
           <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-transform:capitalize">${e.type ? e.type.replace(/_/g,' ') : ''}</td>
-          <td style="padding:8px;border-bottom:1px solid #e5e7eb">${e.description || ''}${itemsHtml}</td>
+          <td style="padding:8px;border-bottom:1px solid #e5e7eb">${ledgerDisplayDesc(e, items)}${itemsHtml}</td>
           <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">${e.amount ? 'Rs. ' + Number(e.amount).toLocaleString('en-PK',{minimumFractionDigits:2}) : '-'}</td>
           <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">Rs. ${Number(e.balance_after||0).toLocaleString('en-PK',{minimumFractionDigits:2})}</td>
           <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-transform:uppercase;font-size:11px">${e.payment_mode || '-'}</td>
@@ -1221,14 +1232,11 @@ export default function CustomerPage() {
                             </>
                           ) : '-'}
                         </TableCell>
-                        <TableCell>
-                          <Chip label={typeInfo.label} size="small" color={typeInfo.color} sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600 }} />
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Chip label={typeInfo.label} size="small" color={typeInfo.color} sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-flex', maxWidth: 'none' }} />
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2" fontWeight={500}>{entry.description || '-'}</Typography>
-                          {entry.invoice_no && (
-                            <Typography variant="caption" color="text.secondary">Invoice: {entry.invoice_no}</Typography>
-                          )}
+                          <Typography variant="body2" fontWeight={500}>{ledgerDisplayDesc(entry, items)}</Typography>
                           {items.length > 0 && (
                             <Box sx={{ mt: 0.5, pl: 1, borderLeft: '2px solid #e2e8f0' }}>
                               {items.map((it, i) => (
