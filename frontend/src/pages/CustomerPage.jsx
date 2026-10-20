@@ -13,7 +13,7 @@ import {
   Add, Edit, Delete, Search, Close, Person, Phone,
   Email, Business, LocationOn, AttachMoney, CreditCard,
   People, Store, Save, Cancel, Refresh, CheckCircle,
-  History, Payment, PictureAsPdf, FilterList, Visibility,
+  History, Payment, PictureAsPdf, FilterList, Visibility, VisibilityOff,
   Receipt, AccountBalanceWallet, TrendingUp, TrendingDown,
   ShoppingCart, ArrowBack, Schedule, CalendarToday, Warning
 } from '../components/ui/icons';
@@ -74,7 +74,7 @@ const getLedgerTypeChip = (type) => {
 const ledgerDisplayDesc = (entry, items) => {
   const desc = entry.description || '-';
   if (items.length > 0) {
-    const m = desc.match(/^(Invoice\s*#\S+)/i);
+    const m = desc.match(/^(Invoice\s*#[A-Za-z0-9-]+)/i);
     if (m) return m[1];
   }
   return desc;
@@ -237,6 +237,8 @@ export default function CustomerPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [showLedger, setShowLedger] = useState(false);
+  // v83: ledger sale items default hidden — eye icon / description click par expand hote hain
+  const [expandedLedgerItems, setExpandedLedgerItems] = useState({});
   const [showPayment, setShowPayment] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [ledgerData, setLedgerData] = useState([]);
@@ -428,6 +430,7 @@ export default function CustomerPage() {
     setShowLedger(true);
     setLedgerLoading(true);
     setLedgerData([]);
+    setExpandedLedgerItems({});
     setCustomerEmis([]);
     setCustomerEmiSummary(null);
     setCustomerGuarantors([]);
@@ -1236,17 +1239,34 @@ export default function CustomerPage() {
                           <Chip label={typeInfo.label} size="small" color={typeInfo.color} sx={{ height: 22, fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap', display: 'inline-flex', maxWidth: 'none' }} />
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2" fontWeight={500}>{ledgerDisplayDesc(entry, items)}</Typography>
-                          {items.length > 0 && (
-                            <Box sx={{ mt: 0.5, pl: 1, borderLeft: '2px solid #e2e8f0' }}>
-                              {items.map((it, i) => (
-                                <Typography key={i} variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
-                                  &bull; {it.name || it.item_name || 'Item'} &times; {it.quantity || it.qty || 1} @ {formatPKR(it.price || it.sale_price || 0)}
-                                  {(it.discount || 0) > 0 && <span style={{ color: '#ef4444' }}> (Disc: {formatPKR(it.discount)})</span>}
-                                  {' = '}<strong>{formatPKR(it.total || ((Number(it.price || it.sale_price || 0) * Number(it.quantity || it.qty || 1)) - Number(it.discount || 0)))}</strong>
-                                </Typography>
-                              ))}
-                            </Box>
+                          {items.length > 0 ? (
+                            <>
+                              <Box
+                                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', width: 'fit-content' }}
+                                onClick={() => setExpandedLedgerItems(prev => ({ ...prev, [entry.id || idx]: !prev[entry.id || idx] }))}
+                              >
+                                <Typography variant="body2" fontWeight={500}>{ledgerDisplayDesc(entry, items)}</Typography>
+                                <Tooltip title={expandedLedgerItems[entry.id || idx] ? 'Hide items' : 'Show items'}>
+                                  <IconButton size="small" sx={{ p: 0.25 }} onClick={(e) => { e.stopPropagation(); setExpandedLedgerItems(prev => ({ ...prev, [entry.id || idx]: !prev[entry.id || idx] })); }}>
+                                    {expandedLedgerItems[entry.id || idx] ? <VisibilityOff fontSize="small" color="action" /> : <Visibility fontSize="small" color="primary" />}
+                                  </IconButton>
+                                </Tooltip>
+                                <Typography variant="caption" color="text.secondary">({items.length} item{items.length > 1 ? 's' : ''})</Typography>
+                              </Box>
+                              {expandedLedgerItems[entry.id || idx] && (
+                                <Box sx={{ mt: 0.5, pl: 1, borderLeft: '2px solid #e2e8f0' }}>
+                                  {items.map((it, i) => (
+                                    <Typography key={i} variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
+                                      &bull; {it.name || it.item_name || 'Item'} &times; {it.quantity || it.qty || 1} @ {formatPKR(it.price || it.sale_price || 0)}
+                                      {(it.discount || 0) > 0 && <span style={{ color: '#ef4444' }}> (Disc: {formatPKR(it.discount)})</span>}
+                                      {' = '}<strong>{formatPKR(it.total || ((Number(it.price || it.sale_price || 0) * Number(it.quantity || it.qty || 1)) - Number(it.discount || 0)))}</strong>
+                                    </Typography>
+                                  ))}
+                                </Box>
+                              )}
+                            </>
+                          ) : (
+                            <Typography variant="body2" fontWeight={500}>{ledgerDisplayDesc(entry, items)}</Typography>
                           )}
                         </TableCell>
                         <TableCell align="right">
