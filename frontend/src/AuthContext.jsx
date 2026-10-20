@@ -120,7 +120,7 @@ export function AuthProvider({ children }) {
       try {
         const { restoreOrApplyModuleVisibility } = await import('./config/businessModules');
         const btype = String(userData.business_type || 'retail').toLowerCase();
-        await restoreOrApplyModuleVisibility(btype, (p) => api.get(p));
+        await restoreOrApplyModuleVisibility(btype, (p) => api.get(p), tenantId);
       } catch { /* non-blocking */ }
 
       setUser(userData);
@@ -182,7 +182,8 @@ export function AuthProvider({ children }) {
           const { restoreOrApplyModuleVisibility } = await import('./config/businessModules');
           await restoreOrApplyModuleVisibility(
             String(userData.business_type || 'retail').toLowerCase(),
-            (p) => api.get(p)
+            (p) => api.get(p),
+            tenantId
           );
         } catch { /* non-blocking */ }
         setUser(userData);

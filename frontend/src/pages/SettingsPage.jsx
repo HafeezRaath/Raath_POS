@@ -1216,6 +1216,9 @@ export default function SettingsPage({ initialTab } = {}) {
       try {
         localStorage.setItem('page_visibility', JSON.stringify(pageVisibility));
         localStorage.setItem('page_visibility_source', 'manual');
+        // v85: ye settings is shop (tenant) ke hain — owner stamp lagao
+        const tid = localStorage.getItem('raath_tenant_id');
+        if (tid) localStorage.setItem('page_visibility_owner', tid);
       } catch { /* ignore */ }
 
       // 2. Sync directly to Firebase Cloud under active shop_id
@@ -1267,7 +1270,7 @@ export default function SettingsPage({ initialTab } = {}) {
     if (!window.confirm('FINAL CONFIRMATION: All data permanently deleted?')) return;
     setSaving(true);
     try {
-      ['shop_profile', 'pos_users', 'receipt_settings', 'barcode_settings', 'tax_settings', 'notification_settings', 'current_user', 'page_visibility'].forEach(k => localStorage.removeItem(k));
+      ['shop_profile', 'pos_users', 'receipt_settings', 'barcode_settings', 'tax_settings', 'notification_settings', 'current_user', 'page_visibility', 'page_visibility_owner', 'page_visibility_source'].forEach(k => localStorage.removeItem(k));
 
       const defaultRoles = JSON.parse(JSON.stringify(DEFAULT_ROLES));
       await persistRolesToDB(defaultRoles);

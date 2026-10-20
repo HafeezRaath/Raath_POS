@@ -150,9 +150,14 @@ export function applyBusinessTypeDefaults(businessType, force = false) {
 // restore karo — user ki "Visible" choice har fresh session me barqarar rahe.
 // Server par kuch save nahi to business-type defaults lagao.
 // apiGet: (path) => Promise — taa ke ye module apiClient par depend na kare.
-export async function restoreOrApplyModuleVisibility(businessType, apiGet) {
+// v85: page_visibility SHOP (tenant) ki property hai, browser ki nahi — ek shop ke
+// bache hue settings doosri shop par apply nahi honge (owner = tenant_id stamp).
+export async function restoreOrApplyModuleVisibility(businessType, apiGet, tenantId) {
   try {
-    if (localStorage.getItem('page_visibility')) return; // pehle se set — chhedo mat
+    const hasPv = !!localStorage.getItem('page_visibility');
+    const owner = localStorage.getItem('page_visibility_owner');
+    if (hasPv && tenantId && owner === tenantId) return; // isi shop ke settings — chhedo mat
+    if (hasPv && !tenantId) return; // tenant maloom nahi — purana behavior
     let restored = null;
     try {
       const res = await apiGet('/settings');
@@ -163,8 +168,11 @@ export async function restoreOrApplyModuleVisibility(businessType, apiGet) {
       localStorage.setItem('page_visibility', JSON.stringify(restored));
       localStorage.setItem('page_visibility_source', 'server');
     } else {
-      applyBusinessTypeDefaults(businessType);
+      // purani (doosri shop ki) pv hata kar is type ke fresh defaults lagao
+      localStorage.removeItem('page_visibility');
+      applyBusinessTypeDefaults(businessType, true);
     }
+    if (tenantId) localStorage.setItem('page_visibility_owner', tenantId);
   } catch { /* non-blocking */ }
 }
 

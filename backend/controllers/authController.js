@@ -194,6 +194,9 @@ exports.login = async (req, res, next) => {
         user.shop_name = tenant.shop_name || user.shop_name;
         user.shop_address = tenant.shop_address || user.shop_address;
         user.currency = tenant.currency || user.currency;
+        // v85: business type SHOP (tenant) ki property hai — tenant ki type hi final,
+        // taa ke ek hi shop ke har user ko usi shop ke features milen
+        if (tenant.business_type) user.business_type = tenant.business_type;
       }
     } catch (e) {}
 
@@ -253,6 +256,12 @@ exports.getMe = async (req, res, next) => {
 
     user.tenant_id = user.tenant_id || req.tenant_id || DEFAULT_TENANT_ID;
     user.shop_id = user.tenant_id;
+
+    // v85: tenant (shop) ki business_type hi final hai
+    try {
+      const tRows = await query('SELECT business_type FROM tenants WHERE id = ?', [user.tenant_id]);
+      if (tRows.length > 0 && tRows[0].business_type) user.business_type = tRows[0].business_type;
+    } catch (e) {}
 
     const roles = await query('SELECT * FROM roles WHERE id = ?', [user.role]);
     let roleData = roles[0] || null;
