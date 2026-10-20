@@ -1455,8 +1455,9 @@ const handleProcessReturn = async () => {
     }
     
     return {
-      purchase_item_id: purchaseItemId,  // <-- YAHAN FIX: Number() HATAYA!
-      product_variant_id: item.product_variant_id || 0,
+      purchase_item_id: purchaseItemId,
+      product_id: item.product_id || item.productId || null,
+      product_variant_id: item.product_variant_id || item.variant_id || null,
       quantity: Number(item.return_quantity) || 0,
       return_price: Number(item.return_price || item.purchase_price || 0),
       tax_percentage: Number(item.tax_percentage || 0),

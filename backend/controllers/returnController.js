@@ -386,7 +386,8 @@ exports.createPurchaseReturn = async (req, res, next) => {
     const tenantId = req.tenant_id || 'tenant_default';
     const {
       purchase_id = null, supplier_id, total_amount = 0,
-      grand_total, notes = '', items = []
+      grand_total, notes = '', items = [],
+      payment_mode = 'credit', account_id = null
     } = req.body;
 
     const returnNo = 'PR-' + Date.now();
@@ -414,36 +415,81 @@ exports.createPurchaseReturn = async (req, res, next) => {
       const id = ins.insertId;
 
       for (const item of items) {
-        // v75/A3: frontend product_id nahi bhejta (sirf purchase_item_id) — purchase_items se resolve karo
-        let prodId = item.product_id || null;
-        let varId = item.product_variant_id || null;
-        if ((!prodId || !varId) && item.purchase_item_id) {
+        let prodId = item.product_id || item.productId || null;
+        let variantId = (item.product_variant_id && Number(item.product_variant_id) !== 0) ? item.product_variant_id : (item.variant_id || null);
+        const purchaseItemId = item.purchase_item_id || item.purchaseItemId || item.id || null;
+        const qty = parseFloat(item.quantity || item.return_quantity) || 1;
+        const returnPrice = parseFloat(item.return_price || item.price || item.purchase_price) || 0;
+        const subTotal = parseFloat(item.sub_total || item.total) || (qty * returnPrice);
+
+        // Fallback: If prodId is missing from client, resolve it from purchase_items!
+        if ((!prodId || !variantId) && purchaseItemId) {
           const [piRows] = await conn.query(
-            `SELECT product_id, product_variant_id FROM purchase_items WHERE tenant_id = ? AND id = ?`,
-            [tenantId, item.purchase_item_id]
+            'SELECT product_id, product_variant_id FROM purchase_items WHERE tenant_id = ? AND id = ?',
+            [tenantId, purchaseItemId]
           );
-          if (piRows.length > 0) {
-            if (!prodId) prodId = piRows[0].product_id || null;
-            if (!varId) varId = piRows[0].product_variant_id || null;
+          if (Array.isArray(piRows) && piRows.length > 0) {
+            if (!prodId) prodId = piRows[0].product_id;
+            if (!variantId && piRows[0].product_variant_id) variantId = piRows[0].product_variant_id;
           }
         }
+
         await conn.query(
-          `INSERT INTO purchase_return_items (tenant_id, purchase_return_id, product_id, product_variant_id, quantity, return_price, sub_total, reason)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [tenantId, id, prodId, varId, item.quantity || 1, item.return_price || item.price || 0, item.sub_total || item.total || 0, item.reason || '']
+          `INSERT INTO purchase_return_items (tenant_id, purchase_return_id, purchase_item_id, product_id, product_variant_id, quantity, return_price, sub_total, reason)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, id, purchaseItemId, prodId, variantId, qty, returnPrice, subTotal, item.reason || '']
         );
 
-        // Deduct inventory
+        // Deduct inventory from products table
         if (prodId) {
-          await conn.query(`UPDATE products SET stock = stock - ? WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, tenantId, prodId]);
+          await conn.query(
+            `UPDATE products SET stock = GREATEST(0, stock - ?) WHERE tenant_id = ? AND id = ?`,
+            [qty, tenantId, prodId]
+          );
         }
-        if (varId) {
-          await conn.query(`UPDATE product_variants SET stock = GREATEST(0, stock - ?), current_stock = GREATEST(0, COALESCE(current_stock, 0) - ?) WHERE tenant_id = ? AND id = ?`, [item.quantity || 1, item.quantity || 1, tenantId, varId]);
+
+        // Deduct inventory from product_variants table
+        if (variantId) {
+          await conn.query(
+            `UPDATE product_variants SET stock = GREATEST(0, stock - ?), current_stock = GREATEST(0, COALESCE(current_stock, 0) - ?) WHERE tenant_id = ? AND id = ?`,
+            [qty, qty, tenantId, variantId]
+          );
+        } else if (prodId) {
+          await conn.query(
+            `UPDATE product_variants SET stock = GREATEST(0, stock - ?), current_stock = GREATEST(0, COALESCE(current_stock, 0) - ?) WHERE tenant_id = ? AND product_id = ?`,
+            [qty, qty, tenantId, prodId]
+          );
+        }
+
+        // Handle serialized IMEI device if returned
+        const imeiVal = item.imei || item.imei1 || (Array.isArray(item.imeis) ? item.imeis : null);
+        if (imeiVal) {
+          const imeiList = Array.isArray(imeiVal) ? imeiVal : [imeiVal];
+          for (const oneImei of imeiList) {
+            await conn.query(
+              `UPDATE device_imei SET status = 'RETURNED_TO_SUPPLIER', notes = CONCAT(COALESCE(notes, ''), ' [Returned to supplier via #${returnNo}]')
+               WHERE tenant_id = ? AND imei1 = ?`,
+              [tenantId, String(oneImei).trim()]
+            );
+          }
         }
       }
 
-      // Update supplier balance
-      if (supplier_id && gTotal > 0) {
+      // Update supplier balance / Cash refund
+      const isCashRefund = (payment_mode === 'cash' || payment_mode === 'bank') && account_id;
+      if (isCashRefund && gTotal > 0) {
+        // Direct cash/bank refund from supplier into account
+        await conn.query(
+          `UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?`,
+          [gTotal, tenantId, account_id]
+        );
+        await conn.query(
+          `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
+           VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'purchase_return', ?, CURDATE())`,
+          [tenantId, account_id, gTotal, tenantId, account_id, `Supplier Refund for Purchase Return #${returnNo}`, id]
+        );
+      } else if (supplier_id && gTotal > 0) {
+        // Supplier credit: reduce supplier payable balance
         await conn.query(`UPDATE suppliers SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?`, [gTotal, tenantId, supplier_id]);
         await conn.query(
           `INSERT INTO supplier_ledger (tenant_id, supplier_id, type, amount, debit, balance, description, reference_type, reference_id, date)

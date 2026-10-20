@@ -145,6 +145,8 @@ async function initializeDatabase() {
     await addColumnIfMissing(connection, 'expenses', '`receipt_no` VARCHAR(100)');
     // v79: QA-048 — sale_return_items INSERT ab product_variant_id likhta hai
     await addColumnIfMissing(connection, 'sale_return_items', '`product_variant_id` INT NULL');
+    // v80 (Hafeez 36a6b10): purchase return INSERT ab purchase_item_id likhta hai (returned_quantity tracking)
+    await addColumnIfMissing(connection, 'purchase_return_items', '`purchase_item_id` INT NULL');
     await addColumnIfMissing(connection, 'sales', '`payment_mode` VARCHAR(50) DEFAULT "cash"');
     await addColumnIfMissing(connection, 'sales', '`fbr_status` VARCHAR(50) DEFAULT "PENDING"');
     await addColumnIfMissing(connection, 'sales', '`fbr_reference` VARCHAR(150)');
