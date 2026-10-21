@@ -17,14 +17,14 @@ exports.getCategories = async (req, res, next) => {
 exports.createCategory = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
-    const { name, slug, parent_id = null, status = 'active' } = req.body;
+    const { name, slug, parent_id = null, status = 'active', description = null } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, error: 'Category name is required' });
     }
     const catSlug = slug || name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const result = await query(
-      'INSERT INTO categories (tenant_id, name, slug, parent_id, status) VALUES (?, ?, ?, ?, ?)',
-      [tenantId, name.trim(), catSlug, parent_id, status]
+      'INSERT INTO categories (tenant_id, name, slug, parent_id, status, description) VALUES (?, ?, ?, ?, ?, ?)',
+      [tenantId, name.trim(), catSlug, parent_id, status, description]
     );
     const created = await query('SELECT * FROM categories WHERE tenant_id = ? AND id = ?', [tenantId, result.insertId]);
     res.status(201).json({ success: true, data: created[0] });
@@ -37,10 +37,10 @@ exports.updateCategory = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    const { name, slug, parent_id, status } = req.body;
+    const { name, slug, parent_id, status, description } = req.body;
     await query(
-      'UPDATE categories SET name = COALESCE(?, name), slug = COALESCE(?, slug), parent_id = COALESCE(?, parent_id), status = COALESCE(?, status) WHERE tenant_id = ? AND id = ?',
-      [name, slug, parent_id, status, tenantId, id]
+      'UPDATE categories SET name = COALESCE(?, name), slug = COALESCE(?, slug), parent_id = COALESCE(?, parent_id), status = COALESCE(?, status), description = COALESCE(?, description) WHERE tenant_id = ? AND id = ?',
+      [name, slug, parent_id, status, description, tenantId, id]
     );
     const updated = await query('SELECT * FROM categories WHERE tenant_id = ? AND id = ?', [tenantId, id]);
     res.json({ success: true, data: updated[0] });

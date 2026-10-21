@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS `users` (
 CREATE TABLE IF NOT EXISTS `brands` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(150) NOT NULL,
+  `contact_person` VARCHAR(150) NULL,
+  `phone` VARCHAR(50) NULL,
+  `email` VARCHAR(150) NULL,
   `status` VARCHAR(20) DEFAULT 'active',
   `is_deleted` TINYINT(1) DEFAULT 0,
   `deleted_at` DATETIME NULL,
@@ -81,6 +84,7 @@ CREATE TABLE IF NOT EXISTS `categories` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(150) NOT NULL,
   `slug` VARCHAR(150) UNIQUE,
+  `description` TEXT NULL,
   `parent_id` INT NULL,
   `status` VARCHAR(20) DEFAULT 'active',
   `is_deleted` TINYINT(1) DEFAULT 0,
@@ -300,6 +304,18 @@ CREATE TABLE IF NOT EXISTS `product_batches` (
   INDEX idx_pb_variant (`variant_id`),
   INDEX idx_pb_expiry (`expiry_date`),
   INDEX idx_pb_tenant (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 17c. Stock Units (Pharmacy master data: Tablet, Capsule, Syrup (ml)...)
+CREATE TABLE IF NOT EXISTS `units` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` VARCHAR(50) NOT NULL DEFAULT 'tenant_default',
+  `name` VARCHAR(100) NOT NULL,
+  `symbol` VARCHAR(20) NULL,
+  `is_deleted` TINYINT(1) DEFAULT 0,
+  `deleted_at` DATETIME NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_units_tenant (`tenant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 18. Product Serialized Items

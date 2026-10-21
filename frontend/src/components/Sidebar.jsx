@@ -53,6 +53,7 @@ const PATH_PERMISSION_MAP = {
   '/products': 'products',
   '/inventory': 'inventory',
   '/stock-tracking': 'inventory',
+  '/expiry': 'expiry',
   '/customers': 'customers',
   '/suppliers': 'suppliers',
   '/services': 'workorders',
@@ -90,6 +91,7 @@ const NAV_GROUPS = [
       { id: 'products', label: 'Products', icon: Category, path: '/products' },
       { id: 'inventory', label: 'Purchase', icon: Package, path: '/inventory' },
       { id: 'inventory', label: 'Stock Tracking', icon: TrackChanges, path: '/stock-tracking' },
+      { id: 'expiry', label: 'Expiry Alerts', icon: Warning, path: '/expiry', onlyPharmacy: true },
     ],
   },
   {
@@ -397,6 +399,11 @@ export default function Navbar() {
       items: group.items.filter((item) => {
         if (!canAccess(item.id)) return false;
         if (pageVisibility[item.id] === false) return false;
+        if (item.onlyPharmacy) {
+          let bt = '';
+          try { bt = (JSON.parse(localStorage.getItem('current_user') || '{}').business_type) || ''; } catch { /* ignore */ }
+          if (bt !== 'pharmacy') return false;
+        }
         return true;
       }),
     })).filter((group) => group.items.length > 0);

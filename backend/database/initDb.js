@@ -459,6 +459,25 @@ async function initializeDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
+    // Pharmacy master data (2026-10-21): company contact fields, category
+    // description, aur stock units ki apni table (Tablet/Capsule/ml...)
+    await addColumnIfMissing(connection, 'brands', '`contact_person` VARCHAR(150) NULL');
+    await addColumnIfMissing(connection, 'brands', '`phone` VARCHAR(50) NULL');
+    await addColumnIfMissing(connection, 'brands', '`email` VARCHAR(150) NULL');
+    await addColumnIfMissing(connection, 'categories', '`description` TEXT NULL');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS \`units\` (
+        \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+        \`tenant_id\` VARCHAR(50) NOT NULL DEFAULT 'tenant_default',
+        \`name\` VARCHAR(100) NOT NULL,
+        \`symbol\` VARCHAR(20) NULL,
+        \`is_deleted\` TINYINT(1) DEFAULT 0,
+        \`deleted_at\` DATETIME NULL,
+        \`created_at\` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_units_tenant (\`tenant_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     // Bookshop: class bundles (idempotent)
     await connection.query(`
       CREATE TABLE IF NOT EXISTS \`bundles\` (

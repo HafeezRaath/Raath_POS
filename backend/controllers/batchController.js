@@ -155,9 +155,12 @@ exports.expiryAlerts = async (req, res, next) => {
     const days = Math.max(1, parseInt(req.query.days) || 7);
     const rows = await query(
       `SELECT b.*, p.name AS product_name, pv.sku AS variant_sku,
+              p.stock AS product_stock, p.brand_id AS brand_id,
+              br.name AS company_name,
               DATEDIFF(b.expiry_date, CURDATE()) AS days_left
        FROM product_batches b
        JOIN products p ON p.id = b.product_id AND COALESCE(p.is_deleted,0) = 0
+       LEFT JOIN brands br ON br.id = p.brand_id
        LEFT JOIN product_variants pv ON pv.id = b.variant_id
        WHERE b.tenant_id = ? AND b.is_active = 1 AND b.expiry_date IS NOT NULL
          AND b.qty_remaining > 0

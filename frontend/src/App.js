@@ -17,6 +17,7 @@ const TOGGLEABLE_IDS = new Set(TOGGLEABLE_MODULES.map(m => m.id));
 // ==================== LAZY LOADED PAGES ====================
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ProductsPage = lazy(() => import('./pages/ProductsPage'));
+const ExpiryPage = lazy(() => import('./pages/ExpiryPage'));
 const Billing = lazy(() => import('./pages/Billing'));
 const SuppliersPage = lazy(() => import('./pages/SuppliersPage'));
 const Inventory = lazy(() => import('./pages/Purchase'));
@@ -139,6 +140,7 @@ const AppRoutes = React.memo(function AppRoutes() {
         <Route path="/products" element={<ProtectedRoute pageId="products"><MainLayout><ProductsPage /></MainLayout></ProtectedRoute>} />
         <Route path="/inventory" element={<ProtectedRoute pageId="inventory"><MainLayout><Inventory /></MainLayout></ProtectedRoute>} />
         <Route path="/stock-tracking" element={<ProtectedRoute pageId="inventory"><MainLayout><StockTrackingPage /></MainLayout></ProtectedRoute>} />
+        <Route path="/expiry" element={<ProtectedRoute pageId="expiry"><MainLayout><ExpiryPage /></MainLayout></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute pageId="customers"><MainLayout><CustomerPage /></MainLayout></ProtectedRoute>} />
         <Route path="/suppliers" element={<ProtectedRoute pageId="suppliers"><MainLayout><SuppliersPage /></MainLayout></ProtectedRoute>} />
         

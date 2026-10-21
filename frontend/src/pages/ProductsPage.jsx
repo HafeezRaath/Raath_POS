@@ -1768,7 +1768,8 @@ const [copies, setCopies] = useState(1);
     let pharmacyUnit = null;
     if (isPharmacyNew) {
       const ph = pharmacyData;
-      pharmacyUnit = ph.mode === 'THREE_LEVEL' ? 'tablet' : ph.mode === 'TWO_LEVEL' ? 'piece' : 'unit';
+      pharmacyUnit = (ph.baseUnit && ph.baseUnit.trim()) ? ph.baseUnit.trim().toLowerCase()
+        : ph.mode === 'THREE_LEVEL' ? 'tablet' : ph.mode === 'TWO_LEVEL' ? 'piece' : 'unit';
       unitCost = ph.costPerUnit || 0;
       unitRetail = ph.salePerUnit || 0;
       unitWholesale = ph.salePerUnit || 0;
@@ -2059,11 +2060,13 @@ const [copies, setCopies] = useState(1);
           setSnackbar({ open: true, message: 'Stock quantity zaroori hai', severity: 'warning' });
           return;
         }
-        if (!ph.expiry) {
-          setSnackbar({ open: true, message: 'Expiry date zaroori hai', severity: 'warning' });
-          return;
-        }
-        const prodResult = await db.addProduct({ ...productData, stock: 0 });
+        const prodResult = await db.addProduct({
+          ...productData,
+          stock: 0,
+          brand_id: ph.brandId || productData.brand_id,
+          category_id: ph.categoryId ? String(ph.categoryId) : productData.category_id,
+          min_stock: ph.minStock != null ? ph.minStock : productData.min_stock,
+        });
         const productId = prodResult?.id || prodResult?.lastInsertRowid || prodResult?.data?.id;
         const varResult = await db.addVariant({ ...variantData, product_id: productId, current_stock: 0 });
         const variantId = varResult?.id || varResult?.lastInsertRowid || varResult?.data?.id || productId;
@@ -3326,7 +3329,7 @@ const [copies, setCopies] = useState(1);
                       </Select>
                     </FormControl>
                   </Grid>
-                  <Grid item xs={12} sm={6} md={3}>
+                  <Grid item xs={12} sm={6} md={3} style={(dialogProductType === 'medical' && !editingProduct) ? { display: 'none' } : undefined}>
                     <FormControl fullWidth size="small">
                       <InputLabel>Category</InputLabel>
                       <Select name="category_id" value={productForm.category_id} onChange={handleProductChange} label="Category">
@@ -3335,7 +3338,7 @@ const [copies, setCopies] = useState(1);
                       </Select>
                     </FormControl>
                   </Grid>
-                  <Grid item xs={12} sm={6} md={3}>
+                  <Grid item xs={12} sm={6} md={3} style={(dialogProductType === 'medical' && !editingProduct) ? { display: 'none' } : undefined}>
                     <FormControl fullWidth size="small">
                       <InputLabel>Brand</InputLabel>
                       <Select name="brand" value={productForm.brand || ''} onChange={handleProductChange} label="Brand">
@@ -3344,7 +3347,7 @@ const [copies, setCopies] = useState(1);
                       </Select>
                     </FormControl>
                   </Grid>
-                  <Grid item xs={12} sm={6} md={3}>
+                  <Grid item xs={12} sm={6} md={3} style={(dialogProductType === 'medical' && !editingProduct) ? { display: 'none' } : undefined}>
                     <FormControl fullWidth size="small">
                       <InputLabel>Base Unit</InputLabel>
                       <Select name="unit" value={productForm.unit} onChange={handleProductChange} label="Base Unit">

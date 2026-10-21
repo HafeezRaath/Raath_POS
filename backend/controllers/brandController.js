@@ -17,13 +17,13 @@ exports.getBrands = async (req, res, next) => {
 exports.createBrand = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
-    const { name, status = 'active' } = req.body;
+    const { name, status = 'active', contact_person = null, phone = null, email = null } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, error: 'Brand name is required' });
     }
     const result = await query(
-      'INSERT INTO brands (tenant_id, name, status) VALUES (?, ?, ?)',
-      [tenantId, name.trim(), status]
+      'INSERT INTO brands (tenant_id, name, status, contact_person, phone, email) VALUES (?, ?, ?, ?, ?, ?)',
+      [tenantId, name.trim(), status, contact_person, phone, email]
     );
     const created = await query('SELECT * FROM brands WHERE tenant_id = ? AND id = ?', [tenantId, result.insertId]);
     res.status(201).json({ success: true, data: created[0] });
@@ -36,8 +36,8 @@ exports.updateBrand = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
     const { id } = req.params;
-    const { name, status } = req.body;
-    await query('UPDATE brands SET name = COALESCE(?, name), status = COALESCE(?, status) WHERE tenant_id = ? AND id = ?', [name, status, tenantId, id]);
+    const { name, status, contact_person, phone, email } = req.body;
+    await query('UPDATE brands SET name = COALESCE(?, name), status = COALESCE(?, status), contact_person = COALESCE(?, contact_person), phone = COALESCE(?, phone), email = COALESCE(?, email) WHERE tenant_id = ? AND id = ?', [name, status, contact_person, phone, email, tenantId, id]);
     const updated = await query('SELECT * FROM brands WHERE tenant_id = ? AND id = ?', [tenantId, id]);
     res.json({ success: true, data: updated[0] });
   } catch (error) {
