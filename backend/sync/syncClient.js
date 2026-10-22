@@ -58,6 +58,14 @@ const SYNC_TABLE_ORDER = [
 // NOTE: general_ledger.reference_id is polymorphic (spans many tables), so it
 // is intentionally NOT remapped.
 const FK_PARENT_MAP = {
+  // Phase 4 re-test finding: Phase-1 parent tables were never remapped, so
+  // pushed rows carried LOCAL foreign-key ids to the cloud (a synced sale
+  // pointed at customer_id 1 while its customer was id 13 on the cloud).
+  sales: { customer_id: 'customers' },
+  purchases: { supplier_id: 'suppliers' },
+  sale_returns: { sale_id: 'sales', customer_id: 'customers' },
+  emi_records: { customer_id: 'customers', product_id: 'products', sale_id: 'sales' },
+  work_orders: { customer_id: 'customers' },
   purchase_returns: { purchase_id: 'purchases', supplier_id: 'suppliers' },
   sale_return_items: { sale_return_id: 'sale_returns', product_id: 'products' },
   purchase_return_items: { purchase_return_id: 'purchase_returns', purchase_item_id: 'purchase_items', product_id: 'products' },
