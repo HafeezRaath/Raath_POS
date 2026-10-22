@@ -65,6 +65,24 @@ function getSqliteDb() {
     const diff = (new Date(d1) - new Date(d2)) / 86400000;
     return Math.round(diff);
   });
+  // Phase 2 (merge-offline-v89): MONTH()/YEAR() are used by report/dashboard
+  // queries (e.g. dashboardController) and do not exist in SQLite.
+  dbInstance.function('MONTH', (d) => {
+    if (d == null) return null;
+    const s = String(d);
+    const m = s.match(/^\d{4}-(\d{2})-\d{2}/);
+    if (m) return parseInt(m[1], 10);
+    const dt = new Date(s);
+    return isNaN(dt.getTime()) ? null : dt.getMonth() + 1;
+  });
+  dbInstance.function('YEAR', (d) => {
+    if (d == null) return null;
+    const s = String(d);
+    const m = s.match(/^(\d{4})-\d{2}-\d{2}/);
+    if (m) return parseInt(m[1], 10);
+    const dt = new Date(s);
+    return isNaN(dt.getTime()) ? null : dt.getFullYear();
+  });
   dbInstance.function('CONCAT', (...args) => args.filter(a => a != null).join(''));
   dbInstance.function('IF', (condition, trueVal, falseVal) => (condition ? trueVal : falseVal));
   dbInstance.function('UUID', () => uuidv4());

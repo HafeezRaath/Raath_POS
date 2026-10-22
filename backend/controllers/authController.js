@@ -145,7 +145,10 @@ exports.login = async (req, res, next) => {
             try { roleData.pages = JSON.parse(roleData.pages); } catch (e) {}
           }
           const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
-          return res.json({ success: true, user, role: roleData, token });
+          // Phase 2 (merge-offline-v89): default-password logins in LOCAL_MODE
+          // are flagged so the client can force a password change.
+          const mustChangePassword = String(process.env.LOCAL_MODE || '') === '1';
+          return res.json({ success: true, user, role: roleData, token, must_change_password: mustChangePassword });
         }
       }
 
@@ -293,11 +296,18 @@ exports.login = async (req, res, next) => {
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
     delete user.password_hash;
 
+    // Phase 2 (merge-offline-v89): minimal forced-change signal — in LOCAL_MODE,
+    // a login that succeeded with the seeded default password ('admin123')
+    // returns must_change_password so the client can force a change. The flag
+    // is additive only; online (MySQL) mode responses are unchanged.
+    const mustChangePassword = String(process.env.LOCAL_MODE || '') === '1' && password === 'admin123';
+
     res.json({
       success: true,
       user,
       role: roleData,
-      token
+      token,
+      must_change_password: mustChangePassword
     });
   } catch (error) {
     next(error);

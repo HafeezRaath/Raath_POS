@@ -23,17 +23,42 @@ const SYNC_TABLE_ORDER = [
   'product_serialized_items',
   // 2. Parent Transactions
   'purchases',
+  'purchase_returns',
   'sales',
   'sale_returns',
   'expenses',
   'payments',
   'emi_records',
   'work_orders',
+  'device_imei',
+  'account_transactions',
+  'customer_ledger',
+  'supplier_ledger',
+  'general_ledger',
   // 3. Child Transaction Items
   'purchase_items',
   'sale_items',
-  'emi_payments'
+  'sale_return_items',
+  'purchase_return_items',
+  'emi_payments',
+  'emi_schedule'
 ];
+
+// Phase 2 (merge-offline-v89): FK columns of the newly added sync tables and
+// the parent table each column must be remapped to (local id -> server_id),
+// consistent with the child-table handling in performSyncCycle below.
+// NOTE: general_ledger.reference_id is polymorphic (spans many tables), so it
+// is intentionally NOT remapped.
+const FK_PARENT_MAP = {
+  purchase_returns: { purchase_id: 'purchases', supplier_id: 'suppliers' },
+  sale_return_items: { sale_return_id: 'sale_returns', product_id: 'products' },
+  purchase_return_items: { purchase_return_id: 'purchase_returns', purchase_item_id: 'purchase_items', product_id: 'products' },
+  account_transactions: { account_id: 'accounts' },
+  customer_ledger: { customer_id: 'customers' },
+  supplier_ledger: { supplier_id: 'suppliers' },
+  emi_schedule: { emi_id: 'emi_records' },
+  device_imei: { product_id: 'products' }
+};
 
 function getCloudApiUrl() {
   return (process.env.CLOUD_API_URL || 'https://pos.raathdeveloper.com/api').replace(/\/+$/, '');
@@ -107,14 +132,19 @@ async function performSyncCycle() {
       return;
     }
 
-    // Get auth token from system_settings or environment if available
+    // Get auth token from system_settings or environment if available.
+    // Phase 2 (merge-offline-v89): tenant is resolved FIRST and the token is
+    // read scoped to that tenant, so one shop can never sync with another
+    // shop's credentials. Unscoped fallback only covers rows seeded before
+    // tenant scoping existed (single-shop local DBs).
     let token = process.env.CLOUD_AUTH_TOKEN || null;
     let tenantId = 'tenant_default';
     try {
-      const tokenRow = db.prepare('SELECT value FROM system_settings WHERE `key` = "sync_auth_token"').get();
-      if (tokenRow && tokenRow.value) token = tokenRow.value;
       const tenantRow = db.prepare('SELECT value FROM system_settings WHERE `key` = "sync_tenant_id"').get();
       if (tenantRow && tenantRow.value) tenantId = tenantRow.value;
+      const tokenRow = db.prepare('SELECT value FROM system_settings WHERE tenant_id = ? AND `key` = "sync_auth_token"').get(tenantId)
+        || db.prepare('SELECT value FROM system_settings WHERE `key` = "sync_auth_token"').get();
+      if (tokenRow && tokenRow.value) token = tokenRow.value;
     } catch (_) {}
 
     const headers = {
@@ -173,6 +203,19 @@ async function performSyncCycle() {
           } catch (_) {}
         }
 
+        // Phase 2 (merge-offline-v89): generic FK remap for the new sync tables
+        const fkMap = FK_PARENT_MAP[table];
+        if (fkMap) {
+          for (const [col, parentTable] of Object.entries(fkMap)) {
+            if (clean[col]) {
+              try {
+                const parent = db.prepare(`SELECT server_id FROM \`${parentTable}\` WHERE id = ?`).get(clean[col]);
+                if (parent && parent.server_id) clean[col] = parent.server_id;
+              } catch (_) {}
+            }
+          }
+        }
+
         return clean;
       });
 
@@ -218,7 +261,9 @@ async function performSyncCycle() {
     // ==================== 2. PULL CLOUD CHANGES ====================
     let lastPullAt = '1970-01-01 00:00:00';
     try {
-      const pullSetting = db.prepare('SELECT value FROM system_settings WHERE `key` = "sync_last_pull_at"').get();
+      // Phase 2 (merge-offline-v89): pull cursor is per-tenant, never shared.
+      const pullSetting = db.prepare('SELECT value FROM system_settings WHERE tenant_id = ? AND `key` = "sync_last_pull_at"').get(tenantId)
+        || db.prepare('SELECT value FROM system_settings WHERE `key` = "sync_last_pull_at"').get();
       if (pullSetting && pullSetting.value) lastPullAt = pullSetting.value;
     } catch (_) {}
 
@@ -274,12 +319,12 @@ async function performSyncCycle() {
           }
         }
 
-        // Save last_pull_at timestamp
-        const existingSetting = db.prepare('SELECT id FROM system_settings WHERE tenant_id = ? AND `key` = ?').get('tenant_default', 'sync_last_pull_at');
+        // Save last_pull_at timestamp (per-tenant key — Phase 2, merge-offline-v89)
+        const existingSetting = db.prepare('SELECT id FROM system_settings WHERE tenant_id = ? AND `key` = ?').get(tenantId, 'sync_last_pull_at');
         if (existingSetting) {
           db.prepare('UPDATE system_settings SET `value` = ? WHERE id = ?').run(serverTime, existingSetting.id);
         } else {
-          db.prepare('INSERT INTO system_settings (tenant_id, `key`, `value`, description) VALUES (?, ?, ?, ?)').run('tenant_default', 'sync_last_pull_at', serverTime, 'Last Cloud Pull Timestamp');
+          db.prepare('INSERT INTO system_settings (tenant_id, `key`, `value`, description) VALUES (?, ?, ?, ?)').run(tenantId, 'sync_last_pull_at', serverTime, 'Last Cloud Pull Timestamp');
         }
       })();
 

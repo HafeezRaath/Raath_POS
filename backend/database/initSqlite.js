@@ -10,7 +10,11 @@ const SYNCABLE_TABLES = new Set([
   'products', 'product_variants', 'product_serialized_items',
   'customers', 'suppliers', 'sales', 'sale_items', 'sale_returns',
   'purchases', 'purchase_items', 'expenses', 'payments',
-  'emi_records', 'emi_payments', 'accounts', 'work_orders'
+  'emi_records', 'emi_payments', 'accounts', 'work_orders',
+  // Phase 2 (merge-offline-v89): returns items, ledgers, EMI schedule, IMEI registry
+  'purchase_returns', 'sale_return_items', 'purchase_return_items',
+  'account_transactions', 'customer_ledger', 'supplier_ledger',
+  'general_ledger', 'emi_schedule', 'device_imei'
 ]);
 
 const TENANT_TABLES = new Set([

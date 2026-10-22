@@ -20,7 +20,17 @@ const SYNCABLE_TABLES = [
   'payments',
   'emi_records',
   'emi_payments',
-  'work_orders'
+  'work_orders',
+  // Phase 2 (merge-offline-v89): returns items, ledgers, EMI schedule, IMEI registry
+  'purchase_returns',
+  'sale_return_items',
+  'purchase_return_items',
+  'account_transactions',
+  'customer_ledger',
+  'supplier_ledger',
+  'general_ledger',
+  'emi_schedule',
+  'device_imei'
 ];
 
 function getPktNow() {
