@@ -4,6 +4,16 @@
 
 const { query, transaction } = require('../config/db');
 
+// FIX E-1: balances/dates computed in JS and bound as plain params — the
+// SQLite adapter (LOCAL_MODE) mangles parenthesised expressions inside
+// INSERT ... VALUES for syncable tables. Balance is re-read on the same
+// connection AFTER the balance UPDATE, identical to the old subquery value.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+async function readBalanceAfter(conn, sql, params) {
+  const [rows] = await conn.query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+
 exports.getSuppliers = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
@@ -144,19 +154,21 @@ exports.addSupplierPayment = async (req, res, next) => {
       await conn.query('UPDATE suppliers SET current_balance = GREATEST(0, current_balance - ?) WHERE tenant_id = ? AND id = ?', [paidAmount, tenantId, supplierId]);
 
       // 2. Add ledger entry (Debit reduces liability, Credit is 0)
+      const supPayBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, supplierId]);
       await conn.query(
         `INSERT INTO supplier_ledger (tenant_id, supplier_id, date, type, amount, description, debit, credit, balance, reference_type)
-         VALUES (?, ?, ?, 'payment', ?, ?, ?, 0, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'payment')`,
-        [tenantId, supplierId, paymentDate, paidAmount, noteText, paidAmount, tenantId, supplierId]
+         VALUES (?, ?, ?, 'payment', ?, ?, ?, 0, ?, 'payment')`,
+        [tenantId, supplierId, paymentDate, paidAmount, noteText, paidAmount, supPayBalAfter]
       );
 
       // 3. Deduct from account if specified
       if (account_id) {
         await conn.query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [paidAmount, tenantId, account_id]);
+        const supPayAccBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, account_id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, date)
-           VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'supplier_payment', CURDATE())`,
-          [tenantId, account_id, paidAmount, tenantId, account_id, `Payment to Supplier #${supplierId}`]
+           VALUES (?, ?, 'debit', ?, ?, ?, 'supplier_payment', ?)`,
+          [tenantId, account_id, paidAmount, supPayAccBalAfter, `Payment to Supplier #${supplierId}`, pktToday()]
         );
       }
 

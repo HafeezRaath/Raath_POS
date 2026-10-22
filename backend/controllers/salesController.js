@@ -5,6 +5,16 @@
 const { query, transaction } = require('../config/db');
 const batchController = require('./batchController');
 
+// FIX E-1: balances/dates computed in JS and bound as plain params — the
+// SQLite adapter (LOCAL_MODE) mangles parenthesised expressions inside
+// INSERT ... VALUES for syncable tables. Balance is re-read on the same
+// connection AFTER the balance UPDATE, identical to the old subquery value.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+async function readBalanceAfter(conn, sql, params) {
+  const [rows] = await conn.query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+
 // Helper: Generate unique invoice number
 function generateInvoiceNumber() {
   const isLocal = String(process.env.LOCAL_MODE || '') === '1';
@@ -271,10 +281,11 @@ exports.createSale = async (req, res, next) => {
               [spAmt, tenantId, spAccId]
             );
 
+            const spBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, spAccId]);
             await conn.query(
               `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-               VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ? LIMIT 1), ?, 'sale', ?, CURDATE())`,
-              [tenantId, spAccId, spAmt, tenantId, spAccId, `Sale: ${invNum} - (${spLabel}: Rs. ${spAmt})`, saleId]
+               VALUES (?, ?, 'credit', ?, ?, ?, 'sale', ?, ?)`,
+              [tenantId, spAccId, spAmt, spBalAfter, `Sale: ${invNum} - (${spLabel}: Rs. ${spAmt})`, saleId, pktToday()]
             );
           }
         }
@@ -287,10 +298,11 @@ exports.createSale = async (req, res, next) => {
             [actualCredit, tenantId, accountId]
           );
 
+          const saleBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, accountId]);
           await conn.query(
             `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-             VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ? LIMIT 1), ?, 'sale', ?, CURDATE())`,
-            [tenantId, accountId, actualCredit, tenantId, accountId, `Sale: ${invNum} - ${customerName}`, saleId]
+             VALUES (?, ?, 'credit', ?, ?, ?, 'sale', ?, ?)`,
+            [tenantId, accountId, actualCredit, saleBalAfter, `Sale: ${invNum} - ${customerName}`, saleId, pktToday()]
           );
         }
       }
@@ -432,8 +444,8 @@ exports.deleteSale = async (req, res, next) => {
         await query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [sale.paid_amount, tenantId, sale.account_id]);
         await query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'debit', ?, 'Sale deletion reversal', 'sale', ?, CURDATE())`,
-          [tenantId, sale.account_id, sale.paid_amount, id]
+           VALUES (?, ?, 'debit', ?, 'Sale deletion reversal', 'sale', ?, ?)`,
+          [tenantId, sale.account_id, sale.paid_amount, id, pktToday()]
         );
       }
 

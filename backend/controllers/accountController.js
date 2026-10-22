@@ -4,6 +4,18 @@
 
 const { query, transaction } = require('../config/db');
 
+// FIX E-1: the SQLite adapter (LOCAL_MODE) mangles any parenthesised
+// expression inside INSERT ... VALUES for syncable tables, so balances and
+// dates are computed in JS and bound as plain parameters. The resulting SQL
+// is valid on BOTH MySQL and SQLite and returns identical values: the
+// balance is re-read on the same connection AFTER the balance UPDATE,
+// exactly what the old (SELECT current_balance ...) subquery produced.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+async function readBalanceAfter(conn, sql, params) {
+  const [rows] = await conn.query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+
 exports.getAccounts = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
@@ -155,18 +167,20 @@ exports.transferFunds = async (req, res, next) => {
     await transaction(async (conn) => {
       // 1. Deduct from source
       await conn.query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [transferAmount, tenantId, from_account_id]);
+      const srcBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, from_account_id]);
       await conn.query(
         `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-         VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'transfer_out', ?, CURDATE())`,
-        [tenantId, from_account_id, transferAmount, tenantId, from_account_id, description, to_account_id]
+         VALUES (?, ?, 'debit', ?, ?, ?, 'transfer_out', ?, ?)`,
+        [tenantId, from_account_id, transferAmount, srcBalAfter, description, to_account_id, pktToday()]
       );
 
       // 2. Add to destination
       await conn.query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [transferAmount, tenantId, to_account_id]);
+      const dstBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, to_account_id]);
       await conn.query(
         `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-         VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'transfer_in', ?, CURDATE())`,
-        [tenantId, to_account_id, transferAmount, tenantId, to_account_id, description, from_account_id]
+         VALUES (?, ?, 'credit', ?, ?, ?, 'transfer_in', ?, ?)`,
+        [tenantId, to_account_id, transferAmount, dstBalAfter, description, from_account_id, pktToday()]
       );
     });
 
@@ -207,10 +221,11 @@ exports.createTransaction = async (req, res, next) => {
         await conn.query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [txAmount, tenantId, accId]);
       }
 
+      const balAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, accId]);
       const [insertRes] = await conn.query(
         `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-         VALUES (?, ?, ?, ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, ?, ?, ?)`,
-        [tenantId, accId, txType, txAmount, tenantId, accId, description, reference_type, reference_no || null, txDate]
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [tenantId, accId, txType, txAmount, balAfter, description, reference_type, reference_no || null, txDate]
       );
 
       return insertRes.insertId;

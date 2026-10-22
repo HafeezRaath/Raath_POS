@@ -5,6 +5,17 @@
 const { query, transaction } = require('../config/db');
 const batchController = require('./batchController');
 
+// FIX E-1: balances/dates computed in JS and bound as plain params — the
+// SQLite adapter (LOCAL_MODE) mangles parenthesised expressions inside
+// INSERT ... VALUES for syncable tables. Balance is re-read on the same
+// connection AFTER the balance UPDATE, identical to the old subquery value.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const pktNow = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+async function readBalanceAfter(conn, sql, params) {
+  const [rows] = await conn.query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+
 // --- Sale Returns ---
 exports.getSaleReturns = async (req, res, next) => {
   try {
@@ -210,10 +221,11 @@ exports.createSaleReturn = async (req, res, next) => {
 
           if (actualDeduct > 0) {
             await conn.query(`UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?`, [actualDeduct, tenantId, spAccId]);
+            const splitBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, spAccId]);
             await conn.query(
               `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-               VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'sale_return', ?, CURDATE())`,
-              [tenantId, spAccId, actualDeduct, tenantId, spAccId, `Refund for Return #${returnNumber} (Split: ${spAccRow?.name || ''})`, id]
+               VALUES (?, ?, 'debit', ?, ?, ?, 'sale_return', ?, ?)`,
+              [tenantId, spAccId, actualDeduct, splitBalAfter, `Refund for Return #${returnNumber} (Split: ${spAccRow?.name || ''})`, id, pktToday()]
             );
           }
         }
@@ -227,10 +239,11 @@ exports.createSaleReturn = async (req, res, next) => {
 
         if (actualDeduct > 0) {
           await conn.query(`UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?`, [actualDeduct, tenantId, account_id]);
+          const retBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, account_id]);
           await conn.query(
             `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-             VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'sale_return', ?, CURDATE())`,
-            [tenantId, account_id, actualDeduct, tenantId, account_id, `Refund for Return #${returnNumber}`, id]
+             VALUES (?, ?, 'debit', ?, ?, ?, 'sale_return', ?, ?)`,
+            [tenantId, account_id, actualDeduct, retBalAfter, `Refund for Return #${returnNumber}`, id, pktToday()]
           );
         }
       }
@@ -486,18 +499,20 @@ exports.createPurchaseReturn = async (req, res, next) => {
           `UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?`,
           [gTotal, tenantId, account_id]
         );
+        const prBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, account_id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'purchase_return', ?, CURDATE())`,
-          [tenantId, account_id, gTotal, tenantId, account_id, `Supplier Refund for Purchase Return #${returnNo}`, id]
+           VALUES (?, ?, 'credit', ?, ?, ?, 'purchase_return', ?, ?)`,
+          [tenantId, account_id, gTotal, prBalAfter, `Supplier Refund for Purchase Return #${returnNo}`, id, pktToday()]
         );
       } else if (supplier_id && gTotal > 0) {
         // Supplier credit: reduce supplier payable balance
         await conn.query(`UPDATE suppliers SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?`, [gTotal, tenantId, supplier_id]);
+        const prSupBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, supplier_id]);
         await conn.query(
           `INSERT INTO supplier_ledger (tenant_id, supplier_id, type, amount, debit, balance, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'return', ?, ?, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), ?, 'purchase_return', ?, NOW())`,
-          [tenantId, supplier_id, gTotal, gTotal, tenantId, supplier_id, `Purchase Return #${returnNo}`, id]
+           VALUES (?, ?, 'return', ?, ?, ?, ?, 'purchase_return', ?, ?)`,
+          [tenantId, supplier_id, gTotal, gTotal, prSupBalAfter, `Purchase Return #${returnNo}`, id, pktNow()]
         );
       }
 

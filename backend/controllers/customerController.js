@@ -4,6 +4,17 @@
 
 const { query, transaction } = require('../config/db');
 
+// FIX E-1: balances/dates computed in JS and bound as plain params — the
+// SQLite adapter (LOCAL_MODE) mangles parenthesised expressions inside
+// INSERT ... VALUES for syncable tables. Balance is re-read on the same
+// connection AFTER the balance UPDATE, identical to the old subquery value.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const pktNow = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+async function readBalanceAfter(conn, sql, params) {
+  const [rows] = await conn.query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+
 exports.getCustomers = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
@@ -60,8 +71,8 @@ exports.createCustomer = async (req, res, next) => {
       await query(
         `INSERT INTO customer_ledger 
          (tenant_id, customer_id, date, type, amount, previous_balance, balance_after, debit, credit, balance, description, reference_type)
-         VALUES (?, ?, NOW(), 'opening_balance', ?, 0, ?, ?, ?, ?, 'Opening Balance', 'opening_balance')`,
-        [tenantId, result.insertId, opBal, opBal, opBal > 0 ? opBal : 0, opBal < 0 ? Math.abs(opBal) : 0, opBal]
+         VALUES (?, ?, ?, 'opening_balance', ?, 0, ?, ?, ?, ?, 'Opening Balance', 'opening_balance')`,
+        [tenantId, result.insertId, pktNow(), opBal, opBal, opBal > 0 ? opBal : 0, opBal < 0 ? Math.abs(opBal) : 0, opBal]
       ).catch(() => {});
     }
 
@@ -269,10 +280,11 @@ exports.addCustomerPayment = async (req, res, next) => {
       // 3. Add to account if specified
       if (account_id) {
         await conn.query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [paidAmount, tenantId, account_id]);
+        const custPayBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, account_id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_no, date)
-           VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'customer_payment', ?, CURDATE())`,
-          [tenantId, account_id, paidAmount, tenantId, account_id, `Payment from ${cust?.name || ('Customer #' + customerId)}: ${noteText}`, refNo]
+           VALUES (?, ?, 'credit', ?, ?, ?, 'customer_payment', ?, ?)`,
+          [tenantId, account_id, paidAmount, custPayBalAfter, `Payment from ${cust?.name || ('Customer #' + customerId)}: ${noteText}`, refNo, pktToday()]
         );
       }
 

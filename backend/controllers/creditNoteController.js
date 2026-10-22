@@ -6,6 +6,16 @@
 // ============================================================
 const { query, transaction } = require('../config/db');
 
+// FIX E-1: balances/dates computed in JS and bound as plain params — the
+// SQLite adapter (LOCAL_MODE) mangles parenthesised expressions inside
+// INSERT ... VALUES for syncable tables. Balance is re-read on the same
+// connection AFTER the balance UPDATE, identical to the old subquery value.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+async function readBalanceAfter(conn, sql, params) {
+  const [rows] = await conn.query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+
 // --- Create credit note ---
 exports.createCreditNote = async (req, res, next) => {
   try {
@@ -32,10 +42,11 @@ exports.createCreditNote = async (req, res, next) => {
       );
 
       // 2. Ledger entry: credit reduces payable; balance snapshot after update
+      const supBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, supplier_id]);
       await conn.query(
         `INSERT INTO supplier_ledger (tenant_id, supplier_id, description, debit, credit, balance, reference_type, reference_id)
-         VALUES (?, ?, ?, 0, ?, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'credit_note', ?)`,
-        [tenantId, supplier_id, `Credit Note ${no} — ${reason || 'price drop / rebate'}`, amt, tenantId, supplier_id, cn.insertId]
+         VALUES (?, ?, ?, 0, ?, ?, 'credit_note', ?)`,
+        [tenantId, supplier_id, `Credit Note ${no} — ${reason || 'price drop / rebate'}`, amt, supBalAfter, cn.insertId]
       );
 
       // 3. Book to Purchase Discount / Rebate income account (profit, past invoices untouched)
@@ -55,10 +66,11 @@ exports.createCreditNote = async (req, res, next) => {
         `UPDATE accounts SET current_balance = current_balance + ? WHERE id = ?`,
         [amt, accountId]
       );
+      const rebateBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE id = ?', [accountId]);
       await conn.query(
         `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, date)
-         VALUES (?, ?, 'credit', ?, (SELECT current_balance FROM accounts WHERE id = ?), ?, 'supplier_credit_note', CURDATE())`,
-        [tenantId, accountId, amt, accountId, `Supplier Credit Note ${no} — supplier #${supplier_id}`]
+         VALUES (?, ?, 'credit', ?, ?, ?, 'supplier_credit_note', ?)`,
+        [tenantId, accountId, amt, rebateBalAfter, `Supplier Credit Note ${no} — supplier #${supplier_id}`, pktToday()]
       );
 
       return { id: cn.insertId, note_no: no };
@@ -102,10 +114,11 @@ exports.voidCreditNote = async (req, res, next) => {
       await conn.query(`UPDATE supplier_credit_notes SET status = 'void' WHERE id = ?`, [id]);
       // Reverse supplier payable
       await conn.query(`UPDATE suppliers SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?`, [cn.amount, tenantId, cn.supplier_id]);
+      const supBalAfterVoid = await readBalanceAfter(conn, 'SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, cn.supplier_id]);
       await conn.query(
         `INSERT INTO supplier_ledger (tenant_id, supplier_id, description, debit, credit, balance, reference_type, reference_id)
-         VALUES (?, ?, ?, ?, 0, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'credit_note_void', ?)`,
-        [tenantId, cn.supplier_id, `VOID Credit Note ${cn.note_no}`, cn.amount, tenantId, cn.supplier_id, id]
+         VALUES (?, ?, ?, ?, 0, ?, 'credit_note_void', ?)`,
+        [tenantId, cn.supplier_id, `VOID Credit Note ${cn.note_no}`, cn.amount, supBalAfterVoid, id]
       );
       // Reverse rebate account
       const [acc] = await conn.query(
@@ -113,10 +126,11 @@ exports.voidCreditNote = async (req, res, next) => {
       );
       if (acc) {
         await conn.query(`UPDATE accounts SET current_balance = current_balance - ? WHERE id = ?`, [cn.amount, acc.id]);
+        const rebateBalAfterVoid = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE id = ?', [acc.id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, date)
-           VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE id = ?), ?, 'supplier_credit_note_void', CURDATE())`,
-          [tenantId, acc.id, cn.amount, acc.id, `VOID Credit Note ${cn.note_no}`]
+           VALUES (?, ?, 'debit', ?, ?, ?, 'supplier_credit_note_void', ?)`,
+          [tenantId, acc.id, cn.amount, rebateBalAfterVoid, `VOID Credit Note ${cn.note_no}`, pktToday()]
         );
       }
     });

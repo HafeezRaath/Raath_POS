@@ -6,6 +6,11 @@
 const fs = require('fs');
 const path = require('path');
 const { query, transaction } = require('../config/db');
+
+// FIX E-1: dates computed in JS and bound as plain params — the SQLite
+// adapter (LOCAL_MODE) mangles CURDATE()/NOW() inside INSERT ... VALUES
+// for syncable tables such as account_transactions.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
 const { encryptPasscode, decryptPasscode } = require('../utils/passcodeCrypto');
 
 // --- Generate next job token: RJC-YYYYMM-0001 ---
@@ -116,8 +121,8 @@ exports.createJob = async (req, res, next) => {
           await conn.query(`UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?`, [advAmt, tenantId, cashId]);
           await conn.query(
             `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
-             VALUES (?, ?, 'credit', ?, 'Repair advance received', 'repair', ?, CURDATE())`,
-            [tenantId, cashId, advAmt, jr.insertId]
+             VALUES (?, ?, 'credit', ?, 'Repair advance received', 'repair', ?, ?)`,
+            [tenantId, cashId, advAmt, jr.insertId, pktToday()]
           );
         }
       }

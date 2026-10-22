@@ -4,6 +4,16 @@
 
 const { query, transaction } = require('../config/db');
 
+// FIX E-1: balances/dates computed in JS and bound as plain params — the
+// SQLite adapter (LOCAL_MODE) mangles parenthesised expressions inside
+// INSERT ... VALUES for syncable tables. Balance is re-read on the same
+// connection AFTER the balance UPDATE, identical to the old subquery value.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+async function readBalanceAfter(conn, sql, params) {
+  const [rows] = await conn.query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+
 exports.getExpenses = async (req, res, next) => {
   try {
     const tenantId = req.tenant_id || 'tenant_default';
@@ -65,10 +75,11 @@ exports.createExpense = async (req, res, next) => {
       // Deduct from account if specified
       if (account_id) {
         await conn.query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [parsedAmount, tenantId, account_id]);
+        const expBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, account_id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'expense', ?, ?)`,
-          [tenantId, account_id, parsedAmount, tenantId, account_id, `Expense: ${title}`, expenseId, date]
+           VALUES (?, ?, 'debit', ?, ?, ?, 'expense', ?, ?)`,
+          [tenantId, account_id, parsedAmount, expBalAfter, `Expense: ${title}`, expenseId, date]
         );
       }
 
@@ -111,8 +122,8 @@ exports.updateExpense = async (req, res, next) => {
         await conn.query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [oldAmount, tenantId, oldAccountId]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'credit', ?, 'Expense update reversal', 'expense', ?, CURDATE())`,
-          [tenantId, oldAccountId, oldAmount, id]
+           VALUES (?, ?, 'credit', ?, 'Expense update reversal', 'expense', ?, ?)`,
+          [tenantId, oldAccountId, oldAmount, id, pktToday()]
         );
       }
 
@@ -126,10 +137,11 @@ exports.updateExpense = async (req, res, next) => {
       // 3. Deduct new amount from (new) account
       if (account_id) {
         await conn.query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [parsedAmount, tenantId, account_id]);
+        const expUpdBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, account_id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'expense', ?, ?)`,
-          [tenantId, account_id, parsedAmount, tenantId, account_id, `Expense: ${title}`, id, date]
+           VALUES (?, ?, 'debit', ?, ?, ?, 'expense', ?, ?)`,
+          [tenantId, account_id, parsedAmount, expUpdBalAfter, `Expense: ${title}`, id, date]
         );
       }
     });
@@ -160,8 +172,8 @@ exports.deleteExpense = async (req, res, next) => {
         await query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [expense.amount, tenantId, expense.account_id]);
         await query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'credit', ?, 'Expense deletion reversal', 'expense', ?, CURDATE())`,
-          [tenantId, expense.account_id, expense.amount, id]
+           VALUES (?, ?, 'credit', ?, 'Expense deletion reversal', 'expense', ?, ?)`,
+          [tenantId, expense.account_id, expense.amount, id, pktToday()]
         );
       }
 

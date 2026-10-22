@@ -4,6 +4,21 @@
 
 const { query, transaction } = require('../config/db');
 
+// FIX E-1: balances/dates computed in JS and bound as plain params — the
+// SQLite adapter (LOCAL_MODE) mangles parenthesised expressions inside
+// INSERT ... VALUES for syncable tables. Balance is re-read on the same
+// connection AFTER the balance UPDATE, identical to the old subquery value.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const pktNow = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+async function readBalanceAfter(conn, sql, params) {
+  const [rows] = await conn.query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+async function readBalanceAfterQ(sql, params) {
+  const rows = await query(sql, params);
+  return (Array.isArray(rows) && rows.length > 0) ? parseFloat(rows[0].current_balance) || 0 : 0;
+}
+
 function generatePONumber() {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -137,13 +152,13 @@ exports.createPurchase = async (req, res, next) => {
           subtotal, discount, tax, shipping_cost, grand_total,
           paid_amount, due_amount, payment_method, payment_mode, payment_status, account_id,
           notes, purchase_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, NOW()))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       const [pRes] = await conn.query(insertSql, [
         tenantId, poNum, poNum, supplier_id || null, finalSupplierName, warehouse_id || null,
         subtotal || total_amount || 0, discount || discount_amount || 0, tax || tax_amount || 0, shipping_cost || shipping_charges || 0, calculatedTotal,
         finalPaid, finalDue, finalPaymentMode, finalPaymentMode, finalPaymentStatus, account_id || null,
-        notes, purchase_date || null
+        notes, purchase_date || pktNow()
       ]);
 
       const purchaseId = pRes.insertId;
@@ -211,14 +226,15 @@ exports.createPurchase = async (req, res, next) => {
           [finalDue, tenantId, supplier_id]
         );
 
+        const supBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, supplier_id]);
         await conn.query(
           `INSERT INTO supplier_ledger (
             tenant_id, supplier_id, date, type, amount, description, debit, credit, balance, reference_type, reference_id
-          ) VALUES (?, ?, COALESCE(?, NOW()), 'purchase', ?, ?, 0, ?, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'purchase', ?)`,
+          ) VALUES (?, ?, ?, 'purchase', ?, ?, 0, ?, ?, 'purchase', ?)`,
           [
-            tenantId, supplier_id, purchase_date || null, finalDue,
+            tenantId, supplier_id, purchase_date || pktNow(), finalDue,
             `Purchase #${poNum}${finalPaid > 0 ? ` (Total: ${calculatedTotal}, Paid: ${finalPaid})` : ''}`,
-            finalDue, tenantId, supplier_id, purchaseId
+            finalDue, supBalAfter, purchaseId
           ]
         );
       }
@@ -228,11 +244,11 @@ exports.createPurchase = async (req, res, next) => {
         await conn.query(
           `INSERT INTO payments (
             tenant_id, supplier_id, amount, type, payment_mode, note, date, account_id, reference_no
-          ) VALUES (?, ?, ?, 'purchase_payment', ?, ?, COALESCE(?, NOW()), ?, ?)`,
+          ) VALUES (?, ?, ?, 'purchase_payment', ?, ?, ?, ?, ?)`,
           [
             tenantId, supplier_id, finalPaid, finalPaymentMode,
             `Paid at purchase #${poNum}`,
-            purchase_date || null, account_id || null, poNum
+            purchase_date || pktNow(), account_id || null, poNum
           ]
         );
       }
@@ -248,10 +264,11 @@ exports.createPurchase = async (req, res, next) => {
             'UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?',
             [spAmount, tenantId, spAccountId]
           );
+          const spBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, spAccountId]);
           await conn.query(
             `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-             VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'purchase', ?, CURDATE())`,
-            [tenantId, spAccountId, spAmount, tenantId, spAccountId, `Purchase (split): ${poNum}`, purchaseId]
+             VALUES (?, ?, 'debit', ?, ?, ?, 'purchase', ?, ?)`,
+            [tenantId, spAccountId, spAmount, spBalAfter, `Purchase (split): ${poNum}`, purchaseId, pktToday()]
           );
         }
       } else if (account_id && finalPaid > 0) {
@@ -260,10 +277,11 @@ exports.createPurchase = async (req, res, next) => {
           [finalPaid, tenantId, account_id]
         );
 
+        const purBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?', [tenantId, account_id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, balance_after, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'debit', ?, (SELECT current_balance FROM accounts WHERE tenant_id = ? AND id = ?), ?, 'purchase', ?, CURDATE())`,
-          [tenantId, account_id, finalPaid, tenantId, account_id, `Purchase: ${poNum}`, purchaseId]
+           VALUES (?, ?, 'debit', ?, ?, ?, 'purchase', ?, ?)`,
+          [tenantId, account_id, finalPaid, purBalAfter, `Purchase: ${poNum}`, purchaseId, pktToday()]
         );
       }
 
@@ -333,10 +351,11 @@ exports.deletePurchase = async (req, res, next) => {
       if (purchase.supplier_id && parseFloat(purchase.due_amount) > 0) {
         const dueAmt = parseFloat(purchase.due_amount);
         await query('UPDATE suppliers SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [dueAmt, tenantId, purchase.supplier_id]);
+        const cancelSupBalAfter = await readBalanceAfterQ('SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, purchase.supplier_id]);
         await query(
           `INSERT INTO supplier_ledger (tenant_id, supplier_id, date, type, amount, description, debit, credit, balance, reference_type, reference_id)
-           VALUES (?, ?, NOW(), 'purchase_cancel', ?, ?, ?, 0, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'purchase_cancel', ?)`,
-          [tenantId, purchase.supplier_id, dueAmt, `Reversal of Purchase #${purchase.purchase_number || purchase.purchase_no}`, dueAmt, tenantId, purchase.supplier_id, id]
+           VALUES (?, ?, ?, 'purchase_cancel', ?, ?, ?, 0, ?, 'purchase_cancel', ?)`,
+          [tenantId, purchase.supplier_id, pktNow(), dueAmt, `Reversal of Purchase #${purchase.purchase_number || purchase.purchase_no}`, dueAmt, cancelSupBalAfter, id]
         );
       }
 
@@ -353,8 +372,8 @@ exports.deletePurchase = async (req, res, next) => {
         await query('UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [purchase.paid_amount, tenantId, purchase.account_id]);
         await query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'credit', ?, 'Purchase deletion reversal', 'purchase', ?, CURDATE())`,
-          [tenantId, purchase.account_id, purchase.paid_amount, id]
+           VALUES (?, ?, 'credit', ?, 'Purchase deletion reversal', 'purchase', ?, ?)`,
+          [tenantId, purchase.account_id, purchase.paid_amount, id, pktToday()]
         );
       }
 
@@ -603,11 +622,12 @@ exports.convertPOToPurchase = async (req, res, next) => {
       // 3. Update supplier balance & ledger if due
       if (po.supplier_id && dueAmount > 0) {
         await conn.query('UPDATE suppliers SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?', [dueAmount, tenantId, po.supplier_id]);
+        const poSupBalAfter = await readBalanceAfter(conn, 'SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?', [tenantId, po.supplier_id]);
         await conn.query(
           `INSERT INTO supplier_ledger (
             tenant_id, supplier_id, date, type, amount, description, debit, credit, balance, reference_type, reference_id
-          ) VALUES (?, ?, NOW(), 'purchase', ?, ?, 0, ?, (SELECT current_balance FROM suppliers WHERE tenant_id = ? AND id = ?), 'purchase', ?)`,
-          [tenantId, po.supplier_id, dueAmount, `Purchase #${purchaseNum} (Converted from PO ${po.po_no})`, dueAmount, tenantId, po.supplier_id, newPurchId]
+          ) VALUES (?, ?, ?, 'purchase', ?, ?, 0, ?, ?, 'purchase', ?)`,
+          [tenantId, po.supplier_id, pktNow(), dueAmount, `Purchase #${purchaseNum} (Converted from PO ${po.po_no})`, dueAmount, poSupBalAfter, newPurchId]
         );
       }
 

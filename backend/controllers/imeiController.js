@@ -5,6 +5,11 @@
 // ============================================================
 const { query, transaction } = require('../config/db');
 
+// FIX E-1: dates computed in JS and bound as plain params — the SQLite
+// adapter (LOCAL_MODE) mangles CURDATE()/NOW() inside INSERT ... VALUES
+// for syncable tables such as device_imei.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
 const VALID_STATUSES = ['IN_STOCK', 'SOLD', 'RETURNED'];
 
 // --- Bulk IMEI stock-in: common specs once + N scanned IMEIs -> N rows ---
@@ -85,9 +90,9 @@ exports.bulkAddImei = async (req, res, next) => {
           `INSERT INTO device_imei
              (tenant_id, product_id, product_variant_id, imei1, imei2, brand, model, ram, rom, color,
               condition_type, purchase_price, sale_price, status, supplier_id, purchase_id, warranty_months, warranty_start, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_STOCK', ?, ?, ?, CURDATE(), ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_STOCK', ?, ?, ?, ?, ?)`,
           [tenantId, pid, pvid, c.imei1, c.imei2, brand, model, ram, rom, color,
-           condition_type, purchase_price, sale_price, supplier_id, purchase_id, warranty_months, notes]
+           condition_type, purchase_price, sale_price, supplier_id, purchase_id, warranty_months, pktToday(), notes]
         );
         await conn.query(
           `INSERT INTO device_imei_history

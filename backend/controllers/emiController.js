@@ -4,6 +4,13 @@
 
 const { query, transaction } = require('../config/db');
 
+// FIX E-1: dates computed in JS and bound as plain params — the SQLite
+// adapter (LOCAL_MODE) mangles parenthesised expressions (CURDATE()/NOW())
+// inside INSERT ... VALUES for syncable tables such as emi_payments and
+// account_transactions.
+const pktToday = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const pktNow = () => new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+
 // --- List EMI Records ---
 exports.getEMIs = async (req, res, next) => {
   try {
@@ -208,8 +215,8 @@ exports.payInstallment = async (req, res, next) => {
         const [missRes] = await conn.query(
           `INSERT INTO emi_payments
              (tenant_id, emi_id, amount, penalty_amount, discount_amount, total_received, payment_mode, payment_method, account_id, receipt_no, notes, status, payment_date)
-           VALUES (?, ?, 0, 0, 0, 0, ?, ?, NULL, ?, ?, 'missed', NOW())`,
-          [tenantId, id, payment_mode, payment_mode, receiptNo, notes || 'Installment missed — Rs0 recorded']
+           VALUES (?, ?, 0, 0, 0, 0, ?, ?, NULL, ?, ?, 'missed', ?)`,
+          [tenantId, id, payment_mode, payment_mode, receiptNo, notes || 'Installment missed — Rs0 recorded', pktNow()]
         );
         const [pendings] = await conn.query(
           `SELECT id FROM emi_schedule WHERE tenant_id = ? AND emi_id = ? AND status IN ('pending', 'partial') ORDER BY installment_no ASC LIMIT 1`,
@@ -225,8 +232,8 @@ exports.payInstallment = async (req, res, next) => {
       const [payRes] = await conn.query(
         `INSERT INTO emi_payments 
          (tenant_id, emi_id, amount, penalty_amount, discount_amount, total_received, payment_mode, payment_method, account_id, receipt_no, notes, status, payment_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', NOW())`,
-        [tenantId, id, payAmt, penAmt, discAmt, payAmt + penAmt - discAmt, payment_mode, payment_mode, account_id, receiptNo, notes]
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?)`,
+        [tenantId, id, payAmt, penAmt, discAmt, payAmt + penAmt - discAmt, payment_mode, payment_mode, account_id, receiptNo, notes, pktNow()]
       );
 
       // 2. Update schedule: handle partial vs full payment
@@ -280,8 +287,8 @@ exports.payInstallment = async (req, res, next) => {
         await conn.query(`UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?`, [payAmt, tenantId, account_id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, reference_no, date)
-           VALUES (?, ?, 'credit', ?, 'EMI Installment Received', 'emi_payment', ?, ?, CURDATE())`,
-          [tenantId, account_id, payAmt, payRes.insertId, receiptNo]
+           VALUES (?, ?, 'credit', ?, 'EMI Installment Received', 'emi_payment', ?, ?, ?)`,
+          [tenantId, account_id, payAmt, payRes.insertId, receiptNo, pktToday()]
         );
       }
     });
@@ -310,7 +317,12 @@ exports.deleteEMI = async (req, res, next) => {
     const { id } = req.params;
 
     // Get EMI details for reversal
-    const [emis] = await query('SELECT * FROM emi_records WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
+    // FIX E-2: query() returns the rows array directly (both MySQL and
+    // SQLite adapters). The old `const [emis] = await query(...)` took the
+    // first ROW as `emis`, so `emis[0]` was undefined and reading
+    // emi.down_payment_account_id threw a TypeError -> HTTP 500 on every
+    // delete of an existing EMI (Step E staging, DELETE /emi/6).
+    const emis = await query('SELECT * FROM emi_records WHERE tenant_id = ? AND id = ? AND is_deleted = 0', [tenantId, id]);
     if (emis.length === 0) {
       return res.status(404).json({ success: false, error: 'EMI record not found' });
     }
@@ -323,8 +335,8 @@ exports.deleteEMI = async (req, res, next) => {
         await query('UPDATE accounts SET current_balance = current_balance - ? WHERE tenant_id = ? AND id = ?', [emi.down_payment, tenantId, emi.down_payment_account_id]);
         await query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_id, date)
-           VALUES (?, ?, 'debit', ?, 'EMI deletion reversal (down payment)', 'emi', ?, CURDATE())`,
-          [tenantId, emi.down_payment_account_id, emi.down_payment, id]
+           VALUES (?, ?, 'debit', ?, ?, 'emi', ?, ?)`,
+          [tenantId, emi.down_payment_account_id, emi.down_payment, 'EMI deletion reversal (down payment)', id, pktToday()]
         );
       }
 
@@ -582,8 +594,8 @@ exports.createAdvancedEMI = async (req, res, next) => {
         const rcp = `EMIRCP-${Date.now()}`;
         await conn.query(
           `INSERT INTO emi_payments (tenant_id, emi_id, amount, total_received, payment_mode, payment_method, receipt_no, notes, status, payment_date)
-           VALUES (?, ?, ?, ?, 'cash', 'cash', ?, 'Down payment', 'paid', NOW())`,
-          [tenantId, id, down, down, rcp]
+           VALUES (?, ?, ?, ?, 'cash', 'cash', ?, 'Down payment', 'paid', ?)`,
+          [tenantId, id, down, down, rcp, pktNow()]
         );
       }
 
@@ -622,14 +634,14 @@ exports.earlySettlement = async (req, res, next) => {
       if (finalAmount > 0) {
         await conn.query(
           `INSERT INTO emi_payments (tenant_id, emi_id, amount, discount_amount, total_received, payment_mode, payment_method, receipt_no, notes, status, payment_date)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Early settlement', 'paid', NOW())`,
-          [tenantId, id, finalAmount, discount, finalAmount, payment_mode, payment_mode, rcp]
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Early settlement', 'paid', ?)`,
+          [tenantId, id, finalAmount, discount, finalAmount, payment_mode, payment_mode, rcp, pktNow()]
         );
       } else if (discount > 0) {
         await conn.query(
           `INSERT INTO emi_payments (tenant_id, emi_id, amount, discount_amount, total_received, payment_mode, payment_method, receipt_no, notes, status, payment_date)
-           VALUES (?, ?, 0, ?, 0, ?, ?, ?, 'Early settlement (full waiver)', 'paid', NOW())`,
-          [tenantId, id, discount, payment_mode, payment_mode, rcp]
+           VALUES (?, ?, 0, ?, 0, ?, ?, ?, ?, 'paid', ?)`,
+          [tenantId, id, discount, payment_mode, payment_mode, rcp, 'Early settlement (full waiver)', pktNow()]
         );
       }
       await conn.query(`UPDATE emi_schedule SET status = 'paid', paid_amount = planned_amount, paid_date = CURDATE() WHERE tenant_id = ? AND emi_id = ? AND status = 'pending'`, [tenantId, id]);
@@ -644,8 +656,8 @@ exports.earlySettlement = async (req, res, next) => {
         await conn.query(`UPDATE accounts SET current_balance = current_balance + ? WHERE tenant_id = ? AND id = ?`, [finalAmount, tenantId, account_id]);
         await conn.query(
           `INSERT INTO account_transactions (tenant_id, account_id, type, amount, description, reference_type, reference_no, date)
-           VALUES (?, ?, 'credit', ?, 'EMI Early Settlement', 'emi_payment', ?, CURDATE())`,
-          [tenantId, account_id, finalAmount, rcp]
+           VALUES (?, ?, 'credit', ?, 'EMI Early Settlement', 'emi_payment', ?, ?)`,
+          [tenantId, account_id, finalAmount, rcp, pktToday()]
         );
       }
     });
