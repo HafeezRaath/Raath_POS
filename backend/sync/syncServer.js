@@ -36,6 +36,10 @@ const SYNCABLE_TABLES = [
 // Cache of cloud table columns for the schema-drift guard in push()
 const _cloudColCache = {};
 
+// tenant:productServerId -> timestamp of the product's last push upsert.
+// Used by the stock double-count guard (items pushed in the same cycle).
+const _recentProductSync = new Map();
+
 function getPktNow() {
   const now = new Date();
   const pkt = new Date(now.getTime() + 5 * 60 * 60 * 1000);
@@ -172,24 +176,21 @@ exports.push = async (req, res, next) => {
             serverId = insertRes.insertId;
 
             // Recalculate / adjust stock on server ONLY on first insert (idempotency guard).
-            // Double-count guard: if the product row itself is sync-managed
-            // (carries a sync_uuid), its stock arrives authoritatively with
-            // the product push — masters are pushed before child items and
-            // the pushed stock already reflects this transaction (e.g. a
-            // product created offline at stock 20, sold down to 18, then
-            // pushed: cloud stock must end at 18, not 18 - 2 = 16).
-            // Adjusting again on item insert deducted the quantity twice.
-            let productSyncManaged = false;
+            // Double-count guard: the sync client pushes masters before
+            // child items within one cycle, and a product whose stock was
+            // changed by the transaction arrives WITH its post-transaction
+            // stock (e.g. created offline at 20, sold down to 18, pushed:
+            // cloud stock must end at 18, not 18 - 2 = 16). If this product
+            // was upserted by a push moments ago (same cycle), its stock is
+            // already correct — skip the item adjustment. If the product
+            // was NOT part of this cycle's pushes, the item adjustment is
+            // the only stock path and must still apply.
+            let productJustSynced = false;
             if ((table === 'sale_items' || table === 'purchase_items') && row.product_id) {
-              try {
-                const [prodRows] = await conn.query(
-                  'SELECT sync_uuid FROM products WHERE id = ? AND tenant_id = ? LIMIT 1',
-                  [row.product_id, tenantId]
-                );
-                productSyncManaged = !!(prodRows && prodRows.length > 0 && prodRows[0].sync_uuid);
-              } catch (_) {}
+              const ts = _recentProductSync.get(`${tenantId}:${row.product_id}`);
+              if (ts && (Date.now() - ts) < 120000) productJustSynced = true;
             }
-            if (!productSyncManaged && table === 'sale_items' && row.product_id && row.quantity) {
+            if (!productJustSynced && table === 'sale_items' && row.product_id && row.quantity) {
               const qty = parseFloat(row.quantity) || 0;
               if (qty > 0) {
                 await conn.query(
@@ -204,7 +205,7 @@ exports.push = async (req, res, next) => {
                   ).catch(() => {});
                 }
               }
-            } else if (!productSyncManaged && table === 'purchase_items' && row.product_id && row.quantity) {
+            } else if (!productJustSynced && table === 'purchase_items' && row.product_id && row.quantity) {
               const qty = parseFloat(row.quantity) || 0;
               if (qty > 0) {
                 await conn.query(
@@ -220,6 +221,14 @@ exports.push = async (req, res, next) => {
                 }
               }
             }
+          }
+
+          // Remember product upserts so the item stock adjustment in the
+          // same sync cycle can tell "stock already arrived with the
+          // product row" apart from "item-only push" (see guard above).
+          if (table === 'products' && serverId) {
+            _recentProductSync.set(`${tenantId}:${serverId}`, Date.now());
+            if (_recentProductSync.size > 10000) _recentProductSync.clear();
           }
 
           mapping[row.sync_uuid] = {
