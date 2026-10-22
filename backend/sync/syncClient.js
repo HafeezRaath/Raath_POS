@@ -140,10 +140,10 @@ async function performSyncCycle() {
     let token = process.env.CLOUD_AUTH_TOKEN || null;
     let tenantId = 'tenant_default';
     try {
-      const tenantRow = db.prepare('SELECT value FROM system_settings WHERE `key` = "sync_tenant_id"').get();
+      const tenantRow = db.prepare("SELECT value FROM system_settings WHERE `key` = 'sync_tenant_id'").get();
       if (tenantRow && tenantRow.value) tenantId = tenantRow.value;
-      const tokenRow = db.prepare('SELECT value FROM system_settings WHERE tenant_id = ? AND `key` = "sync_auth_token"').get(tenantId)
-        || db.prepare('SELECT value FROM system_settings WHERE `key` = "sync_auth_token"').get();
+      const tokenRow = db.prepare("SELECT value FROM system_settings WHERE tenant_id = ? AND `key` = 'sync_auth_token'").get(tenantId)
+        || db.prepare("SELECT value FROM system_settings WHERE `key` = 'sync_auth_token'").get();
       if (tokenRow && tokenRow.value) token = tokenRow.value;
     } catch (_) {}
 
@@ -262,8 +262,8 @@ async function performSyncCycle() {
     let lastPullAt = '1970-01-01 00:00:00';
     try {
       // Phase 2 (merge-offline-v89): pull cursor is per-tenant, never shared.
-      const pullSetting = db.prepare('SELECT value FROM system_settings WHERE tenant_id = ? AND `key` = "sync_last_pull_at"').get(tenantId)
-        || db.prepare('SELECT value FROM system_settings WHERE `key` = "sync_last_pull_at"').get();
+      const pullSetting = db.prepare("SELECT value FROM system_settings WHERE tenant_id = ? AND `key` = 'sync_last_pull_at'").get(tenantId)
+        || db.prepare("SELECT value FROM system_settings WHERE `key` = 'sync_last_pull_at'").get();
       if (pullSetting && pullSetting.value) lastPullAt = pullSetting.value;
     } catch (_) {}
 
