@@ -33,6 +33,9 @@ const SYNCABLE_TABLES = [
   'device_imei'
 ];
 
+// Cache of cloud table columns for the schema-drift guard in push()
+const _cloudColCache = {};
+
 function getPktNow() {
   const now = new Date();
   const pkt = new Date(now.getTime() + 5 * 60 * 60 * 1000);
@@ -109,6 +112,23 @@ exports.push = async (req, res, next) => {
           );
 
           delete row.id;
+
+          // Schema-drift guard: intersect the client's row keys with the
+          // cloud table's actual columns before INSERT/UPDATE. Local SQLite
+          // and cloud MySQL schemas have drifted (e.g. sale_items.
+          // product_variant_id and sale_returns.return_no exist only
+          // locally) and a blind insert fails with "Unknown column".
+          if (!_cloudColCache[table]) {
+            const [colRows] = await conn.query(
+              'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+              [table]
+            );
+            _cloudColCache[table] = new Set(colRows.map(r => r.COLUMN_NAME));
+          }
+          const cloudCols = _cloudColCache[table];
+          for (const k of Object.keys(row)) {
+            if (!cloudCols.has(k)) delete row[k];
+          }
 
           const keys = Object.keys(row);
           const values = Object.values(row);
