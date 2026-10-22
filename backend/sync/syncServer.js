@@ -242,13 +242,42 @@ exports.pull = async (req, res, next) => {
     const tenantId = req.tenant_id || req.query.tenant_id || req.user?.tenant_id || 'tenant_default';
     const since = req.query.since || '1970-01-01 00:00:00';
 
+    // Pull-cursor clock fix: the cursor is compared against updated_at,
+    // which the database stamps with NOW(). server_time must therefore be
+    // the DATABASE clock, not getPktNow() (UTC+5 wall clock). The old PKT
+    // cursor sat ~5h ahead of every updated_at, so `updated_at > since`
+    // filtered out ALL genuine cloud updates and pull never delivered
+    // them (e.g. cloud price changes never reached shops).
+    let dbNow = since;
+    try {
+      const t = await query('SELECT NOW() AS db_now');
+      const d = t && t[0] ? t[0].db_now : null;
+      if (d) {
+        const dt = d instanceof Date ? d : new Date(String(d).replace(' ', 'T'));
+        const p = n => String(n).padStart(2, '0');
+        dbNow = `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())} ${p(dt.getHours())}:${p(dt.getMinutes())}:${p(dt.getSeconds())}`;
+      }
+    } catch (_) {}
+
+    // A cursor left over from the old PKT-based build is in the future
+    // relative to the DB clock; clamp it back to a 15-minute overlap
+    // window so missed updates are re-fetched (sync_uuid upserts make
+    // re-delivery harmless) instead of being suppressed forever.
+    let effectiveSince = since;
+    if (since > dbNow) {
+      const base = new Date(dbNow.replace(' ', 'T'));
+      base.setMinutes(base.getMinutes() - 15);
+      const p = n => String(n).padStart(2, '0');
+      effectiveSince = `${base.getFullYear()}-${p(base.getMonth() + 1)}-${p(base.getDate())} ${p(base.getHours())}:${p(base.getMinutes())}:${p(base.getSeconds())}`;
+    }
+
     const data = {};
 
     for (const table of SYNCABLE_TABLES) {
       try {
         const rows = await query(
           `SELECT * FROM \`${table}\` WHERE tenant_id = ? AND updated_at > ?`,
-          [tenantId, since]
+          [tenantId, effectiveSince]
         );
         data[table] = rows || [];
       } catch (err) {
@@ -259,7 +288,7 @@ exports.pull = async (req, res, next) => {
 
     res.json({
       success: true,
-      server_time: getPktNow(),
+      server_time: dbNow,
       data
     });
   } catch (error) {
