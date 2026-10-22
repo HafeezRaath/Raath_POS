@@ -7,9 +7,11 @@ const batchController = require('./batchController');
 
 // Helper: Generate unique invoice number
 function generateInvoiceNumber() {
+  const isLocal = String(process.env.LOCAL_MODE || '') === '1';
+  const prefix = isLocal ? 'OFF' : 'INV';
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const randomNum = Math.floor(1000 + Math.random() * 9000);
-  return `INV-${dateStr}-${randomNum}`;
+  return `${prefix}-${dateStr}-${randomNum}`;
 }
 
 exports.getSales = async (req, res, next) => {
@@ -88,7 +90,12 @@ exports.createSale = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Cannot create sale without items' });
     }
 
-    const invNum = payload.invoice_no || payload.invoice_number || generateInvoiceNumber();
+    let invNum = payload.invoice_no || payload.invoice_number;
+    if (!invNum) {
+      invNum = generateInvoiceNumber();
+    } else if (String(process.env.LOCAL_MODE || '') === '1' && !invNum.startsWith('OFF-')) {
+      invNum = 'OFF-' + invNum.replace(/^(INV-|OFF-)/, '');
+    }
     const customerId = payload.customer_id || null;
     const customerName = payload.customer_name || 'Walk-in Customer';
     const userId = req.user?.id || payload.user_id || 1;

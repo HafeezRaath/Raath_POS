@@ -37,3 +37,10 @@ Thumbs.db
 
 # Uploads
 backend/uploads/
+
+# Databases & SQLite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+backend/data/

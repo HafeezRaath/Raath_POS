@@ -13,15 +13,43 @@ let mainWindow;
 let serverProcess = null;
 
 // ==================== BACKEND SERVER LAUNCHER ====================
+function getBackendPath() {
+  const candidates = [
+    path.join(__dirname, '../backend/server.js'),
+    path.join(process.resourcesPath, 'backend/server.js'),
+    path.join(process.resourcesPath, 'app/backend/server.js'),
+    path.join(app.getAppPath(), '../backend/server.js')
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return path.join(__dirname, '../backend/server.js');
+}
+
 function startBackendServer() {
   try {
-    const backendServerPath = path.join(__dirname, '../backend/server.js');
+    const backendServerPath = getBackendPath();
     if (fs.existsSync(backendServerPath)) {
+      const userDataPath = app.getPath('userData');
+      const localDbPath = process.env.LOCAL_DB_PATH || path.join(userDataPath, 'raath_pos.sqlite3');
+      const cloudApiUrl = process.env.CLOUD_API_URL || 'https://pos.raathdeveloper.com/api';
+
+      const env = {
+        ...process.env,
+        PORT: process.env.PORT || '5000',
+        NODE_ENV: isDev ? 'development' : 'production',
+        LOCAL_MODE: '1',
+        LOCAL_DB_PATH: localDbPath,
+        CLOUD_API_URL: cloudApiUrl
+      };
+
       serverProcess = fork(backendServerPath, [], {
-        env: { ...process.env, PORT: 5000, NODE_ENV: isDev ? 'development' : 'production' },
+        env,
         silent: false
       });
-      console.log('[Electron] Node.js Express + MySQL backend process launched on port 5000.');
+      console.log(`[Electron] Backend server launched at ${backendServerPath} with LOCAL_MODE=1`);
+      console.log(`[Electron] SQLite DB location (userData): ${localDbPath}`);
+      console.log(`[Electron] Cloud API target: ${cloudApiUrl}`);
     } else {
       console.warn('[Electron] Backend server file not found at:', backendServerPath);
     }
@@ -57,15 +85,20 @@ function createWindow() {
     icon: path.join(__dirname, isDev ? '../public/favicon.ico' : 'favicon.ico'),
   });
 
-  if (isDev) {
+  if (isDev && !process.env.ELECTRON_SERVE_BUILD) {
     mainWindow.loadURL('http://localhost:3000');
   } else {
-    const prodIndex = path.join(__dirname, '../frontend/build/index.html');
-    const legacyIndex = path.join(__dirname, '../build/index.html');
-    if (fs.existsSync(prodIndex)) {
-      mainWindow.loadFile(prodIndex);
+    const candidates = [
+      path.join(__dirname, '../frontend/build/index.html'),
+      path.join(process.resourcesPath, 'frontend/build/index.html'),
+      path.join(process.resourcesPath, 'app/frontend/build/index.html'),
+      path.join(__dirname, '../build/index.html')
+    ];
+    const found = candidates.find(p => fs.existsSync(p));
+    if (found) {
+      mainWindow.loadFile(found);
     } else {
-      mainWindow.loadFile(legacyIndex);
+      mainWindow.loadURL('http://localhost:3000');
     }
   }
 
