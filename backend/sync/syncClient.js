@@ -290,9 +290,25 @@ async function performSyncCycle() {
         for (const [table, rows] of Object.entries(serverData)) {
           if (!Array.isArray(rows) || rows.length === 0) continue;
 
+          // Schema-drift guard (pull side): cloud MySQL tables carry
+          // columns the local SQLite schema does not have (pharmacy/box
+          // columns are added on the cloud by initDb migrations, never in
+          // schema.sql). Intersect pulled rows with the local table's
+          // actual columns, and isolate failures per table so one drifted
+          // table cannot roll back the whole pull cycle.
+          let localCols = null;
+          try {
+            localCols = new Set(db.prepare(`PRAGMA table_info(\`${table}\`)`).all().map(c => c.name));
+          } catch (_) {}
+          if (!localCols || localCols.size === 0) continue;
+
+          try {
           for (const rawRow of rows) {
             if (!rawRow || !rawRow.sync_uuid) continue;
             const row = { ...rawRow };
+            for (const k of Object.keys(row)) {
+              if (!localCols.has(k)) delete row[k];
+            }
             const syncUuid = row.sync_uuid;
 
             // Check if exists locally
@@ -324,6 +340,9 @@ async function performSyncCycle() {
                 // Table might have slight variation, skip gracefully
               }
             }
+          }
+          } catch (tblErr) {
+            console.warn(`[Sync Client] Pull apply failed for table ${table}: ${tblErr.message} — table skipped this cycle.`);
           }
         }
 
