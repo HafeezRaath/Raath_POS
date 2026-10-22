@@ -103,10 +103,17 @@ exports.bulkAddImei = async (req, res, next) => {
       }
 
       // Aggregate counter on variant for quick display (serialized truth stays in device_imei)
+      // FIX adapter-family: count computed in JS — an UPDATE...SET subquery with
+      // its own WHERE breaks in LOCAL_MODE (the SQLite adapter injects its sync
+      // columns before the FIRST WHERE, which is inside the subquery).
       if (pvid) {
+        const [cntRows] = await conn.query(
+          `SELECT COUNT(*) AS c FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0`,
+          [tenantId, pvid]
+        );
         await conn.query(
-          `UPDATE product_variants SET current_stock = (SELECT COUNT(*) FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0) WHERE id = ?`,
-          [tenantId, pvid, pvid]
+          `UPDATE product_variants SET current_stock = ? WHERE id = ?`,
+          [cntRows[0].c, pvid]
         );
       }
     });
@@ -202,9 +209,14 @@ exports.sellImei = async (req, res, next) => {
         [tenantId, id, sale_id, customer_id, customer_name, amount, req.user?.id || null]
       );
       if (d.product_variant_id) {
+        // FIX adapter-family: count in JS, plain UPDATE (see bulkAddImei note).
+        const [cntRows] = await conn.query(
+          `SELECT COUNT(*) AS c FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0`,
+          [tenantId, d.product_variant_id]
+        );
         await conn.query(
-          `UPDATE product_variants SET current_stock = (SELECT COUNT(*) FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0) WHERE id = ?`,
-          [tenantId, d.product_variant_id, d.product_variant_id]
+          `UPDATE product_variants SET current_stock = ? WHERE id = ?`,
+          [cntRows[0].c, d.product_variant_id]
         );
       }
     });
@@ -238,9 +250,14 @@ exports.buybackImei = async (req, res, next) => {
         [tenantId, id, action, d.status, purchase_price, seller_name || null, req.user?.id || null, bbNotes]
       );
       if (d.product_variant_id) {
+        // FIX adapter-family: count in JS, plain UPDATE (see bulkAddImei note).
+        const [cntRows] = await conn.query(
+          `SELECT COUNT(*) AS c FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0`,
+          [tenantId, d.product_variant_id]
+        );
         await conn.query(
-          `UPDATE product_variants SET current_stock = (SELECT COUNT(*) FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0) WHERE id = ?`,
-          [tenantId, d.product_variant_id, d.product_variant_id]
+          `UPDATE product_variants SET current_stock = ? WHERE id = ?`,
+          [cntRows[0].c, d.product_variant_id]
         );
       }
     });

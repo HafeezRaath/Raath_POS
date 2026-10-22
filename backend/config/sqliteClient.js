@@ -83,6 +83,20 @@ function getSqliteDb() {
     const dt = new Date(s);
     return isNaN(dt.getTime()) ? null : dt.getFullYear();
   });
+  // Adapter-family cleanup: GREATEST()/LEAST() do not exist in SQLite, so
+  // every stock-clamp UPDATE (supplier payment, purchase cancel/delete,
+  // sales/returns/batches/bundles/EMI/repair) and the supplier-ledger SELECT
+  // failed in LOCAL_MODE with "no such function: GREATEST". SQLite's scalar
+  // max()/min() are NOT equivalent (they ignore NULLs); MySQL semantics are
+  // "NULL if any argument is NULL", matched here exactly.
+  dbInstance.function('GREATEST', { varargs: true }, (...args) => {
+    if (args.length === 0 || args.some(a => a == null)) return null;
+    return args.reduce((m, a) => (a > m ? a : m));
+  });
+  dbInstance.function('LEAST', { varargs: true }, (...args) => {
+    if (args.length === 0 || args.some(a => a == null)) return null;
+    return args.reduce((m, a) => (a < m ? a : m));
+  });
   dbInstance.function('CONCAT', (...args) => args.filter(a => a != null).join(''));
   dbInstance.function('IF', (condition, trueVal, falseVal) => (condition ? trueVal : falseVal));
   dbInstance.function('UUID', () => uuidv4());

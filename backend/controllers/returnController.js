@@ -193,9 +193,16 @@ exports.createSaleReturn = async (req, res, next) => {
                 [tenantId, dev.id, id, req.user?.id || null, `Returned via #${returnNumber}`]
               );
               if (dev.product_variant_id) {
+                // FIX adapter-family: count in JS, plain UPDATE — the SET-subquery
+                // shape breaks in LOCAL_MODE (adapter sync-column injection lands
+                // inside the subquery) and the error was silently swallowed here.
+                const [cntRows] = await conn.query(
+                  `SELECT COUNT(*) AS c FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0`,
+                  [tenantId, dev.product_variant_id]
+                );
                 await conn.query(
-                  `UPDATE product_variants SET current_stock = (SELECT COUNT(id) FROM device_imei WHERE tenant_id = ? AND product_variant_id = ? AND status = 'IN_STOCK' AND is_deleted = 0) WHERE id = ?`,
-                  [tenantId, dev.product_variant_id, dev.product_variant_id]
+                  `UPDATE product_variants SET current_stock = ? WHERE id = ?`,
+                  [cntRows[0].c, dev.product_variant_id]
                 );
               }
             }
