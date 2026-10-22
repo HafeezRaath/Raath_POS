@@ -148,6 +148,72 @@ exports.login = async (req, res, next) => {
           return res.json({ success: true, user, role: roleData, token });
         }
       }
+
+      // In local mode: If user not found locally, attempt first online login against cloud
+      if (String(process.env.LOCAL_MODE || '') === '1') {
+        const cloudUrl = (process.env.CLOUD_API_URL || 'https://pos.raathdeveloper.com/api').replace(/\/+$/, '');
+        try {
+          console.log('[Auth] Attempting first-time online login against cloud:', cloudUrl);
+          const cloudRes = await fetch(`${cloudUrl}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier, password }),
+            signal: AbortSignal.timeout(5000)
+          });
+          if (cloudRes.ok) {
+            const cloudData = await cloudRes.json();
+            if (cloudData.success && cloudData.user) {
+              const cu = cloudData.user;
+              const passwordHash = await bcrypt.hash(password, 10);
+              const tenantId = cu.tenant_id || cu.shop_id || 'tenant_default';
+
+              // Store tenant snapshot locally
+              await query(`
+                INSERT INTO tenants (id, name, shop_name, status)
+                VALUES (?, ?, ?, 'active')
+                ON DUPLICATE KEY UPDATE name = VALUES(name)
+              `, [tenantId, cu.shop_name || 'Store', cu.shop_name || 'Store']).catch(() => {});
+
+              // Store user row with bcrypt hash locally (never plain-text)
+              await query(`
+                INSERT INTO users (tenant_id, name, username, email, phone, password_hash, role, shop_name, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+                ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), role = VALUES(role)
+              `, [
+                tenantId,
+                cu.name || trimmed,
+                cu.username || trimmed,
+                cu.email || `${trimmed}@shop.local`,
+                cu.phone || '',
+                passwordHash,
+                cu.role || 'cashier',
+                cu.shop_name || 'RAATH POS Store'
+              ]).catch(() => {});
+
+              // Store cloud auth token for sync client
+              if (cloudData.token) {
+                await query(`
+                  INSERT INTO system_settings (tenant_id, \`key\`, \`value\`, description)
+                  VALUES (?, 'sync_auth_token', ?, 'Cloud Auth Token')
+                  ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
+                `, [tenantId, cloudData.token]).catch(() => {});
+
+                await query(`
+                  INSERT INTO system_settings (tenant_id, \`key\`, \`value\`, description)
+                  VALUES (?, 'sync_tenant_id', ?, 'Cloud Tenant ID')
+                  ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)
+                `, [tenantId, tenantId]).catch(() => {});
+              }
+
+              console.log('[Auth] First online login succeeded and credentials cached locally.');
+              return res.json(cloudData);
+            }
+          }
+        } catch (cloudErr) {
+          console.warn('[Auth] Cloud verification failed or offline:', cloudErr.message);
+        }
+      }
+
       console.warn('[Auth] User not found for identifier:', trimmed);
       return res.status(401).json({ success: false, error: 'Invalid credentials. User not found.' });
     }

@@ -121,6 +121,21 @@ class ApiClient {
       return false;
     }
   }
+
+  async getSyncStatus() {
+    try {
+      const res = await this.get('/sync/status');
+      return res;
+    } catch (_) {
+      const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      return {
+        isOnline: online,
+        isSyncing: false,
+        pendingCount: 0,
+        statusText: online ? 'Online' : 'Offline'
+      };
+    }
+  }
 }
 
 export const api = new ApiClient();

@@ -39,6 +39,7 @@ const imeiRoutes = require('./imeiRoutes');
 const repairRoutes = require('./repairRoutes');
 const payrollRoutes = require('./payrollRoutes');
 const creditNoteRoutes = require('./creditNoteRoutes');
+const syncRoutes = require('../sync/syncRoutes');
 
 // API Health Check
 router.get('/health', (req, res) => {
@@ -147,5 +148,6 @@ router.use('/imei', imeiRoutes);
 router.use('/repairs', repairRoutes);
 router.use('/payroll', payrollRoutes);
 router.use('/credit-notes', creditNoteRoutes);
+router.use('/sync', syncRoutes);
 
 module.exports = router;

@@ -47,15 +47,21 @@ app.get('/', (req, res) => {
 // Centralized error handling
 app.use(errorHandler);
 
-// ==================== SERVER STARTUP ====================
 async function startServer() {
   try {
     // Attempt database connection & migration
-    console.log('[Server] Connecting to MySQL...');
-    await initializeDatabase().catch(err => {
-      console.warn('[Server] MySQL init deferred or MySQL service offline:', err.message);
-      console.warn('[Server] Make sure MySQL is running on port', process.env.DB_PORT || 3306);
-    });
+    if (String(process.env.LOCAL_MODE || '') === '1') {
+      console.log('[Server] Initializing Local SQLite database...');
+      const { initializeSqliteDatabase } = require('./database/initSqlite');
+      const { getSqliteDb } = require('./config/sqliteClient');
+      await initializeSqliteDatabase(getSqliteDb());
+    } else {
+      console.log('[Server] Connecting to MySQL...');
+      await initializeDatabase().catch(err => {
+        console.warn('[Server] MySQL init deferred or MySQL service offline:', err.message);
+        console.warn('[Server] Make sure MySQL is running on port', process.env.DB_PORT || 3306);
+      });
+    }
 
     const server = app.listen(PORT, () => {
       console.log(`====================================================`);
@@ -63,11 +69,22 @@ async function startServer() {
       console.log(`API Base URL: http://localhost:${PORT}/api`);
       console.log(`Health check: http://localhost:${PORT}/api/health`);
       console.log(`====================================================`);
+
+      if (String(process.env.LOCAL_MODE || '') === '1') {
+        const { startSyncClient } = require('./sync/syncClient');
+        startSyncClient();
+      }
     });
 
     // Graceful Shutdown
     const shutdown = () => {
       console.log('\n[Server] Shutting down gracefully...');
+      if (String(process.env.LOCAL_MODE || '') === '1') {
+        try {
+          const { stopSyncClient } = require('./sync/syncClient');
+          stopSyncClient();
+        } catch (_) {}
+      }
       server.close(() => {
         console.log('[Server] HTTP server closed.');
         process.exit(0);

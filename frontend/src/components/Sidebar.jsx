@@ -40,6 +40,7 @@ import {
 import { useAuth } from '../AuthContext';
 import { getRoleColorSync, getRoleLabelSync } from '../role';
 import db from '../database/db';
+import api from '../api/apiClient';
 
 // ==================== PATH PERMISSION MAP ====================
 const PATH_PERMISSION_MAP = {
@@ -179,6 +180,43 @@ export default function Navbar() {
 
   const navRef = useRef(null);
   const searchInputRef = useRef(null);
+
+  // Sync status polling for navbar badge
+  const [syncStatus, setSyncStatus] = useState({
+    isOnline: true,
+    isSyncing: false,
+    pendingCount: 0,
+    statusText: 'Online'
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchStatus = async () => {
+      try {
+        const s = await api.getSyncStatus();
+        if (mounted && s) setSyncStatus(s);
+      } catch (_) {}
+    };
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 8000);
+
+    const onOnline = () => {
+      fetchStatus();
+      api.post('/sync/trigger').catch(() => {});
+    };
+    const onOffline = () => fetchStatus();
+
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
 
   // Global Keyboard shortcuts (F1: New Bill, F2: Products, Ctrl+K: Search)
   useEffect(() => {
@@ -578,6 +616,34 @@ export default function Navbar() {
 
           {/* Right Actions: Quick Bill, Refresh, Notifications, Profile */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            {/* Sync Status Badge */}
+            <div className="flex items-center flex-shrink-0">
+              {syncStatus.isSyncing ? (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-500/20 text-blue-200 border border-blue-400/30"
+                  title="Syncing with cloud..."
+                >
+                  <span className="w-2 h-2 rounded-full bg-blue-400 animate-spin"></span>
+                  <span>Syncing…</span>
+                </span>
+              ) : !syncStatus.isOnline ? (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-400/30"
+                  title="Offline mode - changes saved locally to disk"
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <span>{syncStatus.pendingCount > 0 ? `Offline — ${syncStatus.pendingCount} pending` : 'Offline'}</span>
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30"
+                  title="Online and connected to cloud"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  <span>Online</span>
+                </span>
+              )}
+            </div>
             {/* Quick Bill Button */}
             {pageVisibility.pos !== false && canAccess('pos') && (
               <Link

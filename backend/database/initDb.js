@@ -555,6 +555,28 @@ async function initializeDatabase() {
       await addColumnIfMissing(connection, tbl, '`tenant_id` VARCHAR(50) NOT NULL DEFAULT "tenant_default"');
     }
 
+    // 6b. Ensure sync_uuid, updated_at, deleted_at on all syncable tables
+    const SYNCABLE_TABLES = [
+      'products', 'product_variants', 'product_serialized_items',
+      'customers', 'suppliers', 'sales', 'sale_items', 'sale_returns',
+      'purchases', 'purchase_items', 'expenses', 'payments',
+      'emi_records', 'emi_payments', 'accounts', 'work_orders'
+    ];
+    for (const tbl of SYNCABLE_TABLES) {
+      await addColumnIfMissing(connection, tbl, '`sync_uuid` VARCHAR(36) NULL');
+      await addColumnIfMissing(connection, tbl, '`deleted_at` DATETIME NULL');
+      await addColumnIfMissing(connection, tbl, '`updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+      try {
+        await connection.query(`UPDATE \`${tbl}\` SET \`sync_uuid\` = (UUID()) WHERE \`sync_uuid\` IS NULL OR \`sync_uuid\` = ''`);
+      } catch (_) {}
+      try {
+        const [idxRows] = await connection.query(`SHOW INDEX FROM \`${tbl}\` WHERE Column_name = 'sync_uuid'`);
+        if (idxRows.length === 0) {
+          await connection.query(`ALTER TABLE \`${tbl}\` ADD UNIQUE INDEX \`uq_${tbl}_sync_uuid\` (\`sync_uuid\`)`);
+        }
+      } catch (_) {}
+    }
+
     // 7. Now execute views (guaranteed to find tenant_id and migration columns)
     if (viewsSql) {
       console.log('[InitDB] Executing views...');

@@ -1,14 +1,71 @@
 {
-  "name": "raath-pos-electron",
+  "name": "raath-pos",
+  "productName": "RAATH POS",
   "version": "2.0.0",
   "private": true,
   "main": "main.js",
-  "description": "RAATH POS Desktop Application Shell",
+  "description": "RAATH POS Offline-First Desktop Application with Automatic Cloud Sync",
+  "author": "RAATH Developer <support@raathdeveloper.com>",
   "scripts": {
     "start": "electron main.js",
-    "dev": "electron main.js"
+    "dev": "electron main.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis",
+    "build:installer": "electron-builder --win nsis"
   },
-  "dependencies": {
-    "electron": "^42.1.0"
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "42.9.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "electronVersion": "42.9.1",
+    "appId": "com.raathdeveloper.pos",
+    "productName": "RAATH POS",
+    "asar": true,
+    "directories": {
+      "output": "../dist"
+    },
+    "files": [
+      "**/*",
+      "!**/*.log"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!data/*.sqlite3",
+          "!data/*.db",
+          "!tests/**/*"
+        ]
+      },
+      {
+        "from": "../frontend/build",
+        "to": "frontend/build",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RAATH POS"
+    }
   }
 }
