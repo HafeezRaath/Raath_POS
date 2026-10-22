@@ -162,8 +162,25 @@ exports.push = async (req, res, next) => {
             const [insertRes] = await conn.query(insertSql, values);
             serverId = insertRes.insertId;
 
-            // Recalculate / adjust stock on server ONLY on first insert (idempotency guard)
-            if (table === 'sale_items' && row.product_id && row.quantity) {
+            // Recalculate / adjust stock on server ONLY on first insert (idempotency guard).
+            // Double-count guard: if the product row itself is sync-managed
+            // (carries a sync_uuid), its stock arrives authoritatively with
+            // the product push — masters are pushed before child items and
+            // the pushed stock already reflects this transaction (e.g. a
+            // product created offline at stock 20, sold down to 18, then
+            // pushed: cloud stock must end at 18, not 18 - 2 = 16).
+            // Adjusting again on item insert deducted the quantity twice.
+            let productSyncManaged = false;
+            if ((table === 'sale_items' || table === 'purchase_items') && row.product_id) {
+              try {
+                const [prodRows] = await conn.query(
+                  'SELECT sync_uuid FROM products WHERE id = ? AND tenant_id = ? LIMIT 1',
+                  [row.product_id, tenantId]
+                );
+                productSyncManaged = !!(prodRows && prodRows.length > 0 && prodRows[0].sync_uuid);
+              } catch (_) {}
+            }
+            if (!productSyncManaged && table === 'sale_items' && row.product_id && row.quantity) {
               const qty = parseFloat(row.quantity) || 0;
               if (qty > 0) {
                 await conn.query(
@@ -178,7 +195,7 @@ exports.push = async (req, res, next) => {
                   ).catch(() => {});
                 }
               }
-            } else if (table === 'purchase_items' && row.product_id && row.quantity) {
+            } else if (!productSyncManaged && table === 'purchase_items' && row.product_id && row.quantity) {
               const qty = parseFloat(row.quantity) || 0;
               if (qty > 0) {
                 await conn.query(
