@@ -2,7 +2,15 @@
 //  backend/sync/syncClient.js - Background Client Sync Engine
 // ============================================================
 
-const { getSqliteDb } = require('../config/sqliteClient');
+// Lazy-load the SQLite client: this module is also loaded by the cloud
+// (MySQL) server via syncRoutes, and the cloud must boot even when the
+// better-sqlite3 native module is unavailable there. getSqliteDb() is only
+// invoked from inside sync functions at runtime, in LOCAL_MODE.
+let _sqliteClient = null;
+function getSqliteDb(...args) {
+  if (!_sqliteClient) _sqliteClient = require('../config/sqliteClient');
+  return _sqliteClient.getSqliteDb(...args);
+}
 const http = require('http');
 const https = require('https');
 
