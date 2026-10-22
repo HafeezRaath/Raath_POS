@@ -282,6 +282,54 @@ async function initializeSqliteDatabase(db) {
   addSqliteColumnIfMissing(db, 'work_orders', 'advance_amount', 'NUMERIC DEFAULT 0');
   addSqliteColumnIfMissing(db, 'work_orders', 'labor_amount', 'NUMERIC DEFAULT 0');
   addSqliteColumnIfMissing(db, 'work_orders', 'parts_amount', 'NUMERIC DEFAULT 0');
+  // Finding 5: cloud initDb migrations initSqlite previously lacked — work_orders repair fields
+  addSqliteColumnIfMissing(db, 'work_orders', 'condition_notes', 'TEXT NULL');
+  addSqliteColumnIfMissing(db, 'work_orders', 'passcode_encrypted', 'TEXT NULL');
+  addSqliteColumnIfMissing(db, 'work_orders', 'commission_percent', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'work_orders', 'commission_type', 'TEXT NULL');
+  addSqliteColumnIfMissing(db, 'work_orders', 'commission_credited', 'INTEGER DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'work_orders', 'photo_before_url', 'TEXT NULL');
+  addSqliteColumnIfMissing(db, 'work_orders', 'photo_after_url', 'TEXT NULL');
+
+  // Finding 5: emi_records columns from cloud initDb migrations (EMI create 500s without these)
+  addSqliteColumnIfMissing(db, 'emi_records', 'interest_type', "TEXT DEFAULT 'percentage'");
+  addSqliteColumnIfMissing(db, 'emi_records', 'fixed_interest_per_month', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'emi_records', 'product_source', "TEXT DEFAULT 'inventory'");
+  addSqliteColumnIfMissing(db, 'emi_records', 'source_mode', "TEXT DEFAULT 'inventory'");
+  addSqliteColumnIfMissing(db, 'emi_records', 'source_name', "TEXT DEFAULT ''");
+  addSqliteColumnIfMissing(db, 'emi_records', 'source_purchase_price', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'emi_records', 'device_imei_id', 'INTEGER NULL');
+  addSqliteColumnIfMissing(db, 'emi_records', 'cost_price', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'emi_records', 'interest_amount', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'emi_records', 'total_payable', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'emi_records', 'monthly_target', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'emi_records', 'early_settlement_discount', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'emi_records', 'settled_at', 'TEXT NULL');
+  addSqliteColumnIfMissing(db, 'emi_records', 'cnic_only', 'INTEGER DEFAULT 0');
+
+  // Finding 5: remaining drift of the same class (cloud migrations vs local schema)
+  addSqliteColumnIfMissing(db, 'emi_guarantors', 'guarantor_id', 'INTEGER NULL');
+  addSqliteColumnIfMissing(db, 'emi_guarantors', 'customer_id', 'INTEGER NULL');
+  addSqliteColumnIfMissing(db, 'emi_guarantors', 'is_deleted', 'INTEGER DEFAULT 0');
+
+  addSqliteColumnIfMissing(db, 'products', 'expiry_date', 'TEXT NULL');
+  addSqliteColumnIfMissing(db, 'products', 'carton_qty', 'INTEGER DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'products', 'boxes_per_carton', 'INTEGER DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'products', 'pieces_per_box', 'INTEGER DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'products', 'carton_price', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'products', 'box_price', 'NUMERIC DEFAULT 0');
+
+  addSqliteColumnIfMissing(db, 'sale_returns', 'split_payments', 'TEXT NULL');
+  addSqliteColumnIfMissing(db, 'sale_returns', 'actual_refunded', 'NUMERIC DEFAULT 0');
+  addSqliteColumnIfMissing(db, 'sale_returns', 'unrefunded_amount', 'NUMERIC DEFAULT 0');
+
+  addSqliteColumnIfMissing(db, 'payments', 'account_id', 'INTEGER NULL');
+  addSqliteColumnIfMissing(db, 'payments', 'reference_no', 'TEXT NULL');
+
+  addSqliteColumnIfMissing(db, 'audit_logs', 'user_name', 'TEXT');
+  addSqliteColumnIfMissing(db, 'audit_logs', 'user_role', 'TEXT');
+  addSqliteColumnIfMissing(db, 'audit_logs', 'details', 'TEXT');
+  addSqliteColumnIfMissing(db, 'audit_logs', 'ip_address', 'TEXT');
 
   // Product variants legacy & sync aliases
   addSqliteColumnIfMissing(db, 'product_variants', 'name', 'TEXT NULL');
